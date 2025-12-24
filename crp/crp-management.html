@@ -1,0 +1,950 @@
+<!--
+File: crp/crp-management.html
+Version: crp-management-v15
+Date: 2025-12-24
+
+v15 变更点（在 v14 基础上，确保不丢失任何功能）：
+1) 录入区（Booking No & 箱量表）输入框整体变窄：
+   - Booking 输入框不再撑满单元格，宽度适中（可调）
+   - 20GP/40GP/40HC/40RH 数字框按“两位数空间”设计（更紧凑）
+   - 去掉 .tbl input 的 width:100%（否则永远铺满）
+2) 数字框输入限制：
+   - 只允许输入数字
+   - 最多 2 位（输入 123 会自动变成 12）
+3) 版本号与“页面功能要求（requirements）”同步维护
+4) 仍保持 v14 逻辑不变：
+   - “状态/操作”列：未发送=发送；已发送=再发送
+   - 已发送状态胶囊不显示运输公司名称（运输公司单独列展示）
+   - 发送/再发送打开 send-crp.html 的 embed 模式：仅显示发送面板（不显示发送页列表）
+-->
+
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>CRP管理</title>
+
+<style>
+:root{
+  --brand:#e0205c;--bg:#f1f2f5;--card:#fff;--text:#222;--muted:#666;
+  --line:#e9e9ee;--ok:#1a7f37;--warn:#b54708;--bad:#b42318;
+}
+*{box-sizing:border-box}
+body{margin:0;font-family:Arial,"Microsoft YaHei";background:var(--bg);color:var(--text)}
+.topbar{height:56px;background:#fff;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;padding:0 16px;}
+.left{font-weight:900;font-size:16px}
+.right{display:flex;align-items:center;gap:12px}
+.ver{cursor:pointer;background:#f6f6f6;border:1px solid #eee;border-radius:999px;padding:6px 10px;font-size:12px;font-family:ui-monospace,Menlo,Consolas,monospace;display:flex;align-items:center;gap:6px}
+.ver .dot{width:8px;height:8px;border-radius:99px;background:var(--brand)}
+.chk{display:flex;align-items:center;gap:8px;padding:6px 10px;border:1px solid #eee;border-radius:999px;background:#fafafa;font-size:12px;color:var(--muted);user-select:none}
+.chk input{transform:translateY(1px)}
+.wrap{max-width:none;margin:16px 0;padding:0 12px;}
+.grid{
+  --leftW: 700px;
+  height: calc(100vh - 56px - 32px);
+  display:grid;
+  grid-template-columns: var(--leftW) 10px 1fr;
+  gap:0;align-items:stretch;
+}
+@media (max-width: 1300px){
+  .grid{grid-template-columns:1fr;height:auto}
+  .splitter{display:none}
+}
+.card{
+  background:#fff;border:1px solid var(--line);
+  border-radius:12px;box-shadow:0 6px 18px rgba(0,0,0,.04);
+  height:100%;
+  display:flex;flex-direction:column;
+  min-height:0;
+}
+.cardHd{padding:12px 14px;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;font-weight:900;gap:10px;flex:0 0 auto}
+.cardBd{padding:14px;flex:0 0 auto}
+.cardBodyScroll{flex:1 1 auto;min-height:0;overflow:auto;padding:14px}
+
+.pill{display:inline-flex;align-items:center;gap:6px;padding:5px 10px;border-radius:999px;border:1px solid var(--line);font-size:12px;background:#fafafa}
+.pill .dot{width:8px;height:8px;border-radius:99px;background:#bbb}
+.pill.draft .dot{background:var(--warn)}
+.pill.submitted .dot{background:var(--ok)}
+
+.label{font-size:12px;color:var(--muted)}
+.req{color:var(--brand);font-weight:900;margin-left:4px}
+.small{font-size:12px;color:var(--muted)}
+.readonly{background:#f7f7fb;border-color:#e8e8ef}
+.input,.textarea,.select{border:1px solid #ddd;border-radius:10px;padding:10px;font-size:13px;background:#fff;outline:none}
+.textarea{min-height:70px;resize:vertical}
+.btn{border:1px solid #ddd;background:#fff;border-radius:10px;padding:10px 14px;font-weight:900;font-size:13px;cursor:pointer}
+.btn.primary{background:var(--brand);border-color:var(--brand);color:#fff}
+.btn.danger{background:var(--bad);border-color:var(--bad);color:#fff}
+.btn:active{transform:translateY(1px)}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.formGrid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.full{grid-column:1 / -1}
+.field{display:flex;flex-direction:column;gap:6px}
+
+.tblWrap{border:1px solid var(--line);border-radius:12px;overflow:hidden;background:#fff}
+.tblHd{background:#fafafa;border-bottom:1px solid var(--line);padding:10px 12px;display:flex;align-items:center;justify-content:space-between;gap:10px}
+.tblHd b{font-size:13px}
+.tblBd{padding:10px 12px}
+.tbl{width:100%;border-collapse:collapse;min-width:620px}
+.tbl th,.tbl td{border-bottom:1px solid var(--line);padding:8px;font-size:12px;white-space:nowrap}
+.tbl th{background:#fafafa;color:var(--muted);text-align:left;font-weight:900}
+.tbl td{background:#fff}
+
+/* ===== v15: 录入区输入框变窄（数字两位宽）===== */
+/* 去掉 width:100% 否则永远铺满单元格 */
+.tbl input{
+  border:1px solid #ddd;
+  border-radius:10px;
+  padding:8px 8px;
+  font-size:12px;
+  outline:none;
+}
+
+/* Booking 输入框：适中，不要撑满（可按需调） */
+.tbl input.booking{
+  width:170px;     /* 想更窄就 150px */
+  max-width:100%;
+}
+
+/* 数字输入框：两位数空间 */
+.tbl input.qty{
+  width:52px;      /* 想更紧凑就 46px */
+  text-align:center;
+  padding-left:6px;
+  padding-right:6px;
+  font-variant-numeric: tabular-nums;
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+}
+
+.drop{border:1.5px dashed #d6d6de;border-radius:12px;padding:12px;background:#fbfbfd;margin-top:10px}
+.fileList{margin:6px 0 0;padding-left:18px;font-size:12px;color:var(--muted);line-height:1.7}
+
+.toast{margin-top:10px;font-size:12px;color:var(--muted);padding:10px 12px;border-radius:10px;border:1px solid var(--line);background:#fafafa;display:none}
+.toast.show{display:block}
+.toast.bad{border-color:rgba(180,35,24,.25);background:rgba(180,35,24,.06)}
+.toast.ok{border-color:rgba(26,127,55,.25);background:rgba(26,127,55,.06)}
+
+.splitter{height:100%;cursor:col-resize;position:relative;user-select:none;background:transparent}
+.splitter::before{content:"";position:absolute;left:50%;top:10px;transform:translateX(-50%);width:2px;height:calc(100% - 20px);border-radius:2px;background:#dcdce6}
+.splitter:hover::before{background:#c8c8d8}
+.splitter.dragging::before{background:var(--brand);opacity:.35}
+
+.filterBox{padding:14px;border-bottom:1px solid var(--line);flex:0 0 auto}
+.tableOuter{flex:1 1 auto;min-height:0}
+.tableScroll{height:100%;overflow:auto;border-top:1px solid var(--line)}
+
+table{width:100%;border-collapse:collapse;min-width:1550px}
+th,td{border-bottom:1px solid var(--line);padding:8px 10px;font-size:12px;white-space:nowrap}
+th{background:#fafafa;color:var(--muted);text-align:left;font-weight:900}
+tr:hover td{background:#fff7fb}
+tr.selected td{outline:2px solid rgba(224,32,92,.25);background:#fff7fb}
+.ellip{max-width:220px;overflow:hidden;text-overflow:ellipsis}
+.ellip.sm{max-width:160px}
+.num{text-align:center;font-variant-numeric:tabular-nums;font-family:ui-monospace,Menlo,Consolas,monospace;width:62px}
+
+/* 状态胶囊（简洁版：不显示运输公司） */
+.action{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.stPill{
+  display:inline-flex;align-items:center;gap:6px;
+  padding:6px 10px;border-radius:999px;border:1px solid var(--line);
+  font-size:12px;font-weight:900;background:#fff;user-select:none
+}
+.stPill .dot{width:8px;height:8px;border-radius:99px;background:#bbb}
+.stPill.unsent{border-color:rgba(181,71,8,.25);background:rgba(181,71,8,.06);color:#7a3a06}
+.stPill.unsent .dot{background:var(--warn)}
+.stPill.sent{border-color:rgba(26,127,55,.25);background:rgba(26,127,55,.06);color:#135d2a}
+.stPill.sent .dot{background:var(--ok)}
+
+/* 行内按钮：发送/再发送 */
+.miniBtn{
+  padding:6px 10px;border-radius:999px;border:1px solid #ddd;background:#fff;
+  font-size:12px;font-weight:900;cursor:pointer
+}
+.miniBtn.primary{background:var(--brand);border-color:var(--brand);color:#fff}
+.miniBtn.re{border-color:rgba(26,127,55,.35);background:rgba(26,127,55,.06);color:#135d2a}
+.miniBtn:active{transform:translateY(1px)}
+.miniBtn.dis{opacity:.45;cursor:not-allowed}
+
+.modalMask{position:fixed;inset:0;background:rgba(0,0,0,.35);display:none;align-items:center;justify-content:center;z-index:9999}
+.modal{width:980px;max-width:96vw;background:#fff;border-radius:12px;box-shadow:0 20px 60px rgba(0,0,0,.3);display:flex;flex-direction:column}
+.modalHd{padding:12px 16px;border-bottom:1px solid #eee;font-weight:900;display:flex;justify-content:space-between;align-items:center}
+.modalBd{padding:14px 16px;max-height:72vh;overflow:auto;font-size:13px;line-height:1.7}
+.modalFt{padding:12px 16px;border-top:1px solid #eee;display:flex;justify-content:flex-end;gap:10px}
+.vTableWrap{border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.vTableScroll{max-height:360px;overflow:auto}
+.vTbl{width:100%;border-collapse:collapse;min-width:820px}
+.vTbl th,.vTbl td{border-bottom:1px solid var(--line);padding:10px;font-size:12px;white-space:nowrap}
+.vTbl th{background:#fafafa;color:var(--muted);text-align:left;font-weight:900}
+.vRow:hover td{background:#fff7fb}
+.vRow.selected td{outline:2px solid rgba(224,32,92,.25);background:#fff7fb}
+</style>
+</head>
+
+<body>
+<div class="topbar">
+  <div class="left">CRP 录入</div>
+  <div class="right">
+    <label class="chk" title="勾选=模拟有发送权限（列表行内显示发送/再发送按钮）">
+      <input type="checkbox" id="permSendChk" onchange="applyPermUI()">
+      发送CRP
+    </label>
+    <div class="ver" id="verBtn" title="点击查看页面功能要求">
+      <span class="dot"></span>
+      <span>crp-management-v15</span>
+    </div>
+  </div>
+</div>
+
+<div class="wrap">
+  <div class="grid" id="grid">
+
+    <!-- 左：录入 -->
+    <div class="card" id="leftCard">
+      <div class="cardHd">
+        <span>录入（一次仅 1 个 Booking No）</span>
+        <span class="pill draft" id="statePill"><span class="dot"></span>草稿</span>
+      </div>
+
+      <div class="cardBodyScroll">
+        <div class="tblWrap">
+          <div class="tblHd">
+            <b>Booking No & 箱量表<span class="req">*</span></b>
+            <div class="row">
+              <button class="btn" type="button" onclick="fillDemo()">填入示例</button>
+            </div>
+          </div>
+          <div class="tblBd">
+            <div class="small">提交后会清空 Booking/箱量/附件，保留航次方便连续录入。</div>
+            <div style="overflow:auto;margin-top:8px">
+              <table class="tbl">
+                <thead>
+                  <tr>
+                    <th style="min-width:200px">Booking No.<span class="req">*</span></th>
+                    <th style="min-width:40px">20GP</th>
+                    <th style="min-width:40px">40GP</th>
+                    <th style="min-width:40px">40HC</th>
+                    <th style="min-width:40px">40RH</th>
+                  </tr>
+                </thead>
+                <tbody id="entryTbody"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <div class="formGrid" style="margin-top:12px">
+          <div class="field full">
+            <div class="label">航次信息（系统受控）<span class="req">*</span></div>
+            <div class="row" style="justify-content:space-between">
+              <div class="small" id="voyHint">未选择航次</div>
+              <div class="row">
+                <button class="btn" type="button" onclick="openVoyageModal('main')">选择航次</button>
+                <button class="btn" type="button" onclick="clearVoyageMain()">清空航次</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="field">
+            <div class="label">船公司<span class="req">*</span></div>
+            <input class="input readonly" id="carrier" readonly placeholder="必须从系统选择">
+          </div>
+          <div class="field">
+            <div class="label">开船日(ETD)<span class="req">*</span></div>
+            <input class="input readonly" id="etd" readonly>
+          </div>
+
+          <div class="field">
+            <div class="label">船名<span class="req">*</span></div>
+            <input class="input readonly" id="vessel" readonly placeholder="必须从系统选择">
+          </div>
+          <div class="field">
+            <div class="label">航次<span class="req">*</span></div>
+            <input class="input readonly" id="voyage" readonly placeholder="必须从系统选择">
+          </div>
+
+          <div class="field">
+            <div class="label">FF担当<span class="req">*</span></div>
+            <input class="input" id="ffOwner" placeholder="例如：张三 / Kim">
+          </div>
+          <div class="field">
+            <div class="label">CL担当<span class="req">*</span></div>
+            <input class="input" id="clOwner" placeholder="例如：Lucas / 李四">
+          </div>
+
+          <div class="field full">
+            <div class="label">备注</div>
+            <textarea class="textarea" id="remark"></textarea>
+          </div>
+        </div>
+
+        <div class="drop">
+          <b>CRP 文件（附件）</b>
+          <div class="small" style="margin-top:6px">演示：仅统计文件数量并显示文件名。</div>
+          <input type="file" id="fileInput" multiple>
+          <ol class="fileList" id="fileList"><li>未选择文件</li></ol>
+        </div>
+
+        <div class="row" style="margin-top:12px">
+          <button class="btn" onclick="clearFormAll()">新建</button>
+          <button class="btn" onclick="saveOne('草稿')">保存草稿</button>
+          <button class="btn primary" onclick="saveOne('已提交')">提交</button>
+        </div>
+
+        <div class="toast" id="toast"></div>
+      </div>
+    </div>
+
+    <div class="splitter" id="splitter" title="拖动调整左右宽度"></div>
+
+    <!-- 右：CRP列表 -->
+    <div class="card" id="rightCard">
+      <div class="cardHd">
+        <span>CRP 列表（按 Booking 汇总）</span>
+        <span class="small" id="selHint">未选择记录</span>
+      </div>
+
+      <div class="filterBox">
+        <div class="row">
+          <div class="field" style="min-width:220px;flex:1">
+            <div class="label">Booking No.</div>
+            <input class="input" id="f_booking" placeholder="BK..." oninput="render()">
+          </div>
+          <div class="field" style="min-width:150px">
+            <div class="label">船公司</div>
+            <input class="input" id="f_carrier" placeholder="MSK/MSC..." oninput="render()">
+          </div>
+          <div class="field" style="min-width:200px;flex:1">
+            <div class="label">船名</div>
+            <input class="input" id="f_vessel" placeholder="船名..." oninput="render()">
+          </div>
+          <div class="field" style="min-width:140px">
+            <div class="label">航次</div>
+            <input class="input" id="f_voyage" placeholder="552S..." oninput="render()">
+          </div>
+          <div class="field" style="min-width:140px">
+            <div class="label">状态</div>
+            <select class="select" id="f_status" onchange="render()">
+              <option value="">全部</option>
+              <option value="未发送">未发送</option>
+              <option value="已发送">已发送</option>
+            </select>
+          </div>
+          <div class="field" style="min-width:110px;align-self:flex-end">
+            <button class="btn" type="button" onclick="resetFilters()">重置</button>
+          </div>
+        </div>
+        <div class="small" style="margin-top:8px">
+          勾选顶部“发送CRP”后，行内仅显示：未发送=发送；已发送=再发送（embed 仅显示发送面板）。
+        </div>
+      </div>
+
+      <div class="tableOuter">
+        <div class="tableScroll">
+          <table>
+            <thead>
+              <tr>
+                <th style="min-width:140px">录入时间</th>
+                <th style="min-width:160px">Booking</th>
+                <th style="min-width:90px">船公司</th>
+                <th style="min-width:220px">船名</th>
+                <th style="min-width:90px">航次</th>
+                <th style="min-width:110px">ETD</th>
+                <th style="min-width:90px">FF</th>
+                <th style="min-width:90px">CL</th>
+
+                <th class="num">20GP</th>
+                <th class="num">40GP</th>
+                <th class="num">40HC</th>
+                <th class="num">40RH</th>
+
+                <th class="num" style="width:70px">文件</th>
+                <th style="min-width:90px">运输公司</th>
+                <th style="min-width:230px">状态 / 操作</th>
+              </tr>
+            </thead>
+            <tbody id="tbody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="cardBd">
+        <div class="small">说明：行内按钮仅做演示；真实系统会走权限+发送日志。</div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- 航次选择弹窗 -->
+<div class="modalMask" id="voyMask">
+  <div class="modal">
+    <div class="modalHd">
+      <span>选择航次（系统主数据）</span>
+      <span style="cursor:pointer;color:var(--muted)" onclick="closeVoyageModal()">关闭</span>
+    </div>
+    <div class="modalBd">
+      <div class="row" style="justify-content:space-between">
+        <div class="field" style="flex:1;min-width:320px">
+          <div class="label">搜索（船公司/船名/航次/ETD）</div>
+          <input class="input" id="voySearch" placeholder="例如：MSK / ARINA / 552S / 2025-12" oninput="renderVoyages()">
+        </div>
+        <div class="row" style="align-items:flex-end">
+          <button class="btn" type="button" onclick="openNewVoyage()">+ 新建航次</button>
+        </div>
+      </div>
+
+      <div class="vTableWrap" style="margin-top:12px">
+        <div class="vTableScroll">
+          <table class="vTbl">
+            <thead><tr><th>船公司</th><th>船名</th><th>航次</th><th>ETD</th><th>操作</th></tr></thead>
+            <tbody id="voyTbody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="small" style="margin-top:10px">
+        规则：主页面字段只读；必须在此处选择（或新建）后回填。
+      </div>
+
+      <div style="height:1px;background:var(--line);margin:12px 0"></div>
+
+      <div id="newVoyBox" style="display:none">
+        <b>新建航次</b>
+        <div class="formGrid" style="margin-top:10px">
+          <div class="field">
+            <div class="label">船公司<span class="req">*</span></div>
+            <input class="input" id="newCarrier" placeholder="例如：MSK">
+          </div>
+          <div class="field">
+            <div class="label">ETD<span class="req">*</span></div>
+            <input class="input" id="newEtd" type="date">
+          </div>
+          <div class="field">
+            <div class="label">船名<span class="req">*</span></div>
+            <input class="input" id="newVessel" placeholder="例如：MSC ARINA">
+          </div>
+          <div class="field">
+            <div class="label">航次<span class="req">*</span></div>
+            <input class="input" id="newVoyage" placeholder="例如：552S">
+          </div>
+        </div>
+        <div class="row" style="margin-top:10px">
+          <button class="btn primary" type="button" onclick="createVoyage()">保存并加入主数据</button>
+          <button class="btn" type="button" onclick="cancelNewVoyage()">取消</button>
+        </div>
+      </div>
+    </div>
+    <div class="modalFt">
+      <button class="btn" type="button" onclick="closeVoyageModal()">关闭</button>
+    </div>
+  </div>
+</div>
+
+<!-- embed 发送面板：iframe（只显示发送面板，不显示发送页列表） -->
+<div class="modalMask" id="sendMask">
+  <div class="modal" style="width:1100px;max-width:96vw">
+    <div class="modalHd">
+      <span>发送 CRP（快捷面板）</span>
+      <span style="cursor:pointer;color:var(--muted)" onclick="closeSendPanel()">关闭</span>
+    </div>
+    <div class="modalBd" style="padding:0">
+      <iframe id="sendFrame" src="" style="width:100%;height:76vh;border:0"></iframe>
+    </div>
+    <div class="modalFt">
+      <button class="btn" type="button" onclick="openFullSend()">打开完整发送页面</button>
+      <button class="btn" type="button" onclick="closeSendPanel()">关闭</button>
+    </div>
+  </div>
+</div>
+
+<!-- requirements -->
+<div class="modalMask" id="reqMask">
+  <div class="modal">
+    <div class="modalHd">
+      <span>页面功能要求（CRP 录入 / crp-management-v15）</span>
+      <span style="cursor:pointer;color:var(--muted)" onclick="closeReq()">关闭</span>
+    </div>
+    <div class="modalBd">
+      <ol>
+        <li><b>靠左：</b>页面不居中，左侧无额外空白。</li>
+        <li><b>分割条：</b>支持拖拽调整左右宽度，并记忆宽度。</li>
+        <li><b>高度自适应：</b>左右区域随窗口高度自动调整，内部滚动。</li>
+        <li><b>列表字段：</b>四类箱量列；运输公司列；状态=已发送/未发送。</li>
+        <li><b>发送按钮简化：</b>未发送=发送；已发送=再发送（不再出现多余按钮）。</li>
+        <li><b>快捷发送：</b>行内按钮打开 <code>send-crp.html?embed=1</code>，仅展示发送面板；“打开完整页面”才展示列表。</li>
+        <li><b>录入框紧凑：</b>录入区箱量输入框按“两位数空间”设计；只允许数字且最多 2 位。</li>
+      </ol>
+    </div>
+    <div class="modalFt">
+      <button class="btn" type="button" onclick="closeReq()">关闭</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* 配置 */
+const LS_KEY = 'slms_crp_bookings_v1';
+const LS_SPLIT = 'slms_crp_split_leftW_v1';
+const SEND_PAGE = 'send-crp.html';
+const VENDORS_SENT = ['中集','顺航'];
+
+/* req */
+const reqMask = document.getElementById('reqMask');
+document.getElementById('verBtn').onclick = ()=> reqMask.style.display='flex';
+function closeReq(){ reqMask.style.display='none'; }
+reqMask.onclick = e=>{ if(e.target===reqMask) closeReq(); };
+
+/* Toast */
+const toast = document.getElementById('toast');
+function showToast(msg, ok=true){
+  toast.className = 'toast show ' + (ok ? 'ok' : 'bad');
+  toast.textContent = msg;
+  setTimeout(()=>{ toast.className = 'toast'; }, 2600);
+}
+
+/* 附件演示 */
+const fileInput = document.getElementById('fileInput');
+const fileList  = document.getElementById('fileList');
+let pickedFiles = [];
+fileInput.onchange = ()=>{
+  pickedFiles = Array.from(fileInput.files || []);
+  fileList.innerHTML = '';
+  if(!pickedFiles.length){ fileList.innerHTML='<li>未选择文件</li>'; return; }
+  pickedFiles.forEach(f=>{
+    const li=document.createElement('li');
+    li.textContent = `${f.name} (${Math.ceil(f.size/1024)} KB)`;
+    fileList.appendChild(li);
+  });
+};
+function clearFiles(){ pickedFiles=[]; fileInput.value=''; fileList.innerHTML='<li>未选择文件</li>'; }
+
+/* ===== v15: 数字限制工具函数（最多两位、只保留数字） ===== */
+function limit2Digits(v){
+  return String(v ?? '').replace(/\D/g,'').slice(0,2);
+}
+
+/* 单行录入 */
+const entryTbody = document.getElementById('entryTbody');
+let entry = { bookingNo:'', gp20:'', gp40:'', hc40:'', rh40:'' };
+
+function renderEntry(){
+  entryTbody.innerHTML='';
+  const tr=document.createElement('tr');
+  tr.innerHTML = `
+    <td>
+      <input
+        id="bkInput"
+        class="booking"
+        value="${escAttr(entry.bookingNo)}"
+        oninput="setEntry('bookingNo',this.value)"
+        placeholder="BK..."
+      />
+    </td>
+
+    <td>
+      <input
+        class="qty"
+        inputmode="numeric"
+        maxlength="2"
+        value="${escAttr(entry.gp20)}"
+        oninput="setEntry('gp20', limit2Digits(this.value))"
+        placeholder="0"
+      />
+    </td>
+
+    <td>
+      <input
+        class="qty"
+        inputmode="numeric"
+        maxlength="2"
+        value="${escAttr(entry.gp40)}"
+        oninput="setEntry('gp40', limit2Digits(this.value))"
+        placeholder="0"
+      />
+    </td>
+
+    <td>
+      <input
+        class="qty"
+        inputmode="numeric"
+        maxlength="2"
+        value="${escAttr(entry.hc40)}"
+        oninput="setEntry('hc40', limit2Digits(this.value))"
+        placeholder="0"
+      />
+    </td>
+
+    <td>
+      <input
+        class="qty"
+        inputmode="numeric"
+        maxlength="2"
+        value="${escAttr(entry.rh40)}"
+        oninput="setEntry('rh40', limit2Digits(this.value))"
+        placeholder="0"
+      />
+    </td>
+  `;
+  entryTbody.appendChild(tr);
+}
+function setEntry(k,v){ entry[k]=v; }
+renderEntry();
+
+function normalizeQty(v){
+  const s = String(v ?? '').trim();
+  if(s==='') return '';
+  if(!/^\d+$/.test(s)) return null;
+  return s;
+}
+
+/* 航次主数据 */
+let voyageMasters = [
+  { id:'V001', carrier:'MSK', vessel:'MAERSK SANTA', voyage:'123W', etd:'2025-12-28' },
+  { id:'V002', carrier:'MSC', vessel:'MSC ARINA', voyage:'552S', etd:'2025-12-29' },
+  { id:'V003', carrier:'COSCO', vessel:'COSCO SHIPPING', voyage:'88E', etd:'2025-12-30' },
+];
+let selectedVoyageIdMain = '';
+function applyVoyageToMain(v){
+  selectedVoyageIdMain = v.id;
+  carrier.value=v.carrier; vessel.value=v.vessel; voyage.value=v.voyage; etd.value=v.etd;
+  voyHint.textContent = `已选择：${v.carrier} / ${v.vessel} / ${v.voyage} / ETD ${v.etd}`;
+}
+function clearVoyageMain(){
+  selectedVoyageIdMain=''; carrier.value=''; vessel.value=''; voyage.value=''; etd.value='';
+  voyHint.textContent='未选择航次';
+}
+
+/* 航次弹窗 */
+const voyMask = document.getElementById('voyMask');
+const voyTbody = document.getElementById('voyTbody');
+
+/* 兼容按钮传参（v12~v15 都有人传 'main'） */
+function openVoyageModal(_target){
+  voySearch.value='';
+  cancelNewVoyage();
+  renderVoyages();
+  voyMask.style.display='flex';
+}
+function closeVoyageModal(){ voyMask.style.display='none'; }
+voyMask.onclick = e=>{ if(e.target===voyMask) closeVoyageModal(); };
+
+function renderVoyages(){
+  const q=(voySearch.value||'').trim().toLowerCase();
+  voyTbody.innerHTML='';
+  const list = voyageMasters.filter(v=>{
+    if(!q) return true;
+    return (`${v.carrier} ${v.vessel} ${v.voyage} ${v.etd}`.toLowerCase()).includes(q);
+  });
+  if(!list.length){
+    const tr=document.createElement('tr');
+    tr.innerHTML=`<td colspan="5" style="color:var(--muted);padding:16px">未找到匹配航次。你可以点击右上角 <b>+ 新建航次</b>。</td>`;
+    voyTbody.appendChild(tr); return;
+  }
+  list.forEach(v=>{
+    const tr=document.createElement('tr');
+    tr.className='vRow' + (v.id===selectedVoyageIdMain?' selected':'');
+    tr.innerHTML=`
+      <td>${esc(v.carrier)}</td><td>${esc(v.vessel)}</td><td><b>${esc(v.voyage)}</b></td><td>${esc(v.etd)}</td>
+      <td><button class="btn" style="padding:8px 10px;font-size:12px" type="button" onclick="chooseVoyage('${escJs(v.id)}')">选择</button></td>`;
+    voyTbody.appendChild(tr);
+  });
+}
+function chooseVoyage(id){
+  const v=voyageMasters.find(x=>x.id===id); if(!v) return;
+  applyVoyageToMain(v); closeVoyageModal(); showToast('已回填航次信息', true);
+}
+function openNewVoyage(){ newVoyBox.style.display='block'; newCarrier.value='';newVessel.value='';newVoyage.value='';newEtd.value=''; }
+function cancelNewVoyage(){ newVoyBox.style.display='none'; }
+function createVoyage(){
+  const c=(newCarrier.value||'').trim(), ves=(newVessel.value||'').trim(), voy=(newVoyage.value||'').trim(), e=(newEtd.value||'').trim();
+  if(!c||!ves||!voy||!e){ alert('请填写：船公司、船名、航次、ETD'); return; }
+  if(voyageMasters.some(v=>v.carrier===c&&v.vessel===ves&&v.voyage===voy&&v.etd===e)){ alert('该航次已存在（完全相同）'); return; }
+  const id='V'+String(Date.now());
+  const nv={id,carrier:c,vessel:ves,voyage:voy,etd:e};
+  voyageMasters.unshift(nv);
+  cancelNewVoyage(); applyVoyageToMain(nv); closeVoyageModal(); showToast('已新建航次并回填', true);
+}
+
+/* 主数据 */
+let rows = loadRowsFromLS();
+let selectedKey = '';
+let canSend=false;
+function saveRowsToLS(){ try{ localStorage.setItem(LS_KEY, JSON.stringify(rows)); }catch(e){} }
+function loadRowsFromLS(){
+  try{ const s=localStorage.getItem(LS_KEY); const arr=s?JSON.parse(s):[]; return Array.isArray(arr)?arr:[]; }catch(e){ return []; }
+}
+function makeKey(bookingNo){ return String(bookingNo||'').trim(); }
+function upsert(rec){
+  rec.key = makeKey(rec.bookingNo);
+  const idx = rows.findIndex(x=>x.key===rec.key);
+  if(idx>-1) rows[idx]=rec; else rows.unshift(rec);
+  saveRowsToLS();
+}
+
+/* 校验/保存 */
+function getCommonFromMain(){
+  return {
+    carrier: carrier.value.trim(), vessel: vessel.value.trim(), voyage: voyage.value.trim(), etd: etd.value.trim(),
+    ffOwner: ffOwner.value.trim(), clOwner: clOwner.value.trim(), remark: remark.value.trim(),
+    fileCount: pickedFiles.length, voyageId: selectedVoyageIdMain
+  };
+}
+function validateCommonMain(c){
+  if(!c.voyageId) return '请先【选择航次】（系统受控）';
+  if(!c.ffOwner) return '请填写 FF担当';
+  if(!c.clOwner) return '请填写 CL担当';
+  return '';
+}
+function validateEntry(){
+  const bk=(entry.bookingNo||'').trim(); if(!bk) return {ok:false,msg:'请填写 Booking No.'};
+  const gp20=normalizeQty(entry.gp20), gp40=normalizeQty(entry.gp40), hc40=normalizeQty(entry.hc40), rh40=normalizeQty(entry.rh40);
+  if(gp20===null||gp40===null||hc40===null||rh40===null) return {ok:false,msg:'箱量必须是数字（可为空）'};
+  const sum=[gp20,gp40,hc40,rh40].reduce((a,x)=>a+(x?parseInt(x,10):0),0);
+  if(sum===0) return {ok:false,msg:'至少填写 1 个箱型箱量'};
+  return {ok:true,bookingNo:bk,gp20,gp40,hc40,rh40};
+}
+const statePill = document.getElementById('statePill');
+function saveOne(state){
+  const c=getCommonFromMain(); const e=validateCommonMain(c); if(e){showToast(e,false);return;}
+  const ve=validateEntry(); if(!ve.ok){showToast(ve.msg,false);return;}
+
+  const existing = rows.find(x=>x.key===makeKey(ve.bookingNo));
+  const rec = {
+    bookingNo: ve.bookingNo,
+    gp20: ve.gp20||'', gp40: ve.gp40||'', hc40: ve.hc40||'', rh40: ve.rh40||'',
+    carrier: c.carrier, vessel: c.vessel, voyage: c.voyage, etd: c.etd,
+    ffOwner: c.ffOwner, clOwner: c.clOwner, remark: c.remark,
+    fileCount: c.fileCount, voyageId: c.voyageId,
+    sendState: existing?.sendState || '未发送',
+    vendor: existing?.vendor || '',
+    createdAt: existing?.createdAt || Date.now(),
+    entryState: state
+  };
+
+  upsert(rec);
+  selectedKey = rec.key;
+  selHint.textContent = `已选：${rec.bookingNo}`;
+
+  statePill.className = 'pill ' + (state==='已提交'?'submitted':'draft');
+  statePill.innerHTML = `<span class="dot"></span>${state==='已提交'?'已提交':'草稿'}`;
+
+  render();
+  showToast(`已${state==='已提交'?'提交':'保存'}：${rec.bookingNo}`, true);
+
+  if(state==='已提交'){
+    entry={bookingNo:'',gp20:'',gp40:'',hc40:'',rh40:''};
+    renderEntry();
+    clearFiles();
+  }
+}
+
+/* 右侧渲染 */
+const tbody=document.getElementById('tbody');
+function pad2(n){ return String(n).padStart(2,'0'); }
+function fmtTime(ts){
+  const d=new Date(ts);
+  return `${d.getFullYear()}-${pad2(d.getMonth()+1)}-${pad2(d.getDate())} ${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+}
+function resetFilters(){
+  f_booking.value=''; f_carrier.value=''; f_vessel.value=''; f_voyage.value=''; f_status.value='';
+  render();
+}
+function filterList(list){
+  const fbk=(f_booking.value||'').trim().toLowerCase();
+  const fcar=(f_carrier.value||'').trim().toLowerCase();
+  const fves=(f_vessel.value||'').trim().toLowerCase();
+  const fvoy=(f_voyage.value||'').trim().toLowerCase();
+  const fst=(f_status.value||'').trim();
+  return list.filter(r=>{
+    if(fbk && !String(r.bookingNo||'').toLowerCase().includes(fbk)) return false;
+    if(fcar && !String(r.carrier||'').toLowerCase().includes(fcar)) return false;
+    if(fves && !String(r.vessel||'').toLowerCase().includes(fves)) return false;
+    if(fvoy && !String(r.voyage||'').toLowerCase().includes(fvoy)) return false;
+    if(fst && String(r.sendState||'未发送')!==fst) return false;
+    return true;
+  });
+}
+function statePillHtml(st){
+  if(st==='已发送') return `<span class="stPill sent"><span class="dot"></span>已发送</span>`;
+  return `<span class="stPill unsent"><span class="dot"></span>未发送</span>`;
+}
+function render(){
+  tbody.innerHTML='';
+  let list = rows.slice().sort((a,b)=>(b.createdAt||0)-(a.createdAt||0));
+  list = filterList(list);
+
+  if(!list.length){
+    const tr=document.createElement('tr');
+    tr.innerHTML=`<td colspan="15" style="color:var(--muted);padding:18px">暂无数据</td>`;
+    tbody.appendChild(tr); return;
+  }
+
+  list.forEach(r=>{
+    const tr=document.createElement('tr');
+    if(r.key===selectedKey) tr.classList.add('selected');
+    tr.onclick=()=>{ selectedKey=r.key; selHint.textContent=`已选：${r.bookingNo}`; render(); };
+
+    const sent = (r.sendState==='已发送');
+
+    // v14/v15：只显示一个按钮：未发送=发送；已发送=再发送
+    let opBtn = '';
+    if(canSend){
+      opBtn = sent
+        ? `<button class="miniBtn re" onclick="event.stopPropagation();openSendPanel('${escJs(r.bookingNo)}','resend')">再发送</button>`
+        : `<button class="miniBtn primary" onclick="event.stopPropagation();openSendPanel('${escJs(r.bookingNo)}','send')">发送</button>`;
+    }
+
+    tr.innerHTML = `
+      <td>${fmtTime(r.createdAt||Date.now())}</td>
+      <td><b>${esc(r.bookingNo)}</b></td>
+      <td>${esc(r.carrier)}</td>
+      <td class="ellip" title="${escAttr(r.vessel)}">${esc(r.vessel)}</td>
+      <td>${esc(r.voyage)}</td>
+      <td>${esc(r.etd||'-')}</td>
+      <td class="ellip sm" title="${escAttr(r.ffOwner||'')}">${esc(r.ffOwner||'')}</td>
+      <td class="ellip sm" title="${escAttr(r.clOwner||'')}">${esc(r.clOwner||'')}</td>
+
+      <td class="num">${esc(r.gp20||'')}</td>
+      <td class="num">${esc(r.gp40||'')}</td>
+      <td class="num">${esc(r.hc40||'')}</td>
+      <td class="num">${esc(r.rh40||'')}</td>
+
+      <td class="num">${esc(String(r.fileCount ?? 0))}</td>
+      <td>${esc(sent ? (r.vendor||'') : '')}</td>
+      <td><span class="action">${statePillHtml(sent?'已发送':'未发送')}${opBtn}</span></td>
+    `;
+    tbody.appendChild(tr);
+  });
+
+  saveRowsToLS();
+}
+
+/* 权限 */
+function applyPermUI(){ canSend = permSendChk.checked; render(); }
+applyPermUI();
+
+/* 发送面板：embed=1 只显示发送面板 */
+const sendMask=document.getElementById('sendMask');
+const sendFrame=document.getElementById('sendFrame');
+function openSendPanel(bookingNo, mode){
+  if(!canSend){ alert('无发送权限（请勾选顶部“发送CRP”）'); return; }
+  const b=encodeURIComponent(bookingNo||'');
+  sendFrame.src = `${SEND_PAGE}?embed=1&booking=${b}&mode=${encodeURIComponent(mode||'')}&ts=${Date.now()}`;
+  sendMask.style.display='flex';
+}
+function closeSendPanel(){
+  sendMask.style.display='none';
+  sendFrame.src='';
+  // 关闭后回读 localStorage，刷新发送状态
+  rows=loadRowsFromLS();
+  render();
+}
+sendMask.onclick=e=>{ if(e.target===sendMask) closeSendPanel(); };
+function openFullSend(){ window.open(SEND_PAGE, '_blank'); }
+window.addEventListener('message', (ev)=>{ if(ev?.data?.type==='SLMS_CLOSE_SEND_PANEL') closeSendPanel(); });
+
+/* Splitter 记忆 */
+(function initSplitter(){
+  const grid=document.getElementById('grid');
+  const splitter=document.getElementById('splitter');
+  if(!grid||!splitter) return;
+  try{
+    const saved=localStorage.getItem(LS_SPLIT);
+    if(saved){ const n=parseInt(saved,10); if(!Number.isNaN(n)) grid.style.setProperty('--leftW', n+'px'); }
+  }catch(e){}
+  let dragging=false;
+  const clamp=(v,min,max)=>Math.max(min,Math.min(max,v));
+  splitter.addEventListener('mousedown',(e)=>{
+    if(window.matchMedia('(max-width: 1300px)').matches) return;
+    dragging=true; splitter.classList.add('dragging');
+    document.body.style.cursor='col-resize'; document.body.style.userSelect='none'; e.preventDefault();
+  });
+  window.addEventListener('mousemove',(e)=>{
+    if(!dragging) return;
+    const rect=grid.getBoundingClientRect();
+    const x=e.clientX-rect.left;
+    const minLeft=520, maxLeft=Math.max(minLeft, rect.width-520);
+    grid.style.setProperty('--leftW', clamp(x,minLeft,maxLeft)+'px');
+  });
+  window.addEventListener('mouseup',()=>{
+    if(!dragging) return;
+    dragging=false; splitter.classList.remove('dragging');
+    document.body.style.cursor=''; document.body.style.userSelect='';
+    try{
+      const v=getComputedStyle(grid).getPropertyValue('--leftW').trim();
+      const n=parseInt(v,10); if(!Number.isNaN(n)) localStorage.setItem(LS_SPLIT, String(n));
+    }catch(e){}
+  });
+})();
+
+/* 演示数据 */
+function rnd(arr){ return arr[Math.floor(Math.random()*arr.length)]; }
+function rndInt(a,b){ return a + Math.floor(Math.random()*(b-a+1)); }
+function seedDemoIfEmpty(){
+  if(rows && rows.length) return;
+
+  const carriers=[
+    {carrier:'MSK', vessels:['MAERSK SANTA','MAERSK LIMA','MAERSK TOKYO'], voyages:['123W','126E','130S']},
+    {carrier:'MSC', vessels:['MSC ARINA','MSC EVA','MSC KIRA'], voyages:['552S','558W','560E']},
+    {carrier:'COSCO', vessels:['COSCO SHIPPING','COSCO STAR','COSCO OCEAN'], voyages:['88E','90W','92S']},
+  ];
+  const ffs=['FF-A','FF-B','FF-C','FF-D'];
+  const cls=['CL-A','CL-B','CL-C','CL-D'];
+  const now=Date.now();
+  const count=25;
+  const list=[];
+  for(let i=0;i<count;i++){
+    const c=rnd(carriers);
+    const vessel=rnd(c.vessels);
+    const voyage=rnd(c.voyages);
+    const etdDay=26+(i%6);
+    const etd=`2025-12-${pad2(etdDay)}`;
+    const bookingNo=`BK202512${pad2(rndInt(10,24))}-${pad2(i+1)}`;
+
+    let gp20=String(rndInt(0,3)), gp40=String(rndInt(0,3)), hc40=String(rndInt(0,3)), rh40=String(rndInt(0,2));
+    if((+gp20 + +gp40 + +hc40 + +rh40)===0) hc40='1';
+
+    const sent=Math.random()<0.4;
+    list.push({
+      key:makeKey(bookingNo), bookingNo,
+      gp20:gp20==='0'?'':gp20, gp40:gp40==='0'?'':gp40, hc40:hc40==='0'?'':hc40, rh40:rh40==='0'?'':rh40,
+      carrier:c.carrier, vessel, voyage, etd,
+      ffOwner:rnd(ffs), clOwner:rnd(cls),
+      remark:'', fileCount:rndInt(0,4), voyageId:'V'+String(100+i),
+      sendState: sent?'已发送':'未发送',
+      vendor: sent?rnd(VENDORS_SENT):'',
+      createdAt: now - i*1000*60*23,
+      entryState:'已提交'
+    });
+  }
+  rows=list; saveRowsToLS();
+}
+
+/* 填例/新建 */
+function fillDemo(){
+  entry={ bookingNo:'BK20251224-01', gp20:'0', gp40:'1', hc40:'2', rh40:'' };
+  renderEntry();
+  applyVoyageToMain(voyageMasters[0]);
+  ffOwner.value='FF-A'; clOwner.value='CL-B';
+}
+function clearFormAll(){
+  entry={bookingNo:'',gp20:'',gp40:'',hc40:'',rh40:''};
+  renderEntry(); clearFiles(); clearVoyageMain();
+  ffOwner.value=''; clOwner.value=''; remark.value='';
+  selectedKey=''; selHint.textContent='未选择记录';
+  statePill.className='pill draft'; statePill.innerHTML='<span class="dot"></span>草稿';
+  showToast('已进入新建模式', true);
+}
+
+/* 转义 */
+function esc(s){return String(s??'').replace(/[&<>"']/g,m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[m]));}
+function escAttr(s){return esc(s).replace(/"/g,'&quot;');}
+function escJs(s){return String(s??'').replace(/\\/g,'\\\\').replace(/'/g,"\\'");}
+
+/* init */
+seedDemoIfEmpty();
+render();
+</script>
+</body>
+</html>
