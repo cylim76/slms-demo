@@ -1,0 +1,753 @@
+<!--
+File: container/container-claim-with-bl.html
+Version: container-claim-with-bl-v6
+Date: 2025-12-23
+-->
+
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>提箱单（CRP）配箱</title>
+  <style>
+    :root{--brand:#e0205c; --bg:#f1f2f5; --card:#fff; --text:#222; --muted:#666; --line:#e6e6e6;}
+    *{box-sizing:border-box}
+    body{margin:0;font-family:Arial,"Microsoft YaHei";background:var(--bg);color:var(--text)}
+    .topbar{background:#fff;border-bottom:1px solid #eee;padding:10px 14px;display:flex;align-items:center;justify-content:space-between;gap:10px}
+    .topbar .left{display:flex;gap:10px;align-items:baseline;flex-wrap:wrap}
+    .topbar b{font-size:14px}
+    .meta{font-size:12px;color:var(--muted)}
+    .ver{cursor:pointer; user-select:none;background:#f6f6f6;border:1px solid #eee;border-radius:999px;padding:4px 10px;font-size:12px;color:#333;font-family:ui-monospace,Menlo,Consolas,monospace;display:inline-flex;align-items:center;gap:8px;}
+    .ver .dot{width:8px;height:8px;border-radius:99px;background:var(--brand)}
+    .wrap{height:calc(100vh - 46px);padding:12px;max-width:1750px;margin:0 auto}
+
+    /* ====== 可拖动分割布局 ====== */
+    .layout{
+      display:flex;
+      gap:0;              /* 拖动条自己占位 */
+      height:100%;
+      align-items:stretch;
+      min-width:0;
+    }
+    .pane{
+      min-width:280px;
+      min-height:0;
+      display:flex;
+    }
+    .divider{
+      width:10px;
+      cursor:col-resize;
+      position:relative;
+      flex:0 0 10px;
+      user-select:none;
+      touch-action:none;
+    }
+    .divider:before{
+      content:"";
+      position:absolute;
+      left:50%;
+      top:10px;
+      bottom:10px;
+      width:2px;
+      transform:translateX(-50%);
+      background:#ddd;
+      border-radius:99px;
+    }
+    .divider:hover:before{ background:var(--brand); opacity:.8; }
+    .divider .grab{
+      position:absolute;
+      left:50%;
+      top:50%;
+      transform:translate(-50%,-50%);
+      width:6px;height:40px;border-radius:99px;
+      background:#cfcfcf;
+      opacity:.55;
+    }
+    .divider:hover .grab{ background:var(--brand); opacity:.8; }
+
+    .card{
+      background:var(--card);
+      border-radius:8px;
+      box-shadow:0 2px 10px rgba(0,0,0,.08);
+      padding:12px;
+      display:flex;
+      flex-direction:column;
+      min-width:0;
+      width:100%;
+    }
+    h3{margin:0 0 8px;font-size:15px}
+    label{font-size:12px;color:var(--muted);font-weight:800}
+    input,select{width:100%;padding:7px 8px;border:1px solid #ccc;border-radius:6px}
+    .grid6{display:grid;grid-template-columns:repeat(6,1fr);gap:8px}
+    .grid4{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+    .actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:8px}
+    .btn{padding:7px 14px;border-radius:999px;border:1px solid #aaa;background:#fff;font-weight:900;cursor:pointer;font-size:12px}
+    .btn.primary{background:var(--brand);border-color:var(--brand);color:#fff}
+    .btn.danger{border-color:var(--brand);color:var(--brand)}
+    .hint{font-size:12px;color:var(--muted)}
+
+    /* ====== 明细滚动：支持横向 + 纵向 ====== */
+    .scroll{
+      flex:1;
+      overflow:auto;                 /* 关键：横纵都允许 */
+      border:1px solid #eee;
+      border-radius:8px;
+      margin-top:10px;
+      min-height:0;
+      background:#fff;
+    }
+    table{
+      width:max-content;             /* 关键：表格按内容撑开，触发横向滚动 */
+      min-width:100%;                /* 同时保证不小于容器宽 */
+      border-collapse:collapse;
+      font-size:13px;
+    }
+    th,td{border-bottom:1px solid #ddd;padding:7px;text-align:center;white-space:nowrap}
+    th{background:#f6f6f6;position:sticky;top:0;z-index:1}
+
+    tr.unclaimed td{background:#fff0f0}
+    tr.rowSelected{outline:2px solid var(--brand)}
+    .tag{padding:2px 10px;border-radius:999px;font-size:12px;font-weight:900}
+    .tag.ok{background:#eefaf2;color:#1e7f3b}
+    .tag.warn{background:#fff0f0;color:#d4003a}
+    .ops{display:flex;gap:6px;justify-content:center}
+    .linkbtn{padding:5px 10px;border-radius:999px;border:1px solid #ddd;background:#fff;cursor:pointer;font-weight:800;font-size:12px}
+    .detail{background:#fafafa;border:1px solid #eee;border-radius:8px;padding:10px;margin-top:8px;font-size:12px;color:#444;line-height:1.6}
+    .log{height:160px;overflow:auto;border:1px solid #eee;border-radius:8px;padding:8px;font-size:12px;color:#444;margin-top:10px}
+    .log .t{color:#999;font-family:ui-monospace,Menlo,Consolas,monospace}
+
+    /* modal */
+    .modalMask{position:fixed;inset:0;background:rgba(0,0,0,.35);display:none;align-items:center;justify-content:center;padding:14px;z-index:9999}
+    .modal{width:min(900px,96vw);background:#fff;border-radius:12px;box-shadow:0 20px 60px rgba(0,0,0,.28);overflow:hidden}
+    .modalHd{display:flex;justify-content:space-between;gap:10px;align-items:center;padding:12px 14px;border-bottom:1px solid #eee}
+    .modalHd b{font-size:14px}
+    .modalBd{padding:12px 14px;max-height:70vh;overflow:auto}
+    .modalBd ol{margin:8px 0 0 18px}
+    .close{border:1px solid #ddd;background:#fff;border-radius:999px;padding:6px 12px;cursor:pointer;font-weight:900}
+    .kv{display:grid;grid-template-columns:140px 1fr;gap:8px;font-size:12px;color:#444;margin-top:6px}
+    .kv div:nth-child(odd){color:#777}
+
+    /* 拖动时防止选中文本 */
+    .dragging, .dragging *{ cursor:col-resize !important; user-select:none !important; }
+  </style>
+</head>
+
+<body>
+  <div class="topbar">
+    <div class="left">
+      <b>SLMS Demo</b>
+      <span class="meta">提箱单（CRP）配箱</span>
+    </div>
+    <div class="ver" id="verBtn" title="点击查看页面功能要求">
+      <span class="dot"></span>
+      <span id="verText"></span>
+    </div>
+  </div>
+
+  <div class="wrap">
+    <div class="layout" id="layout">
+      <!-- Left: BLs -->
+      <div class="pane" id="leftPane" style="flex: 0 0 40%;">
+        <div class="card">
+          <h3>提箱单（CRP）管理</h3>
+
+          <div class="grid6">
+            <div><label>提箱单号（提单号）</label><input id="bBL" placeholder="模糊匹配"/></div>
+            <div>
+              <label>船公司</label>
+              <select id="bShip">
+                <option value="">全部</option>
+                <option value="OOCL">OOCL</option>
+                <option value="MAERSK">MAERSK</option>
+              </select>
+            </div>
+            <div><label>ETD开始</label><input type="date" id="bEtdStart"/></div>
+            <div><label>ETD结束</label><input type="date" id="bEtdEnd"/></div>
+            <div>
+              <label>运输公司</label>
+              <select id="bTrans">
+                <option value="">全部</option>
+                <option value="中集">中集</option>
+                <option value="顺航">顺航</option>
+              </select>
+            </div>
+            <div>
+              <label>目的港</label>
+              <select id="bPod">
+                <option value="">全部</option>
+                <option value="LOS ANGELES">LOS ANGELES</option>
+                <option value="HAMBURG">HAMBURG</option>
+                <option value="BUSAN">BUSAN</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="actions">
+            <button class="btn primary" onclick="renderBLs()">查询</button>
+            <button class="btn primary" onclick="bindAtomic()">配箱并绑定</button>
+          </div>
+
+          <div class="detail" id="blDetail">请先选择提箱单（点击下方明细行）</div>
+
+          <div class="scroll" id="blScroll">
+            <table>
+              <thead>
+                <tr>
+                  <th>提箱单号</th>
+                  <th>船公司</th>
+                  <th>航次</th>
+                  <th>ETD</th>
+                  <th>运输公司</th>
+                  <th>目的国家</th>
+                  <th>目的港</th>
+                  <th>20GP</th>
+                  <th>40GP</th>
+                  <th>40HQ</th>
+                </tr>
+              </thead>
+              <tbody id="blBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- draggable divider -->
+      <div class="divider" id="divider" title="拖动调整左右宽度">
+        <div class="grab"></div>
+      </div>
+
+      <!-- Right: Containers -->
+      <div class="pane" id="rightPane" style="flex: 1 1 60%;">
+        <div class="card">
+          <h3>箱号明细（配箱对象）</h3>
+          <div class="grid4">
+            <div><label>箱号</label><input id="qBox" placeholder="模糊匹配"/></div>
+            <div><label>提箱单号</label><input id="qBL" placeholder="已配箱才有"/></div>
+            <div>
+              <label>配箱状态</label>
+              <select id="qStatus">
+                <option value="">全部</option>
+                <option value="unclaimed">未配箱</option>
+                <option value="claimed">已配箱</option>
+              </select>
+            </div>
+            <div>
+              <label>运输公司</label>
+              <select id="qTrans">
+                <option value="">全部</option>
+                <option value="中集">中集</option>
+                <option value="顺航">顺航</option>
+              </select>
+            </div>
+
+            <div><label>提箱日期开始</label><input type="date" id="qDateStart"/></div>
+            <div><label>提箱日期结束</label><input type="date" id="qDateEnd"/></div>
+          </div>
+
+          <div class="actions">
+            <button class="btn primary" onclick="renderContainers()">查询</button>
+            <button class="btn" onclick="resetContainerQuery()">重置</button>
+            <button class="btn danger" onclick="unbindConfirm()">解绑</button>
+            <span class="hint" id="selHint">已选 0</span>
+          </div>
+
+          <div class="scroll" id="containerScroll">
+            <table>
+              <thead>
+                <tr>
+                  <th style="width:46px"><input type="checkbox" id="chkAll" onclick="toggleAll(this.checked)"></th>
+                  <th>箱号</th>
+                  <th>提箱日期</th>
+                  <th>运输公司</th>
+                  <th>船公司</th>
+                  <th>目的港</th>
+                  <th>箱型</th>
+                  <th>提箱单号</th>
+                  <th>状态</th>
+                  <th style="width:90px">操作</th>
+                </tr>
+              </thead>
+              <tbody id="containerBody"></tbody>
+            </table>
+          </div>
+
+          <div class="log" id="log"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 页面功能要求 Modal -->
+  <div class="modalMask" id="reqMask">
+    <div class="modal">
+      <div class="modalHd">
+        <b>页面功能要求</b>
+        <button class="close" onclick="closeReq()">关闭</button>
+      </div>
+      <div class="modalBd">
+        <div class="kv">
+          <div>文件</div><div><code>container/container-claim-with-bl.html</code></div>
+          <div>版本</div><div><code id="reqVer"></code></div>
+          <div>说明</div><div>本弹窗内容默认随版本同步更新。</div>
+        </div>
+        <ol id="reqList"></ol>
+      </div>
+    </div>
+  </div>
+
+<script>
+/* ================= 页面功能要求（必须随版本维护） ================= */
+const VERSION = "container-claim-with-bl-v6";
+const REQUIREMENTS = [
+  "布局：左侧=提箱单（CRP）查询/明细/抬头；右侧=箱号明细（配箱对象）",
+  "术语统一：配箱（给提箱单配箱号）；状态=已配箱/未配箱；按钮=配箱并绑定",
+  "左右明细区域均支持纵向滚动 + 横向滚动（列多时可左右滑动）",
+  "中间分割线可拖动调整左右宽度，并自动记住上次比例（localStorage）",
+  "箱号支持多选、查询、明细滚动自适应；已配箱箱号点击时自动定位并高亮对应提箱单",
+  "配箱并绑定：All-or-Nothing 原子操作；任何校验失败 → 全部不操作并列出全部原因",
+  "校验项：已配箱需先解绑；船公司/目的港一致；提箱单箱型配额充足",
+  "解绑：在箱号侧按钮区；弹窗列出箱号明细确认；解绑后回退提箱单已配箱计数",
+  "编辑：每行“编辑”按钮打开 container-edit.html；编辑保存后本页自动刷新并高亮该箱",
+  "Tab 标题动态：选择提箱单后更新为“提箱单（CRP）配箱 - 单号”",
+  "右上角版本号可点击弹窗：显示本页页面功能要求（本区内容与版本同步更新，内容可滚动）"
+];
+verText.textContent = VERSION;
+
+function escapeHtml(s){
+  return String(s??"").replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;")
+    .replaceAll('"',"&quot;").replaceAll("'","&#39;");
+}
+function openReq(){
+  reqVer.textContent = VERSION;
+  reqList.innerHTML = REQUIREMENTS.map(x=>`<li>${escapeHtml(x)}</li>`).join("");
+  reqMask.style.display = "flex";
+}
+function closeReq(){ reqMask.style.display = "none"; }
+verBtn.addEventListener("click", openReq);
+reqMask.addEventListener("click", (e)=>{ if(e.target===reqMask) closeReq(); });
+
+/* ================= Tab title sync (for index tab workspace) ================= */
+const TAB_KEY = "container-claim";
+function setTabTitle(title){
+  try{
+    if(window.parent && window.parent !== window){
+      window.parent.postMessage({ type:"SLMS_SET_TAB_TITLE", key:TAB_KEY, title }, "*");
+    }
+  }catch(_){}
+}
+function refreshTabTitle(){
+  if(currentBL && currentBL.bl){
+    setTabTitle(`提箱单（CRP）配箱 - ${currentBL.bl}`);
+  }else{
+    setTabTitle("提箱单（CRP）配箱");
+  }
+}
+
+/* ================= 可拖动分割线逻辑 ================= */
+const LS_KEY_SPLIT = "slms_demo_split_left_pct_v1";
+(function initSplit(){
+  const saved = parseFloat(localStorage.getItem(LS_KEY_SPLIT) || "");
+  if(Number.isFinite(saved) && saved>15 && saved<85){
+    applySplit(saved);
+  }
+})();
+function applySplit(leftPct){
+  // 左固定百分比，右自适应
+  leftPane.style.flex = `0 0 ${leftPct}%`;
+  rightPane.style.flex = `1 1 ${100-leftPct}%`;
+}
+(function enableDividerDrag(){
+  let dragging=false;
+
+  function start(e){
+    dragging=true;
+    document.documentElement.classList.add("dragging");
+    divider.setPointerCapture?.(e.pointerId);
+  }
+  function move(e){
+    if(!dragging) return;
+    const rect = layout.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const pct = (x / rect.width) * 100;
+    const clamped = Math.max(20, Math.min(80, pct));
+    applySplit(clamped);
+  }
+  function end(){
+    if(!dragging) return;
+    dragging=false;
+    document.documentElement.classList.remove("dragging");
+    // 记住当前左侧百分比
+    const leftPct = parseFloat((leftPane.getBoundingClientRect().width / layout.getBoundingClientRect().width * 100).toFixed(2));
+    try{ localStorage.setItem(LS_KEY_SPLIT, String(leftPct)); }catch(_){}
+  }
+
+  // pointer events（鼠标/触屏都支持）
+  divider.addEventListener("pointerdown", start);
+  window.addEventListener("pointermove", move);
+  window.addEventListener("pointerup", end);
+})();
+
+/* ================= Sample Data ================= */
+const TYPES = ["20GP","40GP","40HQ"];
+const SHIPS = ["OOCL","MAERSK"];
+const TRANS = ["中集","顺航"];
+const PODS  = ["LOS ANGELES","HAMBURG","BUSAN"];
+const COUNTRIES = { "LOS ANGELES":"USA", "HAMBURG":"DE", "BUSAN":"KR" };
+const VESSELS = ["STAR RIVER 012W","BLUE OCEAN 118E","PACIFIC 003N","EAGLE 021S"];
+
+function pad(n){ return String(n).padStart(2,"0"); }
+function iso(d){ return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`; }
+function todayISO(){ return iso(new Date()); }
+function addDaysISO(baseISO, delta){
+  const d = new Date(baseISO+"T00:00:00");
+  d.setDate(d.getDate()+delta);
+  return iso(d);
+}
+function logLine(msg){
+  const t = new Date();
+  const stamp = `${pad(t.getHours())}:${pad(t.getMinutes())}:${pad(t.getSeconds())}`;
+  log.innerHTML = `<div><span class="t">${stamp}</span> ${escapeHtml(msg)}</div>` + log.innerHTML;
+}
+
+/* BLs: 24 rows */
+const bls = Array.from({length:24}, (_,i)=>{
+  const pod = PODS[i%PODS.length];
+  const ship = SHIPS[i%SHIPS.length];
+  const trans = TRANS[(i+1)%TRANS.length];
+  return {
+    bl: "OOLU" + String(900000+i),
+    ship,
+    vessel: VESSELS[i%VESSELS.length],
+    ff: ["Kim","Lee","Park","Choi","Han","Lim"][i%6],
+    trans,
+    etd: addDaysISO(todayISO(), i%20),
+    pod,
+    country: COUNTRIES[pod],
+    quota: { "20GP": 3 + (i%2), "40GP": 3, "40HQ": 2 },
+    claimed: { "20GP": 0, "40GP": 0, "40HQ": 0 } // 数据字段沿用 claimed，页面语义=已配箱
+  };
+});
+
+/* Containers: 30 rows; 1/3 claimed */
+const containers = Array.from({length:30}, (_,i)=>{
+  const ship = SHIPS[i%2];
+  const trans = TRANS[i%2];
+  const pod = PODS[i%PODS.length];
+  const type = TYPES[i%3];
+  return {
+    no: "MSCU" + String(1234500+i),
+    ship,
+    trans,
+    pod,
+    type,
+    releaseDate: addDaysISO(todayISO(), -(i%18)),
+    bl: "",
+    status: "unclaimed" // unclaimed=未配箱, claimed=已配箱
+  };
+});
+
+let selected = new Set();
+let selectedRowNo = null;
+let currentBL = null;
+
+/* seed claimed 1/3 */
+for(let i=0;i<containers.length;i++){
+  if(i%3===0){
+    const b = bls[i%bls.length];
+    const c = containers[i];
+    c.status="claimed";
+    c.bl=b.bl;
+    b.claimed[c.type] += 1;
+  }
+}
+
+/* ================= Query Defaults ================= */
+qDateEnd.value = todayISO();
+bEtdStart.value = todayISO();
+bEtdEnd.value = addDaysISO(todayISO(), 14);
+
+/* ================= Rendering ================= */
+function renderContainers(){
+  const box = qBox.value.trim().toUpperCase();
+  const bl = qBL.value.trim().toUpperCase();
+  const st = qStatus.value;
+  const tr = qTrans.value;
+  const ds = qDateStart.value;
+  const de = qDateEnd.value;
+
+  selected.clear();
+  chkAll.checked = false;
+  selHint.textContent = `已选 0`;
+  containerBody.innerHTML = "";
+
+  const rows = containers.filter(c=>{
+    if(box && !c.no.includes(box)) return false;
+    if(bl && !(c.bl||"").includes(bl)) return false;
+    if(st && c.status!==st) return false;
+    if(tr && c.trans!==tr) return false;
+    if(ds && c.releaseDate<ds) return false;
+    if(de && c.releaseDate>de) return false;
+    return true;
+  });
+
+  rows.forEach(c=>{
+    const trEl = document.createElement("tr");
+    if(c.status==="unclaimed") trEl.classList.add("unclaimed");
+    if(c.no===selectedRowNo) trEl.classList.add("rowSelected");
+
+    trEl.innerHTML = `
+      <td><input type="checkbox" onclick="selectOne(event,'${c.no}')"></td>
+      <td>${c.no}</td>
+      <td>${c.releaseDate}</td>
+      <td>${c.trans}</td>
+      <td>${c.ship}</td>
+      <td>${c.pod}</td>
+      <td>${c.type}</td>
+      <td>${c.bl||""}</td>
+      <td>${c.status==="claimed" ? `<span class="tag ok">已配箱</span>` : `<span class="tag warn">未配箱</span>`}</td>
+      <td><div class="ops"><button class="linkbtn" onclick="openEdit(event,'${c.no}')">编辑</button></div></td>
+    `;
+
+    trEl.addEventListener("click", ()=>{
+      selectedRowNo = c.no;
+      if(c.status==="claimed" && c.bl){
+        locateBL(c.bl);
+      }
+      renderContainers();
+    });
+
+    containerBody.appendChild(trEl);
+  });
+
+  logLine(`箱号查询结果：${rows.length} 条`);
+}
+
+function renderBLs(){
+  const q1 = bBL.value.trim().toUpperCase();
+  const qShip = bShip.value;
+  const qTrans = bTrans.value;
+  const qPod = bPod.value;
+  const s = bEtdStart.value;
+  const e = bEtdEnd.value;
+
+  blBody.innerHTML = "";
+
+  const rows = bls.filter(b=>{
+    if(q1 && !b.bl.includes(q1)) return false;
+    if(qShip && b.ship!==qShip) return false;
+    if(qTrans && b.trans!==qTrans) return false;
+    if(qPod && b.pod!==qPod) return false;
+    if(s && b.etd < s) return false;
+    if(e && b.etd > e) return false;
+    return true;
+  });
+
+  rows.forEach(b=>{
+    const trEl = document.createElement("tr");
+    if(currentBL && currentBL.bl===b.bl) trEl.classList.add("rowSelected");
+
+    trEl.innerHTML = `
+      <td>${b.bl}</td>
+      <td>${b.ship}</td>
+      <td>${b.vessel}</td>
+      <td>${b.etd}</td>
+      <td>${b.trans}</td>
+      <td>${b.country}</td>
+      <td>${b.pod}</td>
+      <td>${b.claimed["20GP"]}/${b.quota["20GP"]}</td>
+      <td>${b.claimed["40GP"]}/${b.quota["40GP"]}</td>
+      <td>${b.claimed["40HQ"]}/${b.quota["40HQ"]}</td>
+    `;
+    trEl.addEventListener("click", ()=>{
+      currentBL = b;
+      updateBLDetail();
+      renderBLs();
+    });
+    blBody.appendChild(trEl);
+  });
+
+  logLine(`提箱单查询结果：${rows.length} 条`);
+}
+
+function updateBLDetail(){
+  if(!currentBL){
+    blDetail.textContent = "请先选择提箱单（点击下方明细行）";
+    refreshTabTitle();
+    return;
+  }
+  blDetail.innerHTML = `
+    <b>提箱单详情（CRP抬头信息）</b><br/>
+    提箱单号：<b>${currentBL.bl}</b> ｜ 船公司：<b>${currentBL.ship}</b> ｜ 航次：<b>${currentBL.vessel}</b><br/>
+    运输公司：<b>${currentBL.trans}</b> ｜ FF担当：<b>${currentBL.ff}</b> ｜ ETD：<b>${currentBL.etd}</b><br/>
+    目的国家：<b>${currentBL.country}</b> ｜ 目的港：<b>${currentBL.pod}</b><br/>
+    箱型配额：20GP <b>${currentBL.claimed["20GP"]}</b>/<b>${currentBL.quota["20GP"]}</b> ｜ 40GP <b>${currentBL.claimed["40GP"]}</b>/<b>${currentBL.quota["40GP"]}</b> ｜ 40HQ <b>${currentBL.claimed["40HQ"]}</b>/<b>${currentBL.quota["40HQ"]}</b>
+  `;
+  refreshTabTitle();
+}
+
+/* ================= Actions ================= */
+function selectOne(e, no){
+  e.stopPropagation();
+  if(selected.has(no)) selected.delete(no);
+  else selected.add(no);
+  selHint.textContent = `已选 ${selected.size}`;
+}
+
+function toggleAll(checked){
+  selected.clear();
+  const checkboxes = containerBody.querySelectorAll("input[type=checkbox]");
+  const rows = Array.from(containerBody.querySelectorAll("tr"));
+  rows.forEach((trEl, idx)=>{
+    const no = trEl.children[1]?.textContent;
+    if(!no) return;
+    if(checked){
+      selected.add(no);
+      checkboxes[idx].checked = true;
+    }else{
+      checkboxes[idx].checked = false;
+    }
+  });
+  selHint.textContent = `已选 ${selected.size}`;
+}
+
+function resetContainerQuery(){
+  qBox.value=""; qBL.value=""; qStatus.value=""; qTrans.value=""; qDateStart.value=""; qDateEnd.value=todayISO();
+  renderContainers();
+}
+
+function locateBL(blNo){
+  const b = bls.find(x=>x.bl===blNo);
+  if(!b) return;
+  currentBL = b;
+  updateBLDetail();
+  renderBLs();
+  logLine(`已定位提箱单：${blNo}`);
+}
+
+function openEdit(e, containerNo){
+  e.stopPropagation();
+  const url = `./container-edit.html?containerNo=${encodeURIComponent(containerNo)}`;
+  const w = window.open(url, "containerEdit", "width=1100,height=720");
+  if(!w) alert("浏览器阻止了弹窗，请允许弹出窗口后重试。");
+}
+
+function unbindConfirm(){
+  const targets = containers.filter(c=>selected.has(c.no));
+  const claimed = targets.filter(c=>c.status==="claimed");
+  if(claimed.length===0){
+    alert("请选择已配箱的箱号后再解绑。");
+    return;
+  }
+  const list = claimed.map(c=>`${c.no}（原提箱单：${c.bl}）`).join("\n");
+  const ok = confirm(`确认解绑以下 ${claimed.length} 个箱号？\n\n${list}\n\n（解绑将清空箱号提箱单号，并回退提箱单已配箱数量）`);
+  if(!ok) return;
+
+  claimed.forEach(c=>{
+    const b = bls.find(x=>x.bl===c.bl);
+    if(b) b.claimed[c.type] = Math.max(0, b.claimed[c.type]-1);
+    c.status="unclaimed";
+    c.bl="";
+  });
+  logLine(`解绑成功：${claimed.length} 个箱号`);
+  renderContainers();
+  renderBLs();
+  updateBLDetail();
+}
+
+function bindAtomic(){
+  if(!currentBL){
+    alert("请先选择左侧提箱单。");
+    return;
+  }
+  if(selected.size===0){
+    alert("请先在右侧勾选要配到该提箱单的箱号。");
+    return;
+  }
+
+  const targets = containers.filter(c=>selected.has(c.no));
+  const errors = [];
+
+  targets.forEach(c=>{
+    if(c.status==="claimed"){
+      errors.push(`${c.no}：已被提箱单 ${c.bl} 配箱（请先解绑或更换提箱单）`);
+    }
+  });
+
+  const need = { "20GP":0, "40GP":0, "40HQ":0 };
+  targets.forEach(c=>{
+    if(c.ship!==currentBL.ship) errors.push(`${c.no}：船公司不一致（箱：${c.ship} / 提箱单：${currentBL.ship}）`);
+    if(c.pod!==currentBL.pod) errors.push(`${c.no}：目的港不一致（箱：${c.pod} / 提箱单：${currentBL.pod}）`);
+    need[c.type] += 1;
+  });
+
+  Object.keys(need).forEach(t=>{
+    if(currentBL.claimed[t] + need[t] > currentBL.quota[t]){
+      errors.push(`${t}：提箱单箱型配额不足（需要 ${need[t]}，当前已配箱 ${currentBL.claimed[t]}，配额 ${currentBL.quota[t]}）`);
+    }
+  });
+
+  if(errors.length){
+    alert("配箱失败：存在以下问题（已阻止全部操作）\n\n" + errors.join("\n"));
+    logLine(`配箱失败（阻止全部）：${errors.length} 条校验不通过`);
+    return;
+  }
+
+  targets.forEach(c=>{
+    c.status="claimed";
+    c.bl=currentBL.bl;
+    currentBL.claimed[c.type] += 1;
+  });
+
+  logLine(`配箱成功：${targets.length} 个箱号 → ${currentBL.bl}`);
+  renderContainers();
+  renderBLs();
+  updateBLDetail();
+}
+
+/* ================= Cross-page Update (edit save) ================= */
+window.addEventListener("message", (ev)=>{
+  if(!ev.data || ev.data.type!=="SLMS_CONTAINER_UPDATED") return;
+  applyContainerUpdate(ev.data.payload);
+});
+window.addEventListener("storage", (ev)=>{
+  if(ev.key !== "slms_demo_container_updated") return;
+  try{
+    const payload = JSON.parse(ev.newValue || "{}");
+    applyContainerUpdate(payload);
+  }catch(_){}
+});
+function applyContainerUpdate(payload){
+  if(!payload || !payload.oldNo) return;
+  const { oldNo, newNo, ship, trans, pod, type, releaseDate } = payload;
+
+  const c = containers.find(x=>x.no===oldNo);
+  if(!c){
+    logLine(`收到编辑回传，但未找到箱号：${oldNo}`);
+    return;
+  }
+
+  c.no = newNo || c.no;
+  if(ship) c.ship = ship;
+  if(trans) c.trans = trans;
+  if(pod) c.pod = pod;
+  if(type) c.type = type;
+  if(releaseDate) c.releaseDate = releaseDate;
+
+  if(selected.has(oldNo)){
+    selected.delete(oldNo);
+    selected.add(c.no);
+  }
+  selectedRowNo = c.no;
+  logLine(`已更新箱号信息：${oldNo} → ${c.no}`);
+  renderContainers();
+}
+
+/* ================= init ================= */
+renderBLs();
+updateBLDetail();
+renderContainers();
+refreshTabTitle();
+</script>
+</body>
+</html>
