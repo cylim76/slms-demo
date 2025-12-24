@@ -1,0 +1,260 @@
+<!--
+File: container/container-edit.html
+Version: container-edit-v3
+Date: 2025-12-23
+-->
+
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>集装箱编辑</title>
+  <style>
+    :root{--brand:#e0205c;--bg:#f1f2f5;--card:#fff;--text:#222;--muted:#666;}
+    *{box-sizing:border-box}
+    body{margin:0;font-family:Arial,"Microsoft YaHei";background:var(--bg);color:var(--text)}
+    .topbar{background:#fff;border-bottom:1px solid #eee;padding:10px 14px;display:flex;align-items:center;justify-content:space-between;gap:10px}
+    .left{display:flex;gap:10px;align-items:baseline;flex-wrap:wrap}
+    .left b{font-size:14px}
+    .meta{font-size:12px;color:var(--muted)}
+    .ver{cursor:pointer; user-select:none;background:#f6f6f6;border:1px solid #eee;border-radius:999px;padding:4px 10px;font-size:12px;color:#333;font-family:ui-monospace,Menlo,Consolas,monospace;display:inline-flex;align-items:center;gap:8px;}
+    .ver .dot{width:8px;height:8px;border-radius:99px;background:var(--brand)}
+    .wrap{padding:14px;max-width:980px;margin:0 auto}
+    .card{background:var(--card);border-radius:10px;box-shadow:0 2px 10px rgba(0,0,0,.08);padding:14px}
+    h3{margin:0 0 8px;font-size:15px}
+    .hint{font-size:12px;color:var(--muted);line-height:1.6;margin-bottom:12px}
+    label{font-size:12px;color:var(--muted);font-weight:900}
+    input,select{width:100%;padding:8px 10px;border:1px solid #ccc;border-radius:8px}
+    .grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
+    .actions{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end;margin-top:12px}
+    .btn{padding:8px 16px;border-radius:999px;border:1px solid #aaa;background:#fff;font-weight:900;cursor:pointer}
+    .btn.primary{background:var(--brand);border-color:var(--brand);color:#fff}
+    .btn.ghost{border-color:#ddd;color:#444}
+    .preview{margin-top:12px;background:#fafafa;border:1px solid #eee;border-radius:10px;padding:10px;font-size:12px;color:#444;line-height:1.6}
+    code{font-family:ui-monospace,Menlo,Consolas,monospace}
+
+    /* modal */
+    .modalMask{position:fixed;inset:0;background:rgba(0,0,0,.35);display:none;align-items:center;justify-content:center;padding:14px;z-index:9999}
+    .modal{width:min(900px,96vw);background:#fff;border-radius:12px;box-shadow:0 20px 60px rgba(0,0,0,.28);overflow:hidden}
+    .modalHd{display:flex;justify-content:space-between;gap:10px;align-items:center;padding:12px 14px;border-bottom:1px solid #eee}
+    .modalHd b{font-size:14px}
+    .modalBd{padding:12px 14px;max-height:70vh;overflow:auto}
+    .modalBd ol{margin:8px 0 0 18px}
+    .close{border:1px solid #ddd;background:#fff;border-radius:999px;padding:6px 12px;cursor:pointer;font-weight:900}
+    .kv{display:grid;grid-template-columns:140px 1fr;gap:8px;font-size:12px;color:#444;margin-top:6px}
+    .kv div:nth-child(odd){color:#777}
+  </style>
+</head>
+
+<body>
+  <div class="topbar">
+    <div class="left">
+      <b>SLMS Demo</b>
+      <span class="meta">集装箱编辑</span>
+    </div>
+    <div class="ver" id="verBtn" title="点击查看页面功能要求">
+      <span class="dot"></span>
+      <span id="verText"></span>
+    </div>
+  </div>
+
+  <div class="wrap">
+    <div class="card">
+      <h3>集装箱信息维护</h3>
+      <div class="hint">
+        - 支持从认领页面弹窗打开（带参数 <code>?containerNo=</code>），也可单独打开手工编辑。<br/>
+        - 保存后会回传给打开它的页面（如有），并关闭窗口。
+      </div>
+
+      <div class="grid">
+        <div>
+          <label>箱号（可编辑）</label>
+          <input id="fNo" placeholder="例如 MSCU1234567"/>
+        </div>
+        <div>
+          <label>箱型</label>
+          <select id="fType">
+            <option value="20GP">20GP</option>
+            <option value="40GP">40GP</option>
+            <option value="40HQ">40HQ</option>
+          </select>
+        </div>
+        <div>
+          <label>运输公司</label>
+          <select id="fTrans">
+            <option value="中集">中集</option>
+            <option value="顺航">顺航</option>
+          </select>
+        </div>
+        <div>
+          <label>船公司</label>
+          <select id="fShip">
+            <option value="OOCL">OOCL</option>
+            <option value="MAERSK">MAERSK</option>
+          </select>
+        </div>
+        <div>
+          <label>目的港</label>
+          <select id="fPod">
+            <option value="LOS ANGELES">LOS ANGELES</option>
+            <option value="HAMBURG">HAMBURG</option>
+            <option value="BUSAN">BUSAN</option>
+          </select>
+        </div>
+        <div>
+          <label>提箱日期</label>
+          <input type="date" id="fDate"/>
+        </div>
+      </div>
+
+      <div class="actions">
+        <button class="btn ghost" onclick="window.close()">取消</button>
+        <button class="btn primary" onclick="save()">保存</button>
+      </div>
+
+      <div class="preview" id="preview"></div>
+    </div>
+  </div>
+
+  <!-- 页面功能要求 Modal -->
+  <div class="modalMask" id="reqMask">
+    <div class="modal">
+      <div class="modalHd">
+        <b>页面功能要求</b>
+        <button class="close" onclick="closeReq()">关闭</button>
+      </div>
+      <div class="modalBd">
+        <div class="kv">
+          <div>文件</div><div><code>container/container-edit.html</code></div>
+          <div>版本</div><div><code id="reqVer"></code></div>
+          <div>说明</div><div>本弹窗内容默认随版本同步更新（无需再次提醒）。</div>
+        </div>
+        <ol id="reqList"></ol>
+      </div>
+    </div>
+  </div>
+
+<script>
+/* ================= 页面功能要求（必须随版本维护） ================= */
+const VERSION = "container-edit-v3";
+const REQUIREMENTS = [
+  "支持两种打开方式：从认领页弹窗打开（带 ?containerNo=XXXX）/ 单独打开（无参数也可编辑）",
+  "编辑时允许修改箱号（演示用），并可修改：运输公司/船公司/目的港/箱型/提箱日期",
+  "保存后：postMessage 回传给 opener + localStorage 兜底 + 自动关闭窗口",
+  "Tab 标题动态：当箱号变化时（在 Tab 工作台中打开的场景），向父页面发送消息更新 Tab 标题（例：集装箱信息维护 - MSCU1234567）",
+  "右上角版本号可点击弹窗：显示本页页面功能要求（本区内容与版本同步更新）"
+];
+verText.textContent = VERSION;
+
+function escapeHtml(s){
+  return String(s??"").replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;")
+    .replaceAll('"',"&quot;").replaceAll("'","&#39;");
+}
+function openReq(){
+  reqVer.textContent = VERSION;
+  reqList.innerHTML = REQUIREMENTS.map(x=>`<li>${escapeHtml(x)}</li>`).join("");
+  reqMask.style.display = "flex";
+}
+function closeReq(){ reqMask.style.display = "none"; }
+verBtn.addEventListener("click", openReq);
+reqMask.addEventListener("click", (e)=>{ if(e.target===reqMask) closeReq(); });
+
+/* ================= Tab title sync (for index tab workspace) ================= */
+const TAB_KEY = "container-edit";
+function setTabTitle(title){
+  try{
+    if(window.parent && window.parent !== window){
+      window.parent.postMessage({ type:"SLMS_SET_TAB_TITLE", key:TAB_KEY, title }, "*");
+    }
+  }catch(_){}
+}
+function refreshTabTitle(){
+  const no = (fNo.value || "").trim().toUpperCase();
+  if(no) setTabTitle(`集装箱信息维护 - ${no}`);
+  else setTabTitle("集装箱信息维护");
+}
+
+/* ================= Init from URL ================= */
+function getQuery(name){
+  const u = new URL(location.href);
+  return u.searchParams.get(name);
+}
+function todayISO(){
+  const d=new Date();
+  const pad=n=>String(n).padStart(2,'0');
+  return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+}
+
+const oldNo = (getQuery("containerNo") || "").trim();
+fNo.value = oldNo || "";
+fDate.value = todayISO();
+
+/* give some default guesses for nicer demo */
+if(oldNo){
+  const n = oldNo.replace(/\D/g,"");
+  const k = n ? parseInt(n.slice(-1),10) : 0;
+  fType.value = ["20GP","40GP","40HQ"][k%3];
+  fTrans.value = ["中集","顺航"][k%2];
+  fShip.value  = ["OOCL","MAERSK"][k%2];
+  fPod.value   = ["LOS ANGELES","HAMBURG","BUSAN"][k%3];
+}
+
+renderPreview();
+refreshTabTitle();
+
+[fNo,fType,fTrans,fShip,fPod,fDate].forEach(el=>el.addEventListener("input", ()=>{ renderPreview(); refreshTabTitle(); }));
+[fType,fTrans,fShip,fPod].forEach(el=>el.addEventListener("change", ()=>{ renderPreview(); refreshTabTitle(); }));
+
+function renderPreview(){
+  preview.innerHTML = `
+    <b>保存回传内容预览</b><br/>
+    oldNo: <code>${escapeHtml(oldNo||"(空)")}</code><br/>
+    newNo: <code>${escapeHtml(fNo.value.trim()||"(空)")}</code><br/>
+    ship: <code>${escapeHtml(fShip.value)}</code> ｜ trans: <code>${escapeHtml(fTrans.value)}</code><br/>
+    pod: <code>${escapeHtml(fPod.value)}</code> ｜ type: <code>${escapeHtml(fType.value)}</code><br/>
+    releaseDate: <code>${escapeHtml(fDate.value||"(空)")}</code>
+  `;
+}
+
+/* ================= Save + callback ================= */
+function save(){
+  const newNo = fNo.value.trim().toUpperCase();
+  if(!newNo){
+    alert("箱号不能为空。");
+    return;
+  }
+  if(newNo.length < 8){
+    alert("箱号长度看起来不正确（演示校验），请检查。");
+    return;
+  }
+
+  const payload = {
+    oldNo: oldNo || newNo,
+    newNo,
+    ship: fShip.value,
+    trans: fTrans.value,
+    pod: fPod.value,
+    type: fType.value,
+    releaseDate: fDate.value || todayISO(),
+    ts: Date.now()
+  };
+
+  // 1) postMessage to opener (best for popup)
+  try{
+    if(window.opener && !window.opener.closed){
+      window.opener.postMessage({ type:"SLMS_CONTAINER_UPDATED", payload }, "*");
+    }
+  }catch(_){}
+
+  // 2) localStorage as fallback (storage event)
+  try{
+    localStorage.setItem("slms_demo_container_updated", JSON.stringify(payload));
+  }catch(_){}
+
+  alert("保存成功（演示）：已回传并关闭窗口。");
+  window.close();
+}
+</script>
+</body>
+</html>
