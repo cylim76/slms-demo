@@ -1,0 +1,416 @@
+<!--
+File: index.html
+Version: index-v16
+Date: 2025-12-24
+
+更新点（v16）：
+1) Stuffing 下拉菜单：
+   - 将“提箱单（CRP）配箱”统一命名为“CRP配箱”
+   - 在其下新增“CRP提箱现况RPT”（指向：crp/rpt-crp-trans-status.html）
+2) 右上角版本号与“页面功能要求”弹窗内容同步更新（按版本号规则维护）
+-->
+
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>SLMS</title>
+<style>
+:root{--brand:#e0205c;--bg:#f1f2f5;--text:#222;--muted:#7a7a7a;--line:#eee;}
+*{box-sizing:border-box}
+body{margin:0;font-family:Arial,"Microsoft YaHei";background:var(--bg);color:var(--text)}
+
+/* 顶部栏：参考截图风格 */
+.topbar{
+  height:56px;background:#fff;border-bottom:1px solid var(--line);
+  display:flex;align-items:center;justify-content:space-between;
+  padding:0 16px;position:relative;
+}
+
+/* 左侧：仅 Logo */
+.brand{display:flex;align-items:center;min-width:200px}
+.brand img{height:30px;width:auto;display:block}
+
+/* 顶部菜单（中间） */
+.menuWrap{flex:1;display:flex;justify-content:center}
+.menu{
+  display:flex;gap:34px;
+  font-weight:700;font-size:15px;color:var(--muted);
+}
+.menu span{
+  cursor:pointer;position:relative;
+  padding:18px 0;
+  user-select:none;
+}
+.menu span:hover{color:#555}
+.menu span.active{color:var(--text)}
+.menu span.active::after{
+  content:"";
+  position:absolute;left:0;right:0;bottom:0;
+  height:3px;border-radius:3px;background:var(--brand);
+}
+
+/* 右侧版本号 */
+.ver{
+  cursor:pointer;background:#f6f6f6;border:1px solid #eee;border-radius:999px;
+  padding:6px 10px;font-size:12px;
+  font-family:ui-monospace,Menlo,Consolas,monospace;
+  display:flex;align-items:center;gap:6px;
+}
+.ver .dot{width:8px;height:8px;border-radius:99px;background:var(--brand)}
+
+/* Stuffing 下拉（一级） */
+.dropdown{
+  position:absolute;top:56px;background:#fff;border:1px solid #ddd;border-radius:10px;
+  box-shadow:0 10px 30px rgba(0,0,0,.18);
+  min-width:280px;display:none;z-index:1000;
+  overflow:visible;
+}
+.dropdown .item{
+  padding:12px 14px;font-size:13px;font-weight:900;cursor:pointer;border-bottom:1px solid #eee;
+  display:flex;align-items:center;justify-content:space-between;gap:12px;
+}
+.dropdown .item:last-child{border-bottom:none}
+.dropdown .item:hover{background:#f6f6f6}
+
+/* 分割线 */
+.dropdown .divider{height:1px;background:#eee;margin:6px 0}
+
+/* ✅ 二级菜单容器（右侧展开） */
+.submenu{
+  position:absolute;
+  top:0;
+  left:calc(100% + 10px);
+  background:#fff;
+  border:1px solid #ddd;
+  border-radius:10px;
+  box-shadow:0 10px 30px rgba(0,0,0,.18);
+  min-width:220px;
+  display:none;
+  z-index:1100;
+}
+.submenu .subitem{
+  padding:12px 14px;font-size:13px;font-weight:900;cursor:pointer;border-bottom:1px solid #eee
+}
+.submenu .subitem:last-child{border-bottom:none}
+.submenu .subitem:hover{background:#f6f6f6}
+
+/* Mobile item 的箭头 */
+.caret{font-size:12px;color:#aaa;font-weight:900}
+.item.hasSub:hover .caret{color:#666}
+
+/* 主体 */
+.main{height:calc(100vh - 56px);display:flex;flex-direction:column}
+.tabs{height:40px;background:#fafafa;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:6px;padding:0 8px;overflow-x:auto}
+.tab{background:#fff;border:1px solid #ddd;border-radius:8px;padding:7px 10px;font-size:12px;font-weight:900;cursor:pointer;white-space:nowrap;display:flex;align-items:center;gap:8px}
+.tab.active{border-color:var(--brand);color:var(--brand)}
+.tab .close{cursor:pointer}
+.content{flex:1}
+iframe{width:100%;height:100%;border:0}
+
+/* 功能要求弹窗 */
+.modalMask{position:fixed;inset:0;background:rgba(0,0,0,.35);display:none;align-items:center;justify-content:center;z-index:9999}
+.modal{width:900px;max-width:96vw;background:#fff;border-radius:12px;box-shadow:0 20px 60px rgba(0,0,0,.3);display:flex;flex-direction:column}
+.modalHd{padding:12px 16px;border-bottom:1px solid #eee;display:flex;justify-content:space-between;align-items:center}
+.modalBd{padding:16px;max-height:70vh;overflow-y:auto;font-size:13px;line-height:1.6}
+.modalBd h4{margin:14px 0 6px}
+.modalBd ol{margin:6px 0 0 18px}
+.modalBd code{background:#f6f6f6;border:1px solid #eee;border-radius:6px;padding:1px 6px}
+</style>
+</head>
+
+<body>
+<div class="topbar">
+  <div class="brand">
+    <img src="img/trademark2.6babe1d4.png" alt="SLMS Logo"/>
+  </div>
+
+  <div class="menuWrap">
+    <div class="menu" id="topMenu">
+      <span id="mSim">Simulation</span>
+      <span id="mShip">R/Shipping</span>
+      <span id="mBook">R/Booking</span>
+      <span id="stuffingBtn" class="active">Stuffing</span>
+    </div>
+  </div>
+
+  <div class="ver" id="verBtn" title="点击查看页面功能要求">
+    <span class="dot"></span>
+    <span>index-v16</span>
+  </div>
+
+  <!-- Stuffing 下拉菜单（一级） -->
+  <div class="dropdown" id="stuffingMenu">
+
+    <div class="item"
+      onclick="openFromMenu(
+        'crp-entry',
+        'CRP录入',
+        'crp/crp-management.html'
+      )">
+      <span>CRP录入</span>
+    </div>
+
+    <div class="item"
+      onclick="openFromMenu(
+        'crp-send',
+        'CRP 发送',
+        'crp/send-crp.html'
+      )">
+      <span>CRP 发送</span>
+    </div>
+
+    <!-- ✅ v16：统一命名为 CRP配箱 -->
+    <div class="item"
+      onclick="openFromMenu(
+        'container-claim',
+        'CRP配箱',
+        'container/container-claim-with-bl.html'
+      )">
+      <span>CRP配箱</span>
+    </div>
+
+    <!-- ✅ v16：新增 CRP提箱现况RPT（挂在 CRP配箱 下方） -->
+    <div class="item"
+      onclick="openFromMenu(
+        'crp-rpt-trans-status',
+        'CRP提箱现况RPT',
+        'crp/rpt-crp-trans-status.html'
+      )">
+      <span>CRP提箱现况RPT</span>
+    </div>
+
+    <div class="item"
+      onclick="openFromMenu(
+        'container-edit',
+        '集装箱信息维护',
+        'container/container-edit.html'
+      )">
+      <span>集装箱信息维护</span>
+    </div>
+
+    <div class="divider"></div>
+
+    <div class="item"
+      onclick="openFromMenu(
+        'stuffing-management',
+        '装箱管理',
+        'stuffing/stuffing-management.html'
+      )">
+      <span>装箱管理</span>
+    </div>
+
+    <div class="divider"></div>
+
+    <!-- ✅ Mobile（二级菜单入口） -->
+    <div class="item hasSub" id="mobileBtn">
+      <span>Mobile</span>
+      <span class="caret">▶</span>
+
+      <!-- 二级菜单（右侧） -->
+      <div class="submenu" id="mobileMenu">
+        <div class="subitem"
+          onclick="openFromMenu(
+            'm-container-entry',
+            '集装箱录入',
+            'mobile/container-entry.html'
+          )">集装箱录入</div>
+
+        <div class="subitem"
+          onclick="openFromMenu(
+            'm-container-check',
+            '集装箱检查',
+            'mobile/container-check.html'
+          )">集装箱检查</div>
+
+        <div class="subitem"
+          onclick="openFromMenu(
+            'm-stuffing',
+            '装箱',
+            'mobile/stuffing.html'
+          )">装箱</div>
+
+        <div class="subitem"
+          onclick="openFromMenu(
+            'm-picking',
+            '备货',
+            'mobile/picking.html'
+          )">备货</div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<div class="main">
+  <div class="tabs" id="tabs"></div>
+  <div class="content" id="content"></div>
+</div>
+
+<!-- 页面功能要求 -->
+<div class="modalMask" id="reqMask">
+  <div class="modal">
+    <div class="modalHd">
+      <b>页面功能要求（Index / index-v16）</b>
+      <span style="cursor:pointer" onclick="closeReq()">关闭</span>
+    </div>
+    <div class="modalBd">
+      <h4>一、顶部导航规范（index-v16）</h4>
+      <ol>
+        <li>顶部导航仅显示：<b>Simulation / R/Shipping / R/Booking / Stuffing</b></li>
+        <li>左上角仅显示系统 Logo 图片（<code>img/trademark2.6babe1d4.png</code>），不显示任何文字</li>
+        <li>顶部菜单采用“当前项下划线高亮”形式（参考截图）</li>
+        <li>Stuffing 采用下拉菜单（支持二级菜单），点击子功能在系统内新建 Tab 打开页面</li>
+      </ol>
+
+      <h4>二、系统导航与页面打开规范</h4>
+      <ol>
+        <li>系统采用【页签式工作台（Tabbed Workspace）】作为核心操作形态</li>
+        <li>点击菜单功能项时，在系统内部新建 Tab 打开页面</li>
+        <li>同一功能页面如已打开，再次点击菜单应切换至已有 Tab</li>
+        <li>Tab 标题默认显示功能名称，可动态追加关键业务编号</li>
+      </ol>
+
+      <h4>三、业务模块与功能归属说明（Stuffing）</h4>
+      <ol>
+        <li><b>CRP录入</b>：用于接收 FF 交接后的 CRP（提箱单）信息录入，并上传/归档 CRP 文件。</li>
+        <li><b>CRP 发送</b>：用于将录入完成的 CRP 信息/文件发送至指定对象并归档发送记录（页面：<code>crp/send-crp.html</code>）。</li>
+        <li><b>CRP配箱</b>：用于确定 CRP 与箱号之间的对应关系（装箱前置业务，页面：<code>container/container-claim-with-bl.html</code>）。</li>
+        <li><b>CRP提箱现况RPT</b>：用于按条件查询提箱进度/状态，并统计各运输公司未完成数量（页面：<code>crp/rpt-crp-trans-status.html</code>）。</li>
+        <li><b>集装箱信息维护</b>：用于维护箱号、箱型、状态等基础信息。</li>
+        <li><b>装箱管理</b>：用于装箱作业计划/进度管理（当前先占位，后续按实际页面补齐）。</li>
+        <li><b>Mobile（二级菜单）</b>：面向手机端的现场操作入口，鼠标点击/悬停 Mobile 后在右侧展开二级菜单。</li>
+      </ol>
+
+      <h4>四、文件命名与路径约定（重要）</h4>
+      <ol>
+        <li><b>页面文件名保持不变</b>：演示阶段不在 URL/文件名上追加版本号</li>
+        <li>页面版本号仅用于：右上角版本标识 + 本弹窗“页面功能要求”同步维护</li>
+        <li>页面路径与目录结构需与正式开发保持一致</li>
+      </ol>
+
+      <h4>五、页面类型与打开方式规范</h4>
+      <ol>
+        <li>主业务页面使用系统内 Tab 打开</li>
+        <li>单条数据编辑采用弹出窗口（Modal）</li>
+        <li>编辑完成后主页面状态保持不变</li>
+      </ol>
+    </div>
+  </div>
+</div>
+
+<script>
+/* 顶部菜单高亮 */
+const topMenu = document.getElementById('topMenu');
+function setTopActive(id){
+  Array.from(topMenu.querySelectorAll('span')).forEach(s=>s.classList.remove('active'));
+  const el=document.getElementById(id);
+  if(el) el.classList.add('active');
+}
+
+/* Stuffing 菜单 */
+const stuffingBtn=document.getElementById('stuffingBtn');
+const stuffingMenu=document.getElementById('stuffingMenu');
+
+stuffingBtn.onclick=e=>{
+  e.stopPropagation();
+  setTopActive('stuffingBtn');
+  const r=stuffingBtn.getBoundingClientRect();
+  stuffingMenu.style.left=r.left+'px';
+  stuffingMenu.style.display=stuffingMenu.style.display==='block'?'none':'block';
+  hideMobileSub(); // 打开一级菜单时先收起二级
+};
+
+/* 其它菜单项（目前仅切换高亮） */
+document.getElementById('mSim').onclick=()=>{ stuffingMenu.style.display='none'; hideMobileSub(); setTopActive('mSim'); };
+document.getElementById('mShip').onclick=()=>{ stuffingMenu.style.display='none'; hideMobileSub(); setTopActive('mShip'); };
+document.getElementById('mBook').onclick=()=>{ stuffingMenu.style.display='none'; hideMobileSub(); setTopActive('mBook'); };
+
+document.body.onclick=()=>{ stuffingMenu.style.display='none'; hideMobileSub(); };
+
+/* Tab 工作台 */
+const tabs={}, tabsEl=document.getElementById('tabs'), contentEl=document.getElementById('content');
+
+function openFromMenu(key,title,url){
+  stuffingMenu.style.display='none';
+  hideMobileSub();
+  openTab(key,title,url);
+}
+function openTab(key,title,url){
+  if(tabs[key]){ setActive(key); return; }
+
+  const tab=document.createElement('div');
+  tab.className='tab active';
+
+  const titleSpan=document.createElement('span');
+  titleSpan.textContent=title;
+
+  const closeSpan=document.createElement('span');
+  closeSpan.className='close';
+  closeSpan.textContent='×';
+
+  tab.appendChild(titleSpan);
+  tab.appendChild(closeSpan);
+
+  tab.onclick=()=>setActive(key);
+  closeSpan.onclick=e=>{ e.stopPropagation(); closeTab(key); };
+
+  const iframe=document.createElement('iframe');
+  iframe.src=url;
+
+  tabs[key]={tab,iframe,titleSpan};
+  tabsEl.appendChild(tab);
+  contentEl.appendChild(iframe);
+  setActive(key);
+}
+function setActive(key){
+  Object.values(tabs).forEach(t=>{
+    t.tab.classList.remove('active');
+    t.iframe.style.display='none';
+  });
+  tabs[key].tab.classList.add('active');
+  tabs[key].iframe.style.display='block';
+}
+function closeTab(key){
+  const t=tabs[key]; if(!t) return;
+  t.tab.remove(); t.iframe.remove(); delete tabs[key];
+  const r=Object.keys(tabs); if(r.length) setActive(r[0]);
+}
+
+/* 功能要求弹窗 */
+const reqMask=document.getElementById('reqMask');
+const verBtn=document.getElementById('verBtn');
+verBtn.onclick=()=>reqMask.style.display='flex';
+function closeReq(){ reqMask.style.display='none'; }
+reqMask.onclick=e=>{ if(e.target===reqMask) closeReq(); };
+
+/* ✅ Mobile 二级菜单（点击 Mobile 在右侧展开） */
+const mobileBtn=document.getElementById('mobileBtn');
+const mobileMenu=document.getElementById('mobileMenu');
+
+function showMobileSub(){
+  // 让二级菜单的 top 与 mobileBtn 对齐
+  mobileMenu.style.top = mobileBtn.offsetTop + 'px';
+  mobileMenu.style.display='block';
+}
+function hideMobileSub(){ mobileMenu.style.display='none'; }
+
+mobileBtn.onclick=(e)=>{
+  e.stopPropagation();
+  // 只切换二级菜单，不触发打开页面
+  const shown = mobileMenu.style.display==='block';
+  if(shown) hideMobileSub();
+  else showMobileSub();
+};
+
+// 防止点击二级菜单时触发 body onclick 立即关闭
+mobileMenu.onclick=(e)=>e.stopPropagation();
+
+// 也支持 hover（如果你不想 hover，把下面两行删掉）
+mobileBtn.onmouseenter=()=>{ if(stuffingMenu.style.display==='block') showMobileSub(); };
+mobileBtn.onmouseleave=()=>{ /* 不立即关闭，给用户移入二级菜单的时间 */ setTimeout(()=>{ if(!mobileMenu.matches(':hover')) hideMobileSub(); }, 150); };
+mobileMenu.onmouseleave=()=>hideMobileSub();
+</script>
+</body>
+</html>
