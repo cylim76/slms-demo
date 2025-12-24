@@ -1,0 +1,641 @@
+<!-- 
+File: send-crp.html
+Version: send-crp-v6
+Date: 2025-12-24
+
+更新点（相对 v5）：
+1) ✅ 版本号同步升级：v5 -> v6（右上角显示 + requirements 弹窗同步）
+2) ✅ 支持 embed=1：只显示“发送面板”，隐藏左侧 CRP列表与分割线
+   - 录入页点击【发送/再发送】弹出的 iframe 建议用 embed=1
+   - 打开完整页面（不带 embed=1）才显示左侧 CRP列表
+3) ✅ embed 模式下仍支持 booking=xxx 自动选中并自动生成标题/正文
+4) 其余 v5 功能保持：左侧列表容器内横纵滚动；正文 textarea 加大；标题自动追加 船公司+Booking；发送写回 localStorage
+-->
+
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>CRP调度发送</title>
+
+<style>
+:root{
+  --brand:#e0205c;--bg:#f1f2f5;--card:#fff;--text:#222;--muted:#666;--line:#e9e9ee;
+  --ok:#1a7f37;--warn:#b54708;
+}
+*{box-sizing:border-box}
+body{margin:0;font-family:Arial,"Microsoft YaHei";background:var(--bg);color:var(--text)}
+.topbar{height:56px;background:#fff;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;padding:0 16px;}
+.left{font-weight:900;font-size:16px}
+.right{display:flex;align-items:center;gap:16px}
+.ver{
+  cursor:pointer;background:#f6f6f6;border:1px solid #eee;border-radius:999px;
+  padding:6px 10px;font-size:12px;font-family:ui-monospace,Menlo,Consolas,monospace;
+  display:flex;align-items:center;gap:6px
+}
+.ver .dot{width:8px;height:8px;border-radius:99px;background:var(--brand)}
+
+/* 左对齐：不再居中留白 */
+.wrap{max-width:none;margin:16px 0;padding:0 12px;}
+
+/* ====== 默认：双栏（列表 + 分割 + 面板） ====== */
+.grid{
+  --leftPx: 980px;
+  height: calc(100vh - 56px - 32px);
+  display:grid;
+  grid-template-columns: var(--leftPx) 10px 1fr;
+  gap:0;
+  align-items:stretch;
+}
+
+/* ✅ embed=1：只显示右侧面板（通过 body.embed 控制） */
+body.embed .grid{
+  grid-template-columns: 1fr;
+}
+body.embed .leftCol,
+body.embed #splitter{
+  display:none !important;
+}
+
+@media (max-width: 1200px){
+  .grid{grid-template-columns:1fr;height:auto}
+  #splitter{display:none}
+}
+
+.card{
+  background:#fff;border:1px solid var(--line);border-radius:12px;
+  box-shadow:0 6px 18px rgba(0,0,0,.04);
+  height:100%;
+  display:flex;flex-direction:column;
+  min-height:0; /* 关键：让内部滚动生效 */
+}
+.cardHd{
+  padding:12px 14px;border-bottom:1px solid var(--line);
+  display:flex;align-items:center;justify-content:space-between;
+  font-weight:900;gap:10px;flex:0 0 auto
+}
+.cardBd{padding:14px;flex:0 0 auto}
+.small{font-size:12px;color:var(--muted)}
+.input,.textarea,.select{border:1px solid #ddd;border-radius:10px;padding:10px;font-size:13px;background:#fff;outline:none;width:100%}
+.textarea{min-height:420px;resize:vertical} /* v6：更大一些（v5 已加大，这里再稳一点） */
+.btn{border:1px solid #ddd;background:#fff;border-radius:10px;padding:10px 14px;font-weight:900;font-size:13px;cursor:pointer}
+.btn.primary{background:var(--brand);border-color:var(--brand);color:#fff}
+.btn:active{transform:translateY(1px)}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.field{display:flex;flex-direction:column;gap:6px}
+.label{font-size:12px;color:var(--muted)}
+
+/* splitter */
+#splitter{
+  height:100%;
+  cursor:col-resize;
+  position:relative;
+  user-select:none;
+  touch-action:none;
+  background:transparent;
+}
+#splitter::before{
+  content:"";
+  position:absolute;left:50%;top:10px;bottom:10px;
+  width:2px;transform:translateX(-50%);
+  background:#ddd;border-radius:99px;
+}
+#splitter:hover::before{ background:var(--brand); opacity:.8; }
+#splitter .grab{
+  position:absolute;left:50%;top:50%;
+  transform:translate(-50%,-50%);
+  width:6px;height:40px;border-radius:99px;
+  background:#cfcfcf;opacity:.55;
+}
+#splitter:hover .grab{ background:var(--brand); opacity:.8; }
+
+.filterBox{padding:14px;border-bottom:1px solid var(--line);flex:0 0 auto}
+
+/* 左侧列表滚动：容器内横+纵滚动 */
+.tableOuter{
+  flex:1 1 auto;
+  min-height:0;
+  padding:12px;
+  display:flex;
+}
+.scroll{
+  flex:1 1 auto;
+  min-height:0;
+  overflow:auto;          /* 横纵都允许 */
+  border:1px solid #eee;
+  border-radius:10px;
+  background:#fff;
+}
+table{
+  width:max-content;
+  min-width:100%;
+  border-collapse:collapse;
+  font-size:12px;
+}
+th,td{border-bottom:1px solid var(--line);padding:8px 10px;white-space:nowrap}
+th{
+  background:#fafafa;color:var(--muted);text-align:left;font-weight:900;
+  position:sticky;top:0;z-index:1
+}
+tr:hover td{background:#fff7fb}
+tr.selected td{outline:2px solid rgba(224,32,92,.25);background:#fff7fb}
+
+.num{
+  text-align:center;
+  font-variant-numeric: tabular-nums;
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+  width:62px;
+}
+.tag{display:inline-flex;align-items:center;gap:6px;padding:4px 8px;border-radius:999px;border:1px solid var(--line);background:#fff;font-size:12px}
+.tag.sent{border-color:rgba(26,127,55,.25);background:rgba(26,127,55,.06)}
+.tag.unsent{border-color:rgba(181,71,8,.25);background:rgba(181,71,8,.06)}
+.log{font-size:12px;color:var(--muted);margin-top:10px;border-top:1px dashed var(--line);padding-top:8px}
+
+/* modal */
+.modalMask{position:fixed;inset:0;background:rgba(0,0,0,.35);display:none;align-items:center;justify-content:center;z-index:9999}
+.modal{width:900px;max-width:96vw;background:#fff;border-radius:12px;box-shadow:0 20px 60px rgba(0,0,0,.3);display:flex;flex-direction:column}
+.modalHd{padding:12px 16px;border-bottom:1px solid #eee;font-weight:900;display:flex;justify-content:space-between;align-items:center}
+.modalBd{padding:16px;max-height:70vh;overflow:auto;font-size:13px;line-height:1.7}
+.modalFt{padding:12px 16px;border-top:1px solid #eee;display:flex;justify-content:flex-end;gap:10px}
+
+/* 拖动时防止选中文本 */
+.dragging, .dragging *{ cursor:col-resize !important; user-select:none !important; }
+</style>
+</head>
+
+<body>
+<div class="topbar">
+  <div class="left" id="pageTitle">CRP 调度 / 发送</div>
+  <div class="right">
+    <div class="ver" id="verBtn" title="点击查看页面功能要求">
+      <span class="dot"></span>
+      <span>send-crp-v6</span>
+    </div>
+  </div>
+</div>
+
+<div class="wrap">
+  <div class="grid" id="grid">
+
+    <!-- 左：CRP列表（完整页面才显示） -->
+    <div class="card leftCol">
+      <div class="cardHd">
+        <span>CRP列表</span>
+        <div class="row">
+          <button class="btn" type="button" onclick="reload()">刷新</button>
+          <button class="btn" type="button" onclick="resetFilters()">重置</button>
+        </div>
+      </div>
+
+      <div class="filterBox">
+        <div class="row">
+          <div class="field" style="min-width:220px;flex:1">
+            <div class="label">Booking No.</div>
+            <input class="input" id="f_booking" placeholder="BK..." oninput="render()">
+          </div>
+          <div class="field" style="min-width:150px">
+            <div class="label">船公司</div>
+            <input class="input" id="f_carrier" placeholder="MSK/MSC..." oninput="render()">
+          </div>
+          <div class="field" style="min-width:220px;flex:1">
+            <div class="label">船名</div>
+            <input class="input" id="f_vessel" placeholder="船名..." oninput="render()">
+          </div>
+          <div class="field" style="min-width:140px">
+            <div class="label">航次</div>
+            <input class="input" id="f_voyage" placeholder="552S..." oninput="render()">
+          </div>
+          <div class="field" style="min-width:140px">
+            <div class="label">状态</div>
+            <select class="select" id="f_status" onchange="render()">
+              <option value="">全部</option>
+              <option value="未发送">未发送</option>
+              <option value="已发送">已发送</option>
+            </select>
+          </div>
+          <div class="field" style="min-width:160px">
+            <div class="label">运输公司</div>
+            <input class="input" id="f_vendor" placeholder="中集/顺航..." oninput="render()">
+          </div>
+        </div>
+        <div class="small" style="margin-top:8px">提示：列表区域支持横向滚动，可看到最右侧“状态”等字段。</div>
+      </div>
+
+      <div class="tableOuter">
+        <div class="scroll">
+          <table>
+            <thead>
+              <tr>
+                <th style="min-width:140px">录入时间</th>
+                <th style="min-width:160px">Booking</th>
+                <th style="min-width:90px">船公司</th>
+                <th style="min-width:240px">船名</th>
+                <th style="min-width:90px">航次</th>
+                <th style="min-width:110px">ETD</th>
+                <th class="num">20GP</th>
+                <th class="num">40GP</th>
+                <th class="num">40HC</th>
+                <th class="num">40RH</th>
+                <th class="num" style="width:70px">文件</th>
+                <th style="min-width:120px">运输公司</th>
+                <th style="min-width:120px">状态</th>
+              </tr>
+            </thead>
+            <tbody id="tbody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="cardBd">
+        <div class="small">建议：正式系统仅显示“已提交且未发送”的记录，并由权限系统控制入口。</div>
+      </div>
+    </div>
+
+    <!-- draggable divider（完整页面才显示） -->
+    <div class="splitter" id="splitter" title="拖动调整左右宽度">
+      <div class="grab"></div>
+    </div>
+
+    <!-- 右：发送面板（embed=1 时只保留这一块） -->
+    <div class="card">
+      <div class="cardHd" id="panelTitle">发送面板（选中记录后自动带入）</div>
+      <div class="cardBd" style="padding:14px;flex:1 1 auto;min-height:0;overflow:auto">
+        <div class="field">
+          <div class="label">运输公司</div>
+          <select class="select" id="vendor" onchange="regen()">
+            <option value="中集">中集</option>
+            <option value="顺航">顺航</option>
+            <option value="XX运输公司">XX运输公司</option>
+            <option value="YY车队">YY车队</option>
+          </select>
+        </div>
+
+        <div class="field">
+          <div class="label">收件邮箱</div>
+          <input class="input" id="to" value="dispatch@carrier.com">
+        </div>
+
+        <div class="field">
+          <div class="label">邮件标题（自动追加：船公司 + Booking No.）</div>
+          <input class="input" id="subj" value="提箱单安排 - 请确认">
+        </div>
+
+        <div class="field">
+          <div class="label">已选记录</div>
+          <input class="input" id="picked" readonly placeholder="请从左侧 CRP列表 选择一条记录">
+        </div>
+
+        <div class="field">
+          <div class="label">邮件正文（可编辑）</div>
+          <textarea class="textarea" id="body"></textarea>
+        </div>
+
+        <div class="row" style="margin-top:10px">
+          <button class="btn primary" type="button" onclick="send()">发送（示意）</button>
+          <button class="btn" type="button" onclick="regen()">重新生成正文</button>
+          <button class="btn" type="button" onclick="closeEmbed()">关闭面板</button>
+        </div>
+
+        <div class="log" id="log">暂无发送记录</div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- 页面功能要求 -->
+<div class="modalMask" id="reqMask">
+  <div class="modal">
+    <div class="modalHd">
+      <span>页面功能要求（send-crp.html / send-crp-v6）</span>
+      <span style="cursor:pointer;color:var(--muted)" onclick="closeReq()">关闭</span>
+    </div>
+    <div class="modalBd">
+      <ol>
+        <li><b>版本同步：</b>右上角版本号与本弹窗内容必须随版本同步维护（当前：v6）。</li>
+        <li><b>embed 模式：</b>当 URL 带 <code>embed=1</code> 时，仅显示右侧发送面板，隐藏左侧 CRP列表与分割线。</li>
+        <li><b>完整模式：</b>不带 <code>embed=1</code> 时，显示左侧 CRP列表（支持查询、横向+纵向滚动），中间分割线可拖动。</li>
+        <li><b>标题自动追加：</b>邮件标题自动追加选中 CRP 的 <b>船公司 + Booking No.</b>。</li>
+        <li><b>发送（示意）：</b>写回 <code>localStorage(slms_crp_bookings_v1)</code>，把该记录标记为 <b>已发送</b> 并写入运输公司。</li>
+        <li><b>自动选中：</b>支持 <code>?booking=BKxxx</code> 自动选中对应记录并生成正文。</li>
+      </ol>
+    </div>
+    <div class="modalFt">
+      <button class="btn" type="button" onclick="closeReq()">关闭</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ===========================
+   配置
+=========================== */
+const LS_KEY = 'slms_crp_bookings_v1';
+const LS_SPLIT = 'slms_send_split_leftW_v4'; // v6: bump (避免覆盖旧比例)
+let rows = [];
+let selectedKey = '';
+const tbody = document.getElementById('tbody');
+
+/* ===========================
+   Modal
+=========================== */
+document.getElementById('verBtn').onclick = ()=>document.getElementById('reqMask').style.display='flex';
+function closeReq(){ document.getElementById('reqMask').style.display='none'; }
+document.getElementById('reqMask').onclick = e=>{ if(e.target.id==='reqMask') closeReq(); };
+
+/* ===========================
+   URL params / embed mode
+=========================== */
+function getParam(name){
+  const u = new URL(location.href);
+  return u.searchParams.get(name) || '';
+}
+function isEmbed(){
+  return String(getParam('embed')||'') === '1';
+}
+(function applyEmbedUI(){
+  if(!isEmbed()) return;
+  document.body.classList.add('embed');
+  // embed 时更明确的标题
+  document.getElementById('pageTitle').textContent = 'CRP 快捷发送';
+  document.getElementById('panelTitle').textContent = '发送面板（快捷发送）';
+  // embed 下“关闭面板”按钮更合理：保留；若你想隐藏也可以在这里做
+})();
+
+/* ===========================
+   Storage
+=========================== */
+function load(){
+  try{
+    const s = localStorage.getItem(LS_KEY);
+    const arr = s ? JSON.parse(s) : [];
+    rows = Array.isArray(arr) ? arr : [];
+  }catch(e){ rows=[]; }
+}
+function save(){ try{ localStorage.setItem(LS_KEY, JSON.stringify(rows)); }catch(e){} }
+
+/* ===========================
+   Utils
+=========================== */
+function esc(s){return String(s??'').replace(/[&<>"']/g,m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[m]));}
+function pad2(n){ return String(n).padStart(2,'0'); }
+function fmtTime(ts){
+  const d=new Date(ts||Date.now());
+  return `${d.getFullYear()}-${pad2(d.getMonth()+1)}-${pad2(d.getDate())} ${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+}
+function tag(state){ return (state==='已发送') ? `<span class="tag sent">已发送</span>` : `<span class="tag unsent">未发送</span>`; }
+function normState(r){ return (r && r.sendState) ? r.sendState : '未发送'; }
+
+/* ===========================
+   Filters (仅完整模式使用；embed 模式不需要也不会显示)
+=========================== */
+function resetFilters(){
+  const ids = ['f_booking','f_carrier','f_vessel','f_voyage','f_status','f_vendor'];
+  ids.forEach(id=>{
+    const el = document.getElementById(id);
+    if(!el) return;
+    if(el.tagName === 'SELECT') el.value='';
+    else el.value='';
+  });
+  render();
+}
+function getFiltered(){
+  let list = rows.slice().sort((a,b)=>(b.createdAt||0)-(a.createdAt||0));
+
+  // embed 模式不显示列表，但仍允许按 booking 自动选中，所以这里不做过滤即可
+  if(isEmbed()) return list;
+
+  const fbk=(document.getElementById('f_booking').value||'').trim().toLowerCase();
+  const fcar=(document.getElementById('f_carrier').value||'').trim().toLowerCase();
+  const fves=(document.getElementById('f_vessel').value||'').trim().toLowerCase();
+  const fvoy=(document.getElementById('f_voyage').value||'').trim().toLowerCase();
+  const fst=(document.getElementById('f_status').value||'').trim();
+  const fven=(document.getElementById('f_vendor').value||'').trim().toLowerCase();
+
+  list = list.filter(r=>{
+    if(fbk && !String(r.bookingNo||'').toLowerCase().includes(fbk)) return false;
+    if(fcar && !String(r.carrier||'').toLowerCase().includes(fcar)) return false;
+    if(fves && !String(r.vessel||'').toLowerCase().includes(fves)) return false;
+    if(fvoy && !String(r.voyage||'').toLowerCase().includes(fvoy)) return false;
+    if(fst && normState(r)!==fst) return false;
+    if(fven && !String(r.vendor||'').toLowerCase().includes(fven)) return false;
+    return true;
+  });
+  return list;
+}
+
+/* ===========================
+   Render list (完整模式)
+=========================== */
+function render(){
+  if(isEmbed()){
+    // embed 模式不渲染左侧列表，但要保证右侧 regen 能拿到数据
+    regen();
+    return;
+  }
+
+  const list = getFiltered();
+  tbody.innerHTML='';
+
+  if(!list.length){
+    const tr=document.createElement('tr');
+    tr.innerHTML = `<td colspan="13" style="color:#666;padding:18px">暂无数据（请先在 CRP 录入页录入）</td>`;
+    tbody.appendChild(tr);
+    regen();
+    return;
+  }
+
+  list.forEach(r=>{
+    const tr=document.createElement('tr');
+    if(r.key===selectedKey) tr.classList.add('selected');
+    tr.onclick=()=>{ selectedKey=r.key; render(); };
+
+    tr.innerHTML = `
+      <td>${fmtTime(r.createdAt)}</td>
+      <td><b>${esc(r.bookingNo)}</b></td>
+      <td>${esc(r.carrier||'')}</td>
+      <td title="${esc(r.vessel||'')}">${esc(r.vessel||'')}</td>
+      <td>${esc(r.voyage||'')}</td>
+      <td>${esc(r.etd||'-')}</td>
+      <td class="num">${esc(r.gp20||'')}</td>
+      <td class="num">${esc(r.gp40||'')}</td>
+      <td class="num">${esc(r.hc40||'')}</td>
+      <td class="num">${esc(r.rh40||'')}</td>
+      <td class="num">${esc(String(r.fileCount ?? 0))}</td>
+      <td>${esc(r.vendor||'')}</td>
+      <td>${tag(normState(r))}</td>
+    `;
+    tbody.appendChild(tr);
+  });
+
+  regen();
+}
+
+/* ===========================
+   Auto-pick by ?booking=
+=========================== */
+function autoPickFromQuery(){
+  const booking = (getParam('booking')||'').trim();
+  if(!booking) return;
+
+  // 优先取最新 createdAt 的同 booking
+  const hit = rows
+    .slice()
+    .sort((a,b)=>(b.createdAt||0)-(a.createdAt||0))
+    .find(r=>String(r.bookingNo||'')===booking);
+
+  if(hit) selectedKey = hit.key;
+}
+
+/* ===========================
+   Reload
+=========================== */
+function reload(){
+  load();
+  if(selectedKey && !rows.some(x=>x.key===selectedKey)) selectedKey='';
+  autoPickFromQuery();
+  render();
+}
+
+/* ===========================
+   Compose
+=========================== */
+function regen(){
+  const r = rows.find(x=>x.key===selectedKey);
+  const vendor = document.getElementById('vendor').value;
+  const picked = document.getElementById('picked');
+  const body = document.getElementById('body');
+  const subj = document.getElementById('subj');
+  const baseSubj = '提箱单安排 - 请确认';
+
+  if(!r){
+    picked.value=''; body.value=''; subj.value=baseSubj;
+    picked.placeholder = isEmbed()
+      ? '未找到对应记录（请从录入页点击发送/再发送进入）'
+      : '请从左侧 CRP列表 选择一条记录';
+    return;
+  }
+
+  subj.value = `${baseSubj} - ${r.carrier || ''} ${r.bookingNo || ''}`.trim();
+
+  picked.value =
+    `${r.bookingNo} | ${r.carrier} | ${r.vessel} ${r.voyage} | ETD:${r.etd||'-'} | ` +
+    `20GP:${r.gp20||0} 40GP:${r.gp40||0} 40HC:${r.hc40||0} 40RH:${r.rh40||0} | 附件:${r.fileCount||0}`;
+
+  body.value =
+`您好，${vendor}：
+
+现安排提箱单如下，请协助安排车辆并回复确认：
+
+- Booking No.：${r.bookingNo}
+- 船公司：${r.carrier}
+- 船名/航次：${r.vessel} / ${r.voyage}
+- ETD：${r.etd || '-'}
+- 箱量：20GP ${r.gp20||0} / 40GP ${r.gp40||0} / 40HC ${r.hc40||0} / 40RH ${r.rh40||0}
+
+附件：CRP/提箱单文件（共 ${r.fileCount || 0} 个）
+
+谢谢。`;
+}
+
+function nowStr(){
+  const d=new Date();
+  return `${d.getFullYear()}-${pad2(d.getMonth()+1)}-${pad2(d.getDate())} ${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+}
+
+/* ===========================
+   Send (demo)
+=========================== */
+function send(){
+  const to = document.getElementById('to').value.trim();
+  const vendor = document.getElementById('vendor').value;
+  const r = rows.find(x=>x.key===selectedKey);
+
+  if(!to){ alert('请填写收件邮箱'); return; }
+  if(!r){ alert('请先选择一条记录'); return; }
+
+  r.sendState = '已发送';
+  r.vendor = vendor;
+  save();
+
+  document.getElementById('log').textContent =
+    `${nowStr()} 已发送给 ${vendor}（${to}）｜Booking:${r.bookingNo}（示意）`;
+
+  // 通知父页面（可选）：录入页可监听并刷新列表
+  try{
+    window.parent.postMessage({ type:'SLMS_CRP_SENT', payload:{ bookingNo:r.bookingNo, vendor } }, '*');
+  }catch(e){}
+
+  render();
+}
+
+/* ===========================
+   Close embed panel
+=========================== */
+function closeEmbed(){
+  // embed 时关闭：发消息给父页面让 iframe 弹窗关闭
+  // 非 embed 时也允许按一下无副作用（只是尝试 postMessage）
+  try{ window.parent.postMessage({type:'SLMS_CLOSE_SEND_PANEL'}, '*'); }catch(e){}
+}
+
+/* ===========================
+   Splitter drag (完整模式)
+=========================== */
+(function initSplitter(){
+  const grid = document.getElementById('grid');
+  const splitter = document.getElementById('splitter');
+  if(!grid || !splitter) return;
+
+  // embed 模式不要分割线逻辑
+  if(isEmbed()) return;
+
+  try{
+    const saved = localStorage.getItem(LS_SPLIT);
+    if(saved){
+      const n = parseInt(saved, 10);
+      if(!Number.isNaN(n)) grid.style.setProperty('--leftPx', n + 'px');
+    }
+  }catch(e){}
+
+  let dragging=false;
+
+  function clamp(v,min,max){ return Math.max(min, Math.min(max, v)); }
+  function start(e){
+    if(window.matchMedia('(max-width: 1200px)').matches) return;
+    dragging=true;
+    document.documentElement.classList.add('dragging');
+    splitter.setPointerCapture?.(e.pointerId);
+  }
+  function move(e){
+    if(!dragging) return;
+    const rect = grid.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const minLeft=720;
+    const maxLeft=Math.max(minLeft, rect.width - 520);
+    const leftW=clamp(x, minLeft, maxLeft);
+    grid.style.setProperty('--leftPx', leftW+'px');
+  }
+  function end(){
+    if(!dragging) return;
+    dragging=false;
+    document.documentElement.classList.remove('dragging');
+    try{
+      const v = getComputedStyle(grid).getPropertyValue('--leftPx').trim();
+      const n = parseInt(v, 10);
+      if(!Number.isNaN(n)) localStorage.setItem(LS_SPLIT, String(n));
+    }catch(e){}
+  }
+
+  splitter.addEventListener('pointerdown', start);
+  window.addEventListener('pointermove', move);
+  window.addEventListener('pointerup', end);
+})();
+
+/* ===========================
+   init
+=========================== */
+reload();
+</script>
+</body>
+</html>
