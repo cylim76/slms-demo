@@ -1,0 +1,876 @@
+<!--
+File: crp/rpt-crp-trans-status.html
+Version: rpt-crp-trans-status-v1
+Date: 2025-12-24
+
+功能要点：
+1) 查询条件：
+   - Booking No / 船公司 / 船名航次 / 状态(未发送/已发送/运输中/已完成) / 箱号 / 运输公司
+   - 日期类型下拉：默认“发送CRP日期”，可切换“ETD”
+   - 默认日期：
+     * 发送CRP日期：开始=今天-7天，结束=今天
+     * ETD：开始=今天，结束=今天+14天
+2) 列表：基于 slms_crp_bookings_v1（CRP录入数据），箱量列显示“已完成/计划”（如 4/5）
+3) 状态计算规则：
+   - 任一箱型已完成(分子)>0 => 运输中
+   - 计划>0的箱型均完成(分子=分母)，且总计划>0 => 已完成
+   - 否则按 sendState => 未发送/已发送
+4) 底部统计条：按运输公司汇总“未完成箱量”并显示：中集:??个，顺航:??个...
+5) 详细弹窗：日期类型+范围查询，显示“日期(列) × 运输公司(行)”的未完成数量矩阵
+6) 导出CSV：主列表与弹窗矩阵均支持导出
+-->
+
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>CRP提箱现况RPT</title>
+
+<style>
+:root{
+  --brand:#e0205c;--bg:#f1f2f5;--card:#fff;--text:#222;--muted:#666;--line:#e9e9ee;
+  --ok:#1a7f37;--warn:#b54708;--bad:#b42318;
+}
+*{box-sizing:border-box}
+body{margin:0;font-family:Arial,"Microsoft YaHei";background:var(--bg);color:var(--text)}
+.topbar{height:56px;background:#fff;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;padding:0 16px;}
+.left{font-weight:900;font-size:16px}
+.right{display:flex;align-items:center;gap:12px}
+.ver{
+  cursor:pointer;background:#f6f6f6;border:1px solid #eee;border-radius:999px;
+  padding:6px 10px;font-size:12px;font-family:ui-monospace,Menlo,Consolas,monospace;
+  display:flex;align-items:center;gap:6px
+}
+.ver .dot{width:8px;height:8px;border-radius:99px;background:var(--brand)}
+
+.wrap{max-width:none;margin:16px 0;padding:0 12px;}
+.card{
+  background:#fff;border:1px solid var(--line);
+  border-radius:12px;box-shadow:0 6px 18px rgba(0,0,0,.04);
+  overflow:hidden;
+}
+.cardHd{
+  padding:12px 14px;border-bottom:1px solid var(--line);
+  display:flex;align-items:center;justify-content:space-between;gap:10px;font-weight:900;
+}
+.small{font-size:12px;color:var(--muted)}
+.btn{
+  border:1px solid #ddd;background:#fff;border-radius:10px;
+  padding:10px 14px;font-weight:900;font-size:13px;cursor:pointer
+}
+.btn.primary{background:var(--brand);border-color:var(--brand);color:#fff}
+.btn:active{transform:translateY(1px)}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.field{display:flex;flex-direction:column;gap:6px}
+.label{font-size:12px;color:var(--muted)}
+.input,.select{
+  border:1px solid #ddd;border-radius:10px;padding:10px;font-size:13px;background:#fff;outline:none
+}
+
+.tableOuter{height:calc(100vh - 56px - 16px - 16px - 68px - 70px); /* 顶部/外边距/筛选卡头/统计条 */
+  min-height:360px;
+}
+@media (max-width: 1100px){
+  .tableOuter{height:auto}
+}
+.tableScroll{height:100%;overflow:auto;border-top:1px solid var(--line)}
+table{width:100%;border-collapse:collapse;min-width:1750px}
+th,td{border-bottom:1px solid var(--line);padding:8px 10px;font-size:12px;white-space:nowrap}
+th{background:#fafafa;color:var(--muted);text-align:left;font-weight:900}
+tr:hover td{background:#fff7fb}
+
+.num{text-align:center;font-variant-numeric:tabular-nums;font-family:ui-monospace,Menlo,Consolas,monospace;width:72px}
+.ellip{max-width:240px;overflow:hidden;text-overflow:ellipsis}
+
+.stPill{
+  display:inline-flex;align-items:center;gap:6px;
+  padding:6px 10px;border-radius:999px;border:1px solid var(--line);
+  font-size:12px;font-weight:900;background:#fff;user-select:none
+}
+.stPill .dot{width:8px;height:8px;border-radius:99px;background:#bbb}
+.stPill.unsent{border-color:rgba(181,71,8,.25);background:rgba(181,71,8,.06);color:#7a3a06}
+.stPill.unsent .dot{background:var(--warn)}
+.stPill.sent{border-color:rgba(26,127,55,.25);background:rgba(26,127,55,.06);color:#135d2a}
+.stPill.sent .dot{background:var(--ok)}
+.stPill.transit{border-color:rgba(224,32,92,.22);background:rgba(224,32,92,.07);color:#8b0d34}
+.stPill.transit .dot{background:var(--brand)}
+.stPill.done{border-color:rgba(0,0,0,.12);background:rgba(0,0,0,.04);color:#333}
+.stPill.done .dot{background:#333}
+
+.statBar{
+  border-top:1px solid var(--line);
+  background:#fff;
+  padding:10px 14px;
+  display:flex;align-items:center;justify-content:space-between;gap:10px;
+}
+.statItems{
+  display:flex;gap:10px;flex-wrap:wrap;align-items:center;
+  font-size:12px;color:var(--muted)
+}
+.badge{
+  display:inline-flex;align-items:center;gap:6px;
+  padding:6px 10px;border-radius:999px;border:1px solid var(--line);
+  background:#fafafa;color:#333;font-weight:900
+}
+.badge .k{color:var(--muted);font-weight:700}
+.badge .v{font-variant-numeric:tabular-nums;font-family:ui-monospace,Menlo,Consolas,monospace}
+
+/* modal */
+.modalMask{position:fixed;inset:0;background:rgba(0,0,0,.35);display:none;align-items:center;justify-content:center;z-index:9999}
+.modal{width:1100px;max-width:96vw;background:#fff;border-radius:12px;box-shadow:0 20px 60px rgba(0,0,0,.3);display:flex;flex-direction:column;overflow:hidden}
+.modalHd{padding:12px 16px;border-bottom:1px solid #eee;font-weight:900;display:flex;justify-content:space-between;align-items:center}
+.modalBd{padding:14px 16px;max-height:72vh;overflow:auto}
+.modalFt{padding:12px 16px;border-top:1px solid #eee;display:flex;justify-content:flex-end;gap:10px}
+
+.matrixWrap{border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.matrixScroll{max-height:48vh;overflow:auto}
+.mTbl{width:100%;border-collapse:collapse;min-width:900px}
+.mTbl th,.mTbl td{border-bottom:1px solid var(--line);padding:8px 10px;font-size:12px;white-space:nowrap}
+.mTbl th{background:#fafafa;color:var(--muted);text-align:left;font-weight:900}
+.mTbl td.num{text-align:center}
+.mTbl tr:hover td{background:#fff7fb}
+
+/* requirements */
+.reqMask .modal{width:980px}
+.reqMask .modalBd{font-size:13px;line-height:1.7}
+code{font-family:ui-monospace,Menlo,Consolas,monospace}
+</style>
+</head>
+
+<body>
+<div class="topbar">
+  <div class="left">CRP 提箱现况 RPT</div>
+  <div class="right">
+    <button class="btn" type="button" onclick="exportMainCSV()">导出CSV</button>
+    <div class="ver" id="verBtn" title="点击查看页面功能要求">
+      <span class="dot"></span>
+      <span>rpt-crp-trans-status-v1</span>
+    </div>
+  </div>
+</div>
+
+<div class="wrap">
+
+  <!-- 查询条件 -->
+  <div class="card">
+    <div class="cardHd">
+      <span>查询条件</span>
+      <div class="row">
+        <button class="btn" type="button" onclick="resetFilters()">重置</button>
+        <button class="btn primary" type="button" onclick="render()">查询</button>
+      </div>
+    </div>
+
+    <div style="padding:14px">
+      <div class="row">
+        <div class="field" style="min-width:220px;flex:1">
+          <div class="label">Booking No</div>
+          <input class="input" id="f_booking" placeholder="BK..." oninput="render()">
+        </div>
+
+        <div class="field" style="min-width:140px">
+          <div class="label">船公司</div>
+          <input class="input" id="f_carrier" placeholder="MSK/MSC..." oninput="render()">
+        </div>
+
+        <div class="field" style="min-width:260px;flex:1">
+          <div class="label">船名航次</div>
+          <input class="input" id="f_vv" placeholder="例如：ARINA 552S" oninput="render()">
+        </div>
+
+        <div class="field" style="min-width:160px">
+          <div class="label">状态</div>
+          <select class="select" id="f_status" onchange="render()">
+            <option value="">全部</option>
+            <option value="未发送">未发送</option>
+            <option value="已发送">已发送</option>
+            <option value="运输中">运输中</option>
+            <option value="已完成">已完成</option>
+          </select>
+        </div>
+
+        <div class="field" style="min-width:190px">
+          <div class="label">箱号</div>
+          <input class="input" id="f_cntr" placeholder="MSKU1234567..." oninput="render()">
+        </div>
+
+        <div class="field" style="min-width:160px">
+          <div class="label">运输公司</div>
+          <input class="input" id="f_vendor" placeholder="中集/顺航..." oninput="render()">
+        </div>
+      </div>
+
+      <div class="row" style="margin-top:10px">
+        <div class="field" style="min-width:200px">
+          <div class="label">日期类型</div>
+          <select class="select" id="f_dateType" onchange="applyDateDefaults(true)">
+            <option value="send">发送CRP日期（默认）</option>
+            <option value="etd">ETD</option>
+          </select>
+        </div>
+
+        <div class="field" style="min-width:180px">
+          <div class="label">开始日期</div>
+          <input class="input" id="f_dateFrom" type="date" onchange="render()">
+        </div>
+
+        <div class="field" style="min-width:180px">
+          <div class="label">结束日期</div>
+          <input class="input" id="f_dateTo" type="date" onchange="render()">
+        </div>
+
+        <div class="small" style="align-self:flex-end;padding-bottom:10px">
+          提示：切换日期类型会自动重置默认范围（可再手动调整）。
+        </div>
+      </div>
+    </div>
+
+    <!-- 列表 -->
+    <div class="tableOuter">
+      <div class="tableScroll">
+        <table>
+          <thead>
+            <tr>
+              <th style="min-width:140px">录入时间</th>
+              <th style="min-width:160px">Booking</th>
+              <th style="min-width:90px">船公司</th>
+              <th style="min-width:240px">船名</th>
+              <th style="min-width:90px">航次</th>
+              <th style="min-width:110px">ETD</th>
+              <th style="min-width:120px">发送CRP</th>
+              <th style="min-width:120px">运输公司</th>
+
+              <th class="num">20GP</th>
+              <th class="num">40GP</th>
+              <th class="num">40HC</th>
+              <th class="num">40RH</th>
+
+              <th class="num" style="min-width:90px">未完成</th>
+              <th style="min-width:140px">状态</th>
+            </tr>
+          </thead>
+          <tbody id="tbody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- 统计条 -->
+    <div class="statBar">
+      <div class="statItems" id="statItems">暂无统计</div>
+      <div class="row">
+        <button class="btn" type="button" onclick="openDetail()">查看详细内容</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 详细弹窗 -->
+<div class="modalMask" id="detailMask">
+  <div class="modal">
+    <div class="modalHd">
+      <span>未完成提箱统计（运输公司 × 日期）</span>
+      <span style="cursor:pointer;color:var(--muted)" onclick="closeDetail()">关闭</span>
+    </div>
+
+    <div class="modalBd">
+      <div class="row">
+        <div class="field" style="min-width:220px">
+          <div class="label">日期类型</div>
+          <select class="select" id="d_dateType" onchange="applyDetailDateDefaults(true)">
+            <option value="send">发送CRP日期</option>
+            <option value="etd">ETD</option>
+          </select>
+        </div>
+        <div class="field" style="min-width:180px">
+          <div class="label">开始日期</div>
+          <input class="input" id="d_from" type="date">
+        </div>
+        <div class="field" style="min-width:180px">
+          <div class="label">结束日期</div>
+          <input class="input" id="d_to" type="date">
+        </div>
+        <div class="row" style="align-items:flex-end">
+          <button class="btn primary" type="button" onclick="renderMatrix()">查询</button>
+          <button class="btn" type="button" onclick="exportMatrixCSV()">导出CSV</button>
+        </div>
+      </div>
+
+      <div class="matrixWrap" style="margin-top:12px">
+        <div class="matrixScroll">
+          <table class="mTbl" id="matrixTbl"></table>
+        </div>
+      </div>
+
+      <div class="small" style="margin-top:10px">
+        口径：按日期范围内的 CRP（按所选日期类型过滤），汇总“未完成箱量 = 计划 - 已完成”，行=运输公司，列=日期（YYYY-MM-DD）。
+      </div>
+    </div>
+
+    <div class="modalFt">
+      <button class="btn" type="button" onclick="closeDetail()">关闭</button>
+    </div>
+  </div>
+</div>
+
+<!-- requirements -->
+<div class="modalMask reqMask" id="reqMask">
+  <div class="modal">
+    <div class="modalHd">
+      <span>页面功能要求（rpt-crp-trans-status.html / rpt-crp-trans-status-v1）</span>
+      <span style="cursor:pointer;color:var(--muted)" onclick="closeReq()">关闭</span>
+    </div>
+    <div class="modalBd">
+      <ol>
+        <li>查询条件包含：Booking/船公司/船名航次/状态(未发送/已发送/运输中/已完成)/箱号/运输公司。</li>
+        <li>日期条件：日期类型下拉（默认发送CRP日期，可切换ETD），并提供开始/结束日期。</li>
+        <li>默认日期：发送CRP日期=今天-7到今天；ETD=今天到今天+14。</li>
+        <li>列表箱量列显示为“已完成/计划”（如 <code>4/5</code>）。</li>
+        <li>状态规则：任一分子&gt;0 => 运输中；若计划&gt;0且全部完成 => 已完成；否则=未发送/已发送。</li>
+        <li>底部统计条：按运输公司汇总未完成箱量并展示，同时提供“查看详细内容”。</li>
+        <li>详细弹窗：日期×运输公司矩阵展示未完成箱量，并支持导出CSV。</li>
+        <li>主列表也支持导出CSV。</li>
+      </ol>
+    </div>
+    <div class="modalFt">
+      <button class="btn" type="button" onclick="closeReq()">关闭</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ========= 数据Key ========= */
+const LS_CRP = 'slms_crp_bookings_v1';
+const LS_PICK = 'slms_crp_pickups_v1'; // 演示：提箱记录（箱号+完成状态）
+
+/* ========= 版本弹窗 ========= */
+document.getElementById('verBtn').onclick = ()=> document.getElementById('reqMask').style.display='flex';
+function closeReq(){ document.getElementById('reqMask').style.display='none'; }
+document.getElementById('reqMask').onclick = e=>{ if(e.target.id==='reqMask') closeReq(); };
+
+/* ========= 工具 ========= */
+function pad2(n){ return String(n).padStart(2,'0'); }
+function ymd(d){
+  const dt = (d instanceof Date) ? d : new Date(d);
+  return `${dt.getFullYear()}-${pad2(dt.getMonth()+1)}-${pad2(dt.getDate())}`;
+}
+function addDays(date, n){
+  const d = new Date(date);
+  d.setDate(d.getDate()+n);
+  return d;
+}
+function esc(s){return String(s??'').replace(/[&<>"']/g,m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[m]));}
+function escAttr(s){return esc(s).replace(/"/g,'&quot;');}
+function nowTs(){ return Date.now(); }
+function fmtTime(ts){
+  if(!ts) return '-';
+  const d=new Date(ts);
+  return `${d.getFullYear()}-${pad2(d.getMonth()+1)}-${pad2(d.getDate())} ${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+}
+function parseInt0(v){ const n=parseInt(String(v||'').trim(),10); return Number.isFinite(n)?n:0; }
+
+/* ========= 读取/写入 ========= */
+function loadJson(key, fallback){
+  try{
+    const s=localStorage.getItem(key);
+    const v=s?JSON.parse(s):fallback;
+    return v ?? fallback;
+  }catch(e){ return fallback; }
+}
+function saveJson(key, val){
+  try{ localStorage.setItem(key, JSON.stringify(val)); }catch(e){}
+}
+function loadCrp(){ const arr=loadJson(LS_CRP, []); return Array.isArray(arr)?arr:[]; }
+function loadPickups(){ const arr=loadJson(LS_PICK, []); return Array.isArray(arr)?arr:[]; }
+
+/* ========= 演示：自动生成提箱记录（让“箱号/完成数量/运输中/已完成”有数据） ========= */
+function ensureDemoPickups(crpRows){
+  let picks = loadPickups();
+  const hasAny = picks && picks.length;
+  if(hasAny) return picks;
+
+  // 基于 CRP 生成一些箱号记录：部分完成、部分未完成（演示）
+  const vendors = ['中集','顺航','XX运输公司','YY车队'];
+  function rnd(arr){ return arr[Math.floor(Math.random()*arr.length)]; }
+  function rndInt(a,b){ return a + Math.floor(Math.random()*(b-a+1)); }
+  function mkCntr(prefix){
+    const nums = String(rndInt(1000000,9999999));
+    return `${prefix}${nums}0`;
+  }
+  const prefixes = ['MSKU','MSCU','COSU','TGHU','OOLU'];
+
+  const out=[];
+  crpRows.slice(0,60).forEach(r=>{
+    const plan20=parseInt0(r.gp20), plan40=parseInt0(r.gp40), planHC=parseInt0(r.hc40), planRH=parseInt0(r.rh40);
+    const totalPlan = plan20+plan40+planHC+planRH;
+    if(totalPlan<=0) return;
+
+    // vendor：优先用 r.vendor（已发送时存在），否则随机
+    const vendor = (r.vendor && String(r.vendor).trim()) ? String(r.vendor).trim() : rnd(vendors);
+
+    // 生成每个箱型对应的箱号记录
+    function gen(type, plan){
+      if(plan<=0) return;
+      // 随机做一部分完成
+      const done = rndInt(0, plan);
+      for(let i=0;i<plan;i++){
+        out.push({
+          bookingNo: r.bookingNo,
+          vendor,
+          containerNo: mkCntr(rnd(prefixes)),
+          boxType: type, // 20GP/40GP/40HC/40RH
+          status: (i<done) ? '已完成' : '未完成',
+          doneAt: (i<done) ? (nowTs() - rndInt(1,20)*86400000) : null,
+          createdAt: nowTs() - rndInt(1,30)*86400000
+        });
+      }
+    }
+    gen('20GP', plan20);
+    gen('40GP', plan40);
+    gen('40HC', planHC);
+    gen('40RH', planRH);
+  });
+
+  picks = out;
+  saveJson(LS_PICK, picks);
+  return picks;
+}
+
+/* ========= 发送日期兜底：如果历史数据没有 sendAt，就用 createdAt 作为“发送日期演示值”并写回 ========= */
+function ensureSendAt(crpRows){
+  let changed=false;
+  crpRows.forEach(r=>{
+    if(String(r.sendState||'')==='已发送'){
+      if(!r.sendAt){
+        r.sendAt = r.createdAt || nowTs();
+        changed=true;
+      }
+    }
+  });
+  if(changed) saveJson(LS_CRP, crpRows);
+  return crpRows;
+}
+
+/* ========= 完成统计 ========= */
+function countDone(picks, bookingNo, boxType){
+  return picks.filter(p=>p.bookingNo===bookingNo && p.boxType===boxType && p.status==='已完成').length;
+}
+function countHasContainer(picks, bookingNo, containerNoLike){
+  const q = String(containerNoLike||'').trim().toLowerCase();
+  if(!q) return true;
+  return picks.some(p=>p.bookingNo===bookingNo && String(p.containerNo||'').toLowerCase().includes(q));
+}
+function vendorOfBooking(r, picks){
+  // 优先 CRP 上记录的 vendor；否则从提箱记录里推
+  const v = String(r.vendor||'').trim();
+  if(v) return v;
+  const hit = picks.find(p=>p.bookingNo===r.bookingNo && String(p.vendor||'').trim());
+  return hit ? String(hit.vendor).trim() : '';
+}
+function getPlan(r){
+  return {
+    gp20: parseInt0(r.gp20),
+    gp40: parseInt0(r.gp40),
+    hc40: parseInt0(r.hc40),
+    rh40: parseInt0(r.rh40),
+  };
+}
+function getDone(r, picks){
+  return {
+    gp20: countDone(picks, r.bookingNo, '20GP'),
+    gp40: countDone(picks, r.bookingNo, '40GP'),
+    hc40: countDone(picks, r.bookingNo, '40HC'),
+    rh40: countDone(picks, r.bookingNo, '40RH'),
+  };
+}
+function calcStatus(plan, done, sendState){
+  const plans = [plan.gp20, plan.gp40, plan.hc40, plan.rh40];
+  const dones = [done.gp20, done.gp40, done.hc40, done.rh40];
+
+  const anyDone = dones.some(x=>x>0);
+  const totalPlan = plans.reduce((a,x)=>a+x,0);
+  const allDoneForPlanned = plans.every((p,i)=> p===0 ? true : (dones[i]>=p));
+
+  if(totalPlan>0 && allDoneForPlanned) return '已完成';
+  if(anyDone) return '运输中';
+  return (String(sendState||'未发送')==='已发送') ? '已发送' : '未发送';
+}
+function statusPill(st){
+  if(st==='已完成') return `<span class="stPill done"><span class="dot"></span>已完成</span>`;
+  if(st==='运输中') return `<span class="stPill transit"><span class="dot"></span>运输中</span>`;
+  if(st==='已发送') return `<span class="stPill sent"><span class="dot"></span>已发送</span>`;
+  return `<span class="stPill unsent"><span class="dot"></span>未发送</span>`;
+}
+function unfinishedTotal(plan, done){
+  return Math.max(0, (plan.gp20-done.gp20)) +
+         Math.max(0, (plan.gp40-done.gp40)) +
+         Math.max(0, (plan.hc40-done.hc40)) +
+         Math.max(0, (plan.rh40-done.rh40));
+}
+function fmtFrac(d,p){ return `${d}/${p}`; }
+
+/* ========= 过滤条件 ========= */
+const f_booking = document.getElementById('f_booking');
+const f_carrier = document.getElementById('f_carrier');
+const f_vv = document.getElementById('f_vv');
+const f_status = document.getElementById('f_status');
+const f_cntr = document.getElementById('f_cntr');
+const f_vendor = document.getElementById('f_vendor');
+const f_dateType = document.getElementById('f_dateType');
+const f_dateFrom = document.getElementById('f_dateFrom');
+const f_dateTo = document.getElementById('f_dateTo');
+
+function applyDateDefaults(triggerRender){
+  const t = f_dateType.value;
+  const today = new Date();
+  if(t==='send'){
+    f_dateFrom.value = ymd(addDays(today,-7));
+    f_dateTo.value = ymd(today);
+  }else{
+    f_dateFrom.value = ymd(today);
+    f_dateTo.value = ymd(addDays(today,14));
+  }
+  if(triggerRender) render();
+}
+function resetFilters(){
+  f_booking.value='';
+  f_carrier.value='';
+  f_vv.value='';
+  f_status.value='';
+  f_cntr.value='';
+  f_vendor.value='';
+  f_dateType.value='send';
+  applyDateDefaults(false);
+  render();
+}
+
+/* 日期过滤：基于所选类型取日期字段 */
+function inDateRange(r, dateType, fromYmd, toYmd){
+  const from = fromYmd ? new Date(fromYmd+'T00:00:00') : null;
+  const to = toYmd ? new Date(toYmd+'T23:59:59') : null;
+
+  let v = null;
+  if(dateType==='etd'){
+    // ETD 是 yyyy-mm-dd 字符串
+    v = r.etd ? new Date(String(r.etd).trim()+'T00:00:00') : null;
+  }else{
+    // send：用 r.sendAt（兜底已做），再兜底 createdAt
+    const ts = r.sendAt || r.createdAt || null;
+    v = ts ? new Date(ts) : null;
+  }
+  if(!v) return false;
+  if(from && v < from) return false;
+  if(to && v > to) return false;
+  return true;
+}
+
+/* ========= 主渲染 ========= */
+const tbody = document.getElementById('tbody');
+const statItems = document.getElementById('statItems');
+
+let crpRows = [];
+let picks = [];
+let viewRows = []; // 当前过滤后的行（用于导出）
+
+function buildView(){
+  const fbk=(f_booking.value||'').trim().toLowerCase();
+  const fcar=(f_carrier.value||'').trim().toLowerCase();
+  const fvv=(f_vv.value||'').trim().toLowerCase();
+  const fst=(f_status.value||'').trim();
+  const fven=(f_vendor.value||'').trim().toLowerCase();
+  const fcn=(f_cntr.value||'').trim();
+
+  const dt=f_dateType.value;
+  const df=f_dateFrom.value;
+  const dt2=f_dateTo.value;
+
+  let list = crpRows.slice().sort((a,b)=>(b.createdAt||0)-(a.createdAt||0));
+
+  list = list.filter(r=>{
+    if(fbk && !String(r.bookingNo||'').toLowerCase().includes(fbk)) return false;
+    if(fcar && !String(r.carrier||'').toLowerCase().includes(fcar)) return false;
+    if(fvv){
+      const vv = `${r.vessel||''} ${r.voyage||''}`.toLowerCase();
+      if(!vv.includes(fvv)) return false;
+    }
+    if(!inDateRange(r, dt, df, dt2)) return false;
+
+    // 箱号过滤：看这个 booking 是否存在匹配箱号
+    if(fcn && !countHasContainer(picks, r.bookingNo, fcn)) return false;
+
+    // vendor过滤：优先 CRP.vendor，再看 picks.vendor
+    const v = vendorOfBooking(r, picks).toLowerCase();
+    if(fven && !v.includes(fven)) return false;
+
+    // 状态过滤（需要先计算）
+    const plan=getPlan(r);
+    const done=getDone(r, picks);
+    const st=calcStatus(plan, done, r.sendState);
+    if(fst && st!==fst) return false;
+
+    return true;
+  });
+
+  // 生成 viewRows：带上计算字段
+  const out = list.map(r=>{
+    const plan=getPlan(r);
+    const done=getDone(r, picks);
+    const st=calcStatus(plan, done, r.sendState);
+    const vendor = vendorOfBooking(r, picks);
+    const unfin = unfinishedTotal(plan, done);
+    return { r, plan, done, st, vendor, unfin };
+  });
+
+  return out;
+}
+
+function render(){
+  const built = buildView();
+  viewRows = built;
+
+  tbody.innerHTML='';
+  if(!built.length){
+    const tr=document.createElement('tr');
+    tr.innerHTML = `<td colspan="14" style="color:var(--muted);padding:18px">暂无数据（请先在 CRP录入页录入并发送；或等待演示数据生成）</td>`;
+    tbody.appendChild(tr);
+    statItems.innerHTML = '暂无统计';
+    return;
+  }
+
+  built.forEach(x=>{
+    const r=x.r, plan=x.plan, done=x.done;
+
+    const tr=document.createElement('tr');
+    tr.innerHTML = `
+      <td>${fmtTime(r.createdAt||null)}</td>
+      <td><b>${esc(r.bookingNo||'')}</b></td>
+      <td>${esc(r.carrier||'')}</td>
+      <td class="ellip" title="${escAttr(r.vessel||'')}">${esc(r.vessel||'')}</td>
+      <td>${esc(r.voyage||'')}</td>
+      <td>${esc(r.etd||'-')}</td>
+      <td>${esc(r.sendAt ? ymd(new Date(r.sendAt)) : '-')}</td>
+      <td>${esc(x.vendor||'')}</td>
+
+      <td class="num">${esc(fmtFrac(done.gp20, plan.gp20))}</td>
+      <td class="num">${esc(fmtFrac(done.gp40, plan.gp40))}</td>
+      <td class="num">${esc(fmtFrac(done.hc40, plan.hc40))}</td>
+      <td class="num">${esc(fmtFrac(done.rh40, plan.rh40))}</td>
+
+      <td class="num"><b>${esc(String(x.unfin))}</b></td>
+      <td>${statusPill(x.st)}</td>
+    `;
+    tbody.appendChild(tr);
+  });
+
+  renderStatBar(built);
+}
+
+function renderStatBar(built){
+  // 按 vendor 汇总未完成
+  const map = new Map();
+  built.forEach(x=>{
+    const v = (x.vendor||'未分配').trim() || '未分配';
+    map.set(v, (map.get(v)||0) + (x.unfin||0));
+  });
+
+  // 展示：vendor:??个
+  const items = Array.from(map.entries())
+    .sort((a,b)=>b[1]-a[1])
+    .slice(0, 20)
+    .map(([k,v])=> `<span class="badge"><span class="k">${esc(k)}:</span><span class="v">${esc(String(v))}</span>个</span>`)
+    .join('');
+
+  const total = built.reduce((a,x)=>a+(x.unfin||0),0);
+  statItems.innerHTML =
+    `<span class="badge"><span class="k">总未完成:</span><span class="v">${esc(String(total))}</span>个</span>` +
+    (items ? items : `<span class="small">暂无统计</span>`);
+}
+
+/* ========= 导出：主列表 CSV ========= */
+function csvEscape(v){
+  const s = String(v ?? '');
+  if(/[",\n]/.test(s)) return `"${s.replace(/"/g,'""')}"`;
+  return s;
+}
+function downloadCsv(filename, rows){
+  const blob = new Blob([rows.join('\n')], {type:'text/csv;charset=utf-8;'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(()=>URL.revokeObjectURL(a.href), 1000);
+}
+function exportMainCSV(){
+  const head = [
+    'bookingNo','carrier','vessel','voyage','etd','sendDate','vendor','status',
+    'gp20_done','gp20_plan','gp40_done','gp40_plan','hc40_done','hc40_plan','rh40_done','rh40_plan',
+    'unfinished'
+  ].join(',');
+
+  const lines = [head];
+
+  viewRows.forEach(x=>{
+    const r=x.r, p=x.plan, d=x.done;
+    lines.push([
+      r.bookingNo, r.carrier, r.vessel, r.voyage, r.etd,
+      (r.sendAt? ymd(new Date(r.sendAt)) : ''),
+      x.vendor, x.st,
+      d.gp20, p.gp20, d.gp40, p.gp40, d.hc40, p.hc40, d.rh40, p.rh40,
+      x.unfin
+    ].map(csvEscape).join(','));
+  });
+
+  downloadCsv(`crp-trans-status_${ymd(new Date())}.csv`, lines);
+}
+
+/* ========= 详细弹窗：矩阵 ========= */
+const detailMask = document.getElementById('detailMask');
+const d_dateType = document.getElementById('d_dateType');
+const d_from = document.getElementById('d_from');
+const d_to = document.getElementById('d_to');
+const matrixTbl = document.getElementById('matrixTbl');
+
+function openDetail(){
+  d_dateType.value = f_dateType.value || 'send';
+  applyDetailDateDefaults(false);
+  detailMask.style.display='flex';
+  renderMatrix();
+}
+function closeDetail(){ detailMask.style.display='none'; }
+detailMask.onclick = e=>{ if(e.target===detailMask) closeDetail(); };
+
+function applyDetailDateDefaults(trigger){
+  const t = d_dateType.value;
+  const today = new Date();
+  if(t==='send'){
+    d_from.value = ymd(addDays(today,-7));
+    d_to.value = ymd(today);
+  }else{
+    d_from.value = ymd(today);
+    d_to.value = ymd(addDays(today,14));
+  }
+  if(trigger) renderMatrix();
+}
+
+function dateList(fromYmd, toYmd){
+  const out=[];
+  const start=new Date(fromYmd+'T00:00:00');
+  const end=new Date(toYmd+'T00:00:00');
+  let cur = start;
+  while(cur <= end){
+    out.push(ymd(cur));
+    cur = addDays(cur, 1);
+  }
+  return out;
+}
+
+let lastMatrix = { dates:[], vendors:[], grid: new Map() };
+
+function renderMatrix(){
+  const t = d_dateType.value;
+  const from = d_from.value;
+  const to = d_to.value;
+  if(!from || !to){ alert('请选择开始/结束日期'); return; }
+  if(new Date(from) > new Date(to)){ alert('开始日期不能大于结束日期'); return; }
+
+  const dates = dateList(from, to);
+
+  // 先取符合日期范围的 CRP（按 t）
+  const subset = crpRows.filter(r=> inDateRange(r, t, from, to));
+
+  // 构造 vendor 列表：来自 subset 的 vendor（含提箱记录推断）
+  const vset = new Set();
+  subset.forEach(r=>{
+    const v = (vendorOfBooking(r, picks) || '未分配').trim() || '未分配';
+    vset.add(v);
+  });
+  const vendors = Array.from(vset).sort((a,b)=>a.localeCompare(b,'zh'));
+
+  // grid key: vendor|date => count
+  const grid = new Map();
+  function add(v, d, n){
+    const key = `${v}||${d}`;
+    grid.set(key, (grid.get(key)||0) + n);
+  }
+
+  subset.forEach(r=>{
+    const plan=getPlan(r);
+    const done=getDone(r, picks);
+    const unfin=unfinishedTotal(plan, done);
+    if(unfin<=0) return;
+
+    const vendor = (vendorOfBooking(r, picks) || '未分配').trim() || '未分配';
+
+    // 归属日期
+    let d = '';
+    if(t==='etd'){
+      d = String(r.etd||'').trim();
+    }else{
+      d = r.sendAt ? ymd(new Date(r.sendAt)) : '';
+      if(!d) d = ymd(new Date(r.createdAt||nowTs()));
+    }
+    if(!d || !dates.includes(d)) return;
+
+    add(vendor, d, unfin);
+  });
+
+  // 渲染表
+  let html = '';
+  html += '<thead><tr>';
+  html += '<th style="min-width:140px">运输公司</th>';
+  dates.forEach(d=> html += `<th class="num" style="min-width:90px">${esc(d.slice(5))}</th>`);
+  html += '</tr></thead>';
+
+  html += '<tbody>';
+  if(!vendors.length){
+    html += `<tr><td colspan="${1+dates.length}" style="color:var(--muted);padding:16px">该日期范围暂无未完成数据</td></tr>`;
+  }else{
+    vendors.forEach(v=>{
+      html += `<tr><td><b>${esc(v)}</b></td>`;
+      dates.forEach(d=>{
+        const n = grid.get(`${v}||${d}`) || 0;
+        html += `<td class="num">${n ? `<b>${esc(String(n))}</b>` : ''}</td>`;
+      });
+      html += '</tr>';
+    });
+  }
+  html += '</tbody>';
+
+  matrixTbl.innerHTML = html;
+  lastMatrix = { dates, vendors, grid };
+}
+
+function exportMatrixCSV(){
+  const {dates, vendors, grid} = lastMatrix;
+  if(!dates || !dates.length){ alert('暂无矩阵数据'); return; }
+
+  const head = ['vendor', ...dates].map(csvEscape).join(',');
+  const lines = [head];
+
+  if(!vendors || !vendors.length){
+    lines.push(csvEscape('暂无数据'));
+  }else{
+    vendors.forEach(v=>{
+      const row = [v, ...dates.map(d=> String(grid.get(`${v}||${d}`)||0))].map(csvEscape).join(',');
+      lines.push(row);
+    });
+  }
+
+  downloadCsv(`crp-unfinished-matrix_${ymd(new Date())}.csv`, lines);
+}
+
+/* ========= init ========= */
+(function init(){
+  crpRows = ensureSendAt(loadCrp());
+  picks = ensureDemoPickups(crpRows);
+
+  // 默认：发送CRP日期范围（今天-7 到 今天）
+  f_dateType.value='send';
+  applyDateDefaults(false);
+  render();
+})();
+</script>
+</body>
+</html>
