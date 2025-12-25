@@ -1,0 +1,836 @@
+<!--
+File: mobile/container-entry-truck.html
+Version: container-entry-truck-v5
+Date: 2025-12-25
+
+更新点（v5）：
+1) 录入容器：箱号输入框缩小；箱型移动到【检查】按钮右侧（同一行）
+2) 将“列表查询条件的船公司”移到录入容器；与 自重 / 运输公司 三个并排
+3) Booking 查询容器下：删除“列表容器/列表按钮”；改为点击 Booking No 输入框弹出选择弹窗
+4) CRP 选择弹窗：顶部新增 Booking No 输入框 + 查询按钮；列表箱量列改为“箱型表头 + 数据仅数字 4/5”
+5) 弹窗选中行后，点击【确定】才返回；返回后仅更新“已选”提示（船公司 + Booking No），不回填查询条件
+-->
+
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>集装箱录入（拖车）</title>
+<style>
+:root{
+  --brand:#e0205c;--bg:#f1f2f5;--card:#fff;--text:#222;--muted:#666;--line:#e9e9ee;
+  --ok:#1a7f37;--warn:#b54708;--bad:#b42318;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);font-family:Arial,"Microsoft YaHei";color:var(--text)}
+
+/* 手机外观（iPhone Pro Max 级别） */
+.shell{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:10px}
+.device{
+  width:min(460px,100%);
+  background:#111;border-radius:28px;padding:10px;
+  box-shadow:0 18px 60px rgba(0,0,0,.32);
+  border:2px solid rgba(255,255,255,.08);
+}
+.deviceInner{
+  background:var(--bg);
+  border-radius:20px;
+  overflow:hidden;
+  height: min(932px, calc(100vh - 22px));
+  display:flex;
+  flex-direction:column;
+}
+
+/* 顶部 */
+.topbar{
+  height:50px;background:#fff;border-bottom:1px solid var(--line);
+  display:flex;align-items:center;justify-content:space-between;padding:0 12px;
+  flex:0 0 auto;
+}
+.left{font-weight:900;font-size:14px}
+.ver{
+  cursor:pointer;background:#f6f6f6;border:1px solid #eee;border-radius:999px;
+  padding:6px 10px;font-size:12px;
+  font-family:ui-monospace,Menlo,Consolas,monospace;
+  display:flex;align-items:center;gap:6px;
+}
+.ver .dot{width:8px;height:8px;border-radius:99px;background:var(--brand)}
+
+/* 主体滚动区 */
+.content{overflow:auto;padding:10px 10px 14px}
+
+/* 卡片 */
+.card{
+  background:#fff;border:1px solid var(--line);border-radius:12px;
+  box-shadow:0 6px 16px rgba(0,0,0,.04);
+}
+.cardHd{
+  padding:10px 12px;border-bottom:1px solid var(--line);
+  display:flex;align-items:center;justify-content:space-between;gap:10px;
+  font-weight:900;font-size:13px;
+}
+.cardBd{padding:10px 12px}
+
+.row{display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap}
+.field{display:flex;flex-direction:column;gap:6px;flex:1;min-width:140px}
+.field.sm{min-width:120px;flex:0 0 auto}
+.field.xs{min-width:90px;flex:0 0 auto}
+.label{font-size:12px;color:var(--muted)}
+.req{color:var(--brand);font-weight:900;margin-left:4px}
+
+.input,.select,.textarea{
+  width:100%;
+  border:1px solid #ddd;border-radius:10px;
+  padding:9px 10px;font-size:13px;background:#fff;outline:none;
+}
+.readonly{background:#f7f7fb;border-color:#e8e8ef;cursor:pointer}
+.textarea{min-height:52px;resize:vertical}
+
+.btn{
+  border:1px solid #ddd;background:#fff;border-radius:10px;
+  padding:9px 12px;font-weight:900;font-size:13px;cursor:pointer;
+}
+.btn.primary{background:var(--brand);border-color:var(--brand);color:#fff}
+.btn.ok{border-color:rgba(26,127,55,.35);background:rgba(26,127,55,.06);color:#135d2a}
+.btn:active{transform:translateY(1px)}
+
+.pill{
+  display:inline-flex;align-items:center;gap:6px;
+  padding:6px 10px;border-radius:999px;border:1px solid var(--line);
+  font-size:12px;font-weight:900;background:#fff;user-select:none
+}
+.pill .dot{width:8px;height:8px;border-radius:99px;background:#bbb}
+.pill.ok{border-color:rgba(26,127,55,.25);background:rgba(26,127,55,.06);color:#135d2a}
+.pill.ok .dot{background:var(--ok)}
+.pill.warn{border-color:rgba(181,71,8,.25);background:rgba(181,71,8,.06);color:#7a3a06}
+.pill.warn .dot{background:var(--warn)}
+.pill.bad{border-color:rgba(180,35,24,.25);background:rgba(180,35,24,.06);color:#7a1b13}
+.pill.bad .dot{background:var(--bad)}
+
+.hr{height:1px;background:var(--line);margin:10px 0}
+
+/* CRP 列表（下方） */
+.tblWrap{border:1px solid var(--line);border-radius:12px;overflow:hidden;background:#fff}
+.tblHd{background:#fafafa;border-bottom:1px solid var(--line);padding:9px 10px;display:flex;align-items:center;justify-content:space-between;gap:10px}
+.tblHd b{font-size:13px}
+.crpScroll{max-height:300px;overflow:auto}
+table{width:100%;border-collapse:collapse;min-width:720px}
+th,td{border-bottom:1px solid var(--line);padding:9px 10px;font-size:12px;white-space:nowrap}
+th{background:#fafafa;color:var(--muted);text-align:left;font-weight:900;position:sticky;top:0;z-index:1}
+tr:hover td{background:#fff7fb}
+tr.selected td{background:#fff7fb;outline:2px solid rgba(224,32,92,.22)}
+.badge{display:inline-flex;align-items:center;gap:6px;padding:4px 8px;border-radius:999px;border:1px solid #eee;background:#fafafa;font-size:12px;font-weight:900;color:#333}
+
+/* 弹窗 */
+.modalMask{position:fixed;inset:0;background:rgba(0,0,0,.35);display:none;align-items:center;justify-content:center;z-index:9999}
+.modal{width:720px;max-width:96vw;background:#fff;border-radius:12px;box-shadow:0 20px 60px rgba(0,0,0,.3);display:flex;flex-direction:column}
+.modal.sm{width:560px}
+.modalHd{padding:12px 16px;border-bottom:1px solid #eee;font-weight:900;display:flex;justify-content:space-between;align-items:center}
+.modalBd{padding:14px 16px;max-height:70vh;overflow:auto;font-size:13px;line-height:1.7}
+.modalFt{padding:12px 16px;border-top:1px solid #eee;display:flex;justify-content:flex-end;gap:10px}
+.kv{display:grid;grid-template-columns:140px 1fr;gap:8px 10px}
+.kv .k{color:var(--muted)}
+.code{font-family:ui-monospace,Menlo,Consolas,monospace}
+</style>
+</head>
+
+<body>
+<div class="shell">
+  <div class="device">
+    <div class="deviceInner">
+
+      <div class="topbar">
+        <div class="left">集装箱录入（拖车）</div>
+        <div class="ver" id="verBtn" title="点击查看页面功能要求">
+          <span class="dot"></span>
+          <span>container-entry-truck-v5</span>
+        </div>
+      </div>
+
+      <div class="content">
+
+        <!-- 录入 -->
+        <div class="card">
+          <div class="cardHd">
+            <span>录入 / 核对</span>
+            <span class="pill warn" id="boxPill"><span class="dot"></span>未检查</span>
+          </div>
+
+          <div class="cardBd">
+
+            <!-- ✅ 箱号缩小 + 箱型在检查按钮右侧 -->
+            <div class="row">
+              <div class="field" style="min-width:200px;flex:1.3">
+                <div class="label">箱号<span class="req">*</span></div>
+                <input class="input" id="containerNo" placeholder="MSKU1234567" oninput="onContainerTyping()">
+              </div>
+
+              <div class="field xs">
+                <button class="btn primary" type="button" onclick="checkContainer()">检查</button>
+              </div>
+
+              <div class="field sm" style="min-width:130px">
+                <div class="label">箱型<span class="req">*</span></div>
+                <select class="select" id="containerType">
+                  <option value="">— 请选择 —</option>
+                  <option value="20GP">20GP</option>
+                  <option value="40GP">40GP</option>
+                  <option value="40HC">40HC</option>
+                  <option value="40RH">40RH</option>
+                </select>
+              </div>
+            </div>
+
+            <!-- ✅ 船公司（查询条件）移动到录入容器；与 自重/运输公司 三个并排 -->
+            <div class="row" style="margin-top:8px">
+              <div class="field sm" style="min-width:130px">
+                <div class="label">船公司</div>
+                <input class="input readonly" id="qCarrier" placeholder="点击选择" readonly onclick="openCarrierPick()">
+              </div>
+              <div class="field sm">
+                <div class="label">自重（kg）</div>
+                <input class="input" id="tareKg" placeholder="3800">
+              </div>
+              <div class="field sm">
+                <div class="label">运输公司<span class="req">*</span></div>
+                <select class="select" id="vendor" onchange="syncCrpList()">
+                  <option value="">— 请选择 —</option>
+                  <option value="中集">中集</option>
+                  <option value="顺航">顺航</option>
+                  <option value="XX运输公司">XX运输公司</option>
+                  <option value="YY车队">YY车队</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="field" style="margin-top:8px">
+              <div class="label">备注</div>
+              <textarea class="textarea" id="remark"></textarea>
+            </div>
+
+            <div class="hr"></div>
+
+            <!-- ✅ Booking 查询容器：不再有列表按钮/列表容器；点击 Booking No 输入框弹窗 -->
+            <div class="tblWrap">
+              <div class="tblHd">
+                <b>Booking 选择<span class="req">*</span></b>
+                <div class="row">
+                  <button class="btn primary" type="button" onclick="openConfirmSave()">保存</button>
+                </div>
+              </div>
+
+              <div class="cardBd" style="padding:10px 12px">
+                <div class="row">
+                  <div class="field" style="min-width:260px;flex:2">
+                    <div class="label">Booking No（点击选择）</div>
+                    <input class="input readonly" id="bookingNo" placeholder="点击选择" readonly onclick="openCrpPickerModal()">
+                  </div>
+                </div>
+
+                <div class="row" style="margin-top:8px">
+                  <div class="field">
+                    <div class="label">已选</div>
+                    <input class="input readonly" id="pickedCrp" readonly placeholder="未选择">
+                  </div>
+                </div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+
+        <!-- 下方 CRP 列表（仍保留：点击只更新已选提示，不回填条件） -->
+        <div class="card" style="margin-top:10px">
+          <div class="cardHd">
+            <span>CRP 列表</span>
+            <span class="badge" id="kpi">10条</span>
+          </div>
+
+          <div class="tblWrap" style="margin:0 12px 12px 12px">
+            <div class="crpScroll">
+              <table>
+                <thead>
+                  <tr>
+                    <th style="min-width:150px">录入时间</th>
+                    <th style="min-width:170px">Booking</th>
+                    <th style="min-width:90px">船公司</th>
+                    <th style="min-width:280px">箱量（20/40/HC/RH）</th>
+                    <th style="min-width:110px">状态</th>
+                  </tr>
+                </thead>
+                <tbody id="crpTbody"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- 页面功能要求 -->
+      <div class="modalMask" id="reqMask">
+        <div class="modal">
+          <div class="modalHd">
+            <span>页面功能要求（container-entry-truck.html / container-entry-truck-v5）</span>
+            <span style="cursor:pointer;color:var(--muted)" onclick="closeReq()">关闭</span>
+          </div>
+          <div class="modalBd">
+            <ol>
+              <li>必须先点【检查】完成箱号校验+查重回填，才允许保存。</li>
+              <li>保存时弹出确认框；确定才写入，取消不写入。</li>
+              <li>点击 Booking No 输入框弹出选择弹窗；选中后点【确定】才返回。</li>
+              <li>返回后仅更新“已选”提示（船公司 + Booking No），不回填船公司/Booking 条件。</li>
+              <li>CRP 列表仅显示 10 条，支持滚动与选中高亮。</li>
+            </ol>
+          </div>
+          <div class="modalFt">
+            <button class="btn" type="button" onclick="closeReq()">关闭</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 船公司选择弹窗（点击船公司字段触发） -->
+      <div class="modalMask" id="carrierMask">
+        <div class="modal sm">
+          <div class="modalHd">
+            <span>选择船公司</span>
+            <span style="cursor:pointer;color:var(--muted)" onclick="closeCarrierPick()">关闭</span>
+          </div>
+          <div class="modalBd">
+            <div class="row" style="margin-bottom:10px">
+              <div class="field" style="min-width:260px;flex:1">
+                <div class="label">搜索</div>
+                <input class="input" id="carrierSearch" placeholder="输入船公司名称，如 MSK / MSC" oninput="renderCarrierPickList()">
+              </div>
+              <div class="field xs">
+                <button class="btn" type="button" onclick="clearCarrier()">清空</button>
+              </div>
+            </div>
+
+            <div class="tblWrap">
+              <div class="tblHd"><b>结果（最多10条）</b></div>
+              <div class="cardBd" style="padding:0">
+                <div id="carrierList"></div>
+              </div>
+            </div>
+          </div>
+          <div class="modalFt">
+            <button class="btn" type="button" onclick="closeCarrierPick()">关闭</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ✅ Booking/CRP 选择弹窗：顶部 Booking No 输入框 + 查询按钮；选中后点确定返回 -->
+      <div class="modalMask" id="crpPickMask">
+        <div class="modal">
+          <div class="modalHd">
+            <span>选择 Booking</span>
+            <span style="cursor:pointer;color:var(--muted)" onclick="closeCrpPickerModal()">关闭</span>
+          </div>
+          <div class="modalBd">
+
+            <div class="row" style="margin-bottom:10px">
+              <div class="field" style="min-width:260px;flex:2">
+                <div class="label">Booking No</div>
+                <input class="input" id="pickBookingQ" placeholder="输入 BK..." oninput="renderCrpPickerList()">
+              </div>
+              <div class="field xs">
+                <button class="btn ok" type="button" onclick="renderCrpPickerList()">查询</button>
+              </div>
+            </div>
+
+            <div class="tblWrap">
+              <div class="tblBd" style="overflow:auto">
+                <table style="min-width:860px">
+                  <thead>
+                    <tr>
+                      <th style="min-width:160px">录入时间</th>
+                      <th style="min-width:180px">Booking</th>
+                      <th style="min-width:90px">船公司</th>
+                      <!-- ✅ 箱型作为表头，数据区域只显示 4/5 这种 -->
+                      <th style="min-width:70px">20GP</th>
+                      <th style="min-width:70px">40GP</th>
+                      <th style="min-width:70px">40HC</th>
+                      <th style="min-width:70px">40RH</th>
+                      <th style="min-width:120px">运输公司</th>
+                      <th style="min-width:120px">状态</th>
+                    </tr>
+                  </thead>
+                  <tbody id="pickTbody"></tbody>
+                </table>
+              </div>
+            </div>
+
+            <div style="margin-top:10px;color:var(--muted);font-size:12px">
+              已选：<span class="code" id="pickPreview">未选择</span>
+            </div>
+
+          </div>
+          <div class="modalFt">
+            <button class="btn" type="button" onclick="closeCrpPickerModal()">取消</button>
+            <button class="btn primary" type="button" onclick="confirmPickCrp()">确定</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 保存确认弹窗 -->
+      <div class="modalMask" id="confirmMask">
+        <div class="modal">
+          <div class="modalHd">
+            <span>确认保存</span>
+            <span style="cursor:pointer;color:var(--muted)" onclick="closeConfirm()">关闭</span>
+          </div>
+          <div class="modalBd">
+            <div class="kv">
+              <div class="k">Booking No</div><div class="v code" id="c_booking">-</div>
+              <div class="k">船公司</div><div class="v code" id="c_carrier">-</div>
+              <div class="k">集装箱号</div><div class="v code" id="c_container">-</div>
+              <div class="k">箱型</div><div class="v code" id="c_type">-</div>
+              <div class="k">自重（kg）</div><div class="v code" id="c_tare">-</div>
+              <div class="k">运输公司</div><div class="v code" id="c_vendor">-</div>
+              <div class="k">备注</div><div class="v" id="c_remark">-</div>
+            </div>
+          </div>
+          <div class="modalFt">
+            <button class="btn" type="button" onclick="closeConfirm()">取消</button>
+            <button class="btn primary" type="button" onclick="confirmSave()">确定</button>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script>
+/* Keys（演示） */
+const LS_CONTAINERS = 'slms_containers_v1';
+const LS_CRP       = 'slms_crp_bookings_v1';
+const LS_PICKUPS   = 'slms_pickup_events_v1';
+
+/* req */
+const reqMask = document.getElementById('reqMask');
+document.getElementById('verBtn').onclick = ()=> reqMask.style.display='flex';
+function closeReq(){ reqMask.style.display='none'; }
+reqMask.onclick = e=>{ if(e.target===reqMask) closeReq(); };
+
+/* confirm modal */
+const confirmMask = document.getElementById('confirmMask');
+function closeConfirm(){ confirmMask.style.display='none'; }
+confirmMask.onclick = e=>{ if(e.target===confirmMask) closeConfirm(); };
+
+/* UI refs */
+const boxPill = document.getElementById('boxPill');
+const crpTbody = document.getElementById('crpTbody');
+
+let checkedOk = false;
+let checkedContainerNo = '';
+let selectedCrpKey = '';
+
+/* 选择弹窗状态 */
+let pickSelected = null; // {bookingNo, carrier, ...}
+
+/* helpers */
+function pad2(n){ return String(n).padStart(2,'0'); }
+function fmtTime(ts){
+  const d=new Date(ts||Date.now());
+  return `${d.getFullYear()}-${pad2(d.getMonth()+1)}-${pad2(d.getDate())} ${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+}
+function esc(s){return String(s??'').replace(/[&<>"']/g,m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[m]));}
+function upperNoSpace(s){ return String(s||'').toUpperCase().replace(/\s+/g,''); }
+function getJson(key, fallback){
+  try{ const s=localStorage.getItem(key); if(!s) return fallback; return JSON.parse(s); }catch(e){ return fallback; }
+}
+function setJson(key, val){ try{ localStorage.setItem(key, JSON.stringify(val)); }catch(e){} }
+function fuzzyIncludes(a,b){
+  a=String(a||'').toLowerCase(); b=String(b||'').toLowerCase();
+  if(!b) return true;
+  return a.includes(b);
+}
+function numOr0(v){
+  const s=String(v??'').trim();
+  if(!s) return 0;
+  const n=parseInt(s,10);
+  return Number.isFinite(n)?n:0;
+}
+
+/* ISO 6346 校验 */
+const ISO6346_MAP = {A:10,B:12,C:13,D:14,E:15,F:16,G:17,H:18,I:19,J:20,K:21,L:23,M:24,N:25,O:26,P:27,Q:28,R:29,S:30,T:31,U:32,V:34,W:35,X:36,Y:37,Z:38};
+function iso6346CheckDigit(containerNo){
+  const s=upperNoSpace(containerNo);
+  if(!/^[A-Z]{4}\d{7}$/.test(s)) return {ok:false,msg:'格式应为4字母+7数字'};
+  const cat=s[3];
+  if(!['U','J','Z'].includes(cat)) return {ok:false,msg:'第4位应为U/J/Z'};
+  const body=s.slice(0,10);
+  const given=parseInt(s[10],10);
+  let sum=0;
+  for(let i=0;i<body.length;i++){
+    const ch=body[i];
+    let v;
+    if(/[A-Z]/.test(ch)){ v=ISO6346_MAP[ch]; if(v===undefined) return {ok:false,msg:'字母映射失败'}; }
+    else v=parseInt(ch,10);
+    sum += v * Math.pow(2,i);
+  }
+  const mod=sum%11;
+  const cd=(mod===10)?0:mod;
+  return {ok: cd===given, expected: cd, given, msg: cd===given?'通过':`校验位应为${cd}`};
+}
+
+/* 输入改变 -> 取消“已检查” */
+function onContainerTyping(){
+  checkedOk=false;
+  checkedContainerNo='';
+  boxPill.className='pill warn';
+  boxPill.innerHTML='<span class="dot"></span>未检查';
+}
+
+/* 检查箱号 + 查重回填 */
+function checkContainer(){
+  const input=document.getElementById('containerNo');
+  const no=upperNoSpace(input.value);
+  input.value=no;
+
+  const r=iso6346CheckDigit(no);
+  if(!r.ok){
+    checkedOk=false; checkedContainerNo='';
+    boxPill.className='pill bad';
+    boxPill.innerHTML=`<span class="dot"></span>${esc(r.msg)}`;
+    return;
+  }
+
+  const list=getJson(LS_CONTAINERS, []);
+  const hit = Array.isArray(list) ? list.find(x=>upperNoSpace(x.containerNo)===no) : null;
+  if(hit){
+    document.getElementById('containerType').value = hit.containerType || '';
+    document.getElementById('tareKg').value = hit.tareKg || '';
+    document.getElementById('vendor').value = hit.vendor || '';
+    document.getElementById('remark').value = hit.remark || '';
+    // 回填已选（但不强制回填 booking 输入框，因为它现在是只读选择）
+    if(hit.bookingNo || hit.carrier){
+      document.getElementById('bookingNo').value = hit.bookingNo || '';
+      document.getElementById('qCarrier').value = hit.carrier || '';
+      document.getElementById('pickedCrp').value = (hit.carrier||'') + ' / ' + (hit.bookingNo||'');
+      selectedCrpKey = String(hit.bookingNo||'').trim();
+    }
+  }
+
+  checkedOk=true;
+  checkedContainerNo=no;
+  boxPill.className='pill ok';
+  boxPill.innerHTML=`<span class="dot"></span>${hit?'已检查｜已回填':'已检查'}`;
+
+  syncCrpList();
+}
+
+/* CRP 数据 */
+function readCrpRows(){
+  const rows=getJson(LS_CRP, []);
+  return Array.isArray(rows)?rows:[];
+}
+
+/* 运输进度汇总（演示：pickup_events） */
+function sumDoneBy(crp, vendor){
+  const events=getJson(LS_PICKUPS, []);
+  const out={'20GP':0,'40GP':0,'40HC':0,'40RH':0};
+  if(!Array.isArray(events)) return out;
+
+  events.forEach(e=>{
+    if(vendor && String(e.vendor||'')!==String(vendor||'')) return;
+    if(String(e.bookingNo||'')!==String(crp.bookingNo||'')) return;
+    if(String(e.carrier||'') && String(crp.carrier||'') && String(e.carrier||'')!==String(crp.carrier||'')) return;
+    const t=String(e.containerType||'');
+    const d=numOr0(e.doneDelta||0);
+    if(out[t]!==undefined) out[t]+=d;
+  });
+  return out;
+}
+function inferState(plan, done, sendState){
+  const planSum=plan['20GP']+plan['40GP']+plan['40HC']+plan['40RH'];
+  const doneSum=done['20GP']+done['40GP']+done['40HC']+done['40RH'];
+  if(planSum>0 && doneSum>0){
+    const allOk =
+      (plan['20GP']===0 || done['20GP']>=plan['20GP']) &&
+      (plan['40GP']===0 || done['40GP']>=plan['40GP']) &&
+      (plan['40HC']===0 || done['40HC']>=plan['40HC']) &&
+      (plan['40RH']===0 || done['40RH']>=plan['40RH']);
+    return allOk ? '已完成' : '运输中';
+  }
+  return String(sendState||'未发送');
+}
+
+/* 下方 CRP 列表：仅10条，点击仅提示已选（不回填条件） */
+function syncCrpList(){
+  const vendor=document.getElementById('vendor').value.trim();
+  const carrier=document.getElementById('qCarrier').value.trim();
+  // 这里不再依赖 booking 查询输入（因为 bookingNo 是只读选择）；仍可以用 selectedCrpKey 做高亮
+  let list=readCrpRows().slice().sort((a,b)=>(b.createdAt||0)-(a.createdAt||0));
+  if(vendor) list=list.filter(r=>String(r.vendor||'')===vendor);
+  if(carrier) list=list.filter(r=>fuzzyIncludes(r.carrier, carrier));
+
+  list=list.slice(0,10);
+  document.getElementById('kpi').textContent = `${list.length}条`;
+
+  crpTbody.innerHTML='';
+  if(!list.length){
+    const tr=document.createElement('tr');
+    tr.innerHTML=`<td colspan="5" style="color:var(--muted);padding:16px">暂无数据</td>`;
+    crpTbody.appendChild(tr);
+    return;
+  }
+
+  list.forEach(crp=>{
+    const plan={'20GP':numOr0(crp.gp20),'40GP':numOr0(crp.gp40),'40HC':numOr0(crp.hc40),'40RH':numOr0(crp.rh40)};
+    const done=sumDoneBy(crp, vendor);
+    const state=inferState(plan, done, crp.sendState);
+
+    const progress =
+      `${done['20GP']}/${plan['20GP']}  ${done['40GP']}/${plan['40GP']}  ${done['40HC']}/${plan['40HC']}  ${done['40RH']}/${plan['40RH']}`;
+
+    const tr=document.createElement('tr');
+    if(String(crp.bookingNo||'').trim()===selectedCrpKey) tr.classList.add('selected');
+
+    tr.onclick=()=>{
+      selectedCrpKey = String(crp.bookingNo||'').trim();
+      document.getElementById('pickedCrp').value = `${crp.carrier||''} / ${crp.bookingNo||''}`;
+      syncCrpList();
+    };
+
+    tr.innerHTML=`
+      <td>${fmtTime(crp.createdAt||Date.now())}</td>
+      <td><b>${esc(crp.bookingNo||'')}</b></td>
+      <td>${esc(crp.carrier||'')}</td>
+      <td>${esc(progress)}</td>
+      <td>${esc(state)}</td>
+    `;
+    crpTbody.appendChild(tr);
+  });
+}
+
+/* ✅ 船公司选择（从 CRP 中去重搜） */
+const carrierMask = document.getElementById('carrierMask');
+function openCarrierPick(){
+  carrierMask.style.display='flex';
+  document.getElementById('carrierSearch').value='';
+  renderCarrierPickList();
+  setTimeout(()=>document.getElementById('carrierSearch').focus(), 50);
+}
+function closeCarrierPick(){ carrierMask.style.display='none'; }
+carrierMask.onclick = e=>{ if(e.target===carrierMask) closeCarrierPick(); };
+
+function clearCarrier(){
+  document.getElementById('qCarrier').value='';
+  closeCarrierPick();
+  syncCrpList();
+}
+
+function renderCarrierPickList(){
+  const q=String(document.getElementById('carrierSearch').value||'').trim().toLowerCase();
+  const rows=readCrpRows().slice().sort((a,b)=>(b.createdAt||0)-(a.createdAt||0));
+  const seen=new Set();
+  const out=[];
+  for(const r of rows){
+    const c=String(r.carrier||'').trim();
+    if(!c) continue;
+    const k=c.toLowerCase();
+    if(seen.has(k)) continue;
+    if(q && !k.includes(q)) continue;
+    seen.add(k);
+    out.push(c);
+    if(out.length>=10) break;
+  }
+
+  const host=document.getElementById('carrierList');
+  host.innerHTML='';
+  if(!out.length){
+    host.innerHTML=`<div style="padding:14px 12px;color:var(--muted)">无匹配</div>`;
+    return;
+  }
+  out.forEach(c=>{
+    const div=document.createElement('div');
+    div.style.padding='10px 12px';
+    div.style.borderBottom='1px solid var(--line)';
+    div.style.cursor='pointer';
+    div.onmouseenter=()=>div.style.background='#fff7fb';
+    div.onmouseleave=()=>div.style.background='#fff';
+    div.onclick=()=>{
+      document.getElementById('qCarrier').value=c;
+      closeCarrierPick();
+      syncCrpList();
+    };
+    div.innerHTML=`<b>${esc(c)}</b>`;
+    host.appendChild(div);
+  });
+  host.lastChild && (host.lastChild.style.borderBottom='none');
+}
+
+/* ✅ Booking/CRP 选择弹窗：输入 booking 查询 + 行选中 + 确定返回 */
+const crpPickMask = document.getElementById('crpPickMask');
+function openCrpPickerModal(){
+  crpPickMask.style.display='flex';
+  document.getElementById('pickBookingQ').value='';
+  pickSelected=null;
+  document.getElementById('pickPreview').textContent='未选择';
+  renderCrpPickerList();
+  setTimeout(()=>document.getElementById('pickBookingQ').focus(), 50);
+}
+function closeCrpPickerModal(){ crpPickMask.style.display='none'; }
+crpPickMask.onclick = e=>{ if(e.target===crpPickMask) closeCrpPickerModal(); };
+
+function renderCrpPickerList(){
+  const carrier=document.getElementById('qCarrier').value.trim();
+  const bq=String(document.getElementById('pickBookingQ').value||'').trim().toLowerCase();
+  const vendor=document.getElementById('vendor').value.trim();
+
+  let rows=readCrpRows().slice().sort((a,b)=>(b.createdAt||0)-(a.createdAt||0));
+  if(carrier) rows=rows.filter(r=>fuzzyIncludes(r.carrier, carrier));
+  if(vendor) rows=rows.filter(r=>String(r.vendor||'')===vendor);
+  if(bq) rows=rows.filter(r=>fuzzyIncludes(r.bookingNo, bq));
+
+  rows=rows.slice(0,10);
+
+  const tb=document.getElementById('pickTbody');
+  tb.innerHTML='';
+  if(!rows.length){
+    const tr=document.createElement('tr');
+    tr.innerHTML=`<td colspan="9" style="color:var(--muted);padding:16px">无匹配</td>`;
+    tb.appendChild(tr);
+    return;
+  }
+
+  rows.forEach(r=>{
+    const plan={'20GP':numOr0(r.gp20),'40GP':numOr0(r.gp40),'40HC':numOr0(r.hc40),'40RH':numOr0(r.rh40)};
+    const done=sumDoneBy(r, vendor);
+
+    // ✅ 数据只显示数字 4/5（done/plan）
+    const c20 = `${done['20GP']}/${plan['20GP']}`;
+    const c40 = `${done['40GP']}/${plan['40GP']}`;
+    const cHC = `${done['40HC']}/${plan['40HC']}`;
+    const cRH = `${done['40RH']}/${plan['40RH']}`;
+
+    const tr=document.createElement('tr');
+    tr.style.cursor='pointer';
+    if(pickSelected && pickSelected.bookingNo===r.bookingNo && pickSelected.carrier===r.carrier){
+      tr.classList.add('selected');
+    }
+
+    tr.onclick=()=>{
+      pickSelected = r;
+      document.getElementById('pickPreview').textContent = `${r.carrier||''} / ${r.bookingNo||''}`;
+      // 重新渲染以显示选中高亮
+      renderCrpPickerList();
+    };
+
+    tr.innerHTML=`
+      <td>${fmtTime(r.createdAt||Date.now())}</td>
+      <td><b>${esc(r.bookingNo||'')}</b></td>
+      <td>${esc(r.carrier||'')}</td>
+      <td>${esc(c20)}</td>
+      <td>${esc(c40)}</td>
+      <td>${esc(cHC)}</td>
+      <td>${esc(cRH)}</td>
+      <td>${esc(r.vendor||'')}</td>
+      <td>${esc(r.sendState||'未发送')}</td>
+    `;
+    tb.appendChild(tr);
+  });
+}
+
+function confirmPickCrp(){
+  if(!pickSelected){ alert('请选择一条记录'); return; }
+
+  // ✅ 返回：只更新 bookingNo 展示 + 已选提示；不去改搜索条件（船公司条件在录入里，本来就是条件）
+  document.getElementById('bookingNo').value = pickSelected.bookingNo || '';
+  document.getElementById('pickedCrp').value = `${pickSelected.carrier||''} / ${pickSelected.bookingNo||''}`;
+  selectedCrpKey = String(pickSelected.bookingNo||'').trim();
+
+  closeCrpPickerModal();
+  syncCrpList();
+}
+
+/* 保存：校验 */
+function validateForConfirm(){
+  const no=upperNoSpace(document.getElementById('containerNo').value.trim());
+  if(!no) return '请填写箱号';
+  if(!checkedOk || checkedContainerNo!==no) return '请先点击【检查】确认箱号（含查重回填）';
+
+  const type=document.getElementById('containerType').value.trim();
+  if(!type) return '请选择箱型';
+
+  const vendor=document.getElementById('vendor').value.trim();
+  if(!vendor) return '请选择运输公司';
+
+  const booking=document.getElementById('bookingNo').value.trim();
+  if(!booking) return '请选择 Booking No';
+  return '';
+}
+
+function openConfirmSave(){
+  const err=validateForConfirm();
+  if(err){ alert(err); return; }
+
+  const booking=document.getElementById('bookingNo').value.trim();
+  const carrier=document.getElementById('qCarrier').value.trim();
+  const containerNo=upperNoSpace(document.getElementById('containerNo').value.trim());
+  const type=document.getElementById('containerType').value.trim();
+  const tare=document.getElementById('tareKg').value.trim();
+  const vendor=document.getElementById('vendor').value.trim();
+  const remark=document.getElementById('remark').value.trim();
+
+  document.getElementById('c_booking').textContent = booking || '-';
+  document.getElementById('c_carrier').textContent = carrier || '-';
+  document.getElementById('c_container').textContent = containerNo || '-';
+  document.getElementById('c_type').textContent = type || '-';
+  document.getElementById('c_tare').textContent = tare || '-';
+  document.getElementById('c_vendor').textContent = vendor || '-';
+  document.getElementById('c_remark').textContent = remark || '-';
+
+  confirmMask.style.display='flex';
+}
+
+function confirmSave(){
+  const containerNo=upperNoSpace(document.getElementById('containerNo').value.trim());
+  const rec={
+    containerNo,
+    containerType: document.getElementById('containerType').value.trim(),
+    tareKg: document.getElementById('tareKg').value.trim(),
+    vendor: document.getElementById('vendor').value.trim(),
+    remark: document.getElementById('remark').value.trim(),
+    bookingNo: document.getElementById('bookingNo').value.trim(),
+    carrier: document.getElementById('qCarrier').value.trim(),
+    updatedAt: Date.now()
+  };
+
+  let list=getJson(LS_CONTAINERS, []);
+  if(!Array.isArray(list)) list=[];
+
+  const idx=list.findIndex(x=>upperNoSpace(x.containerNo)===containerNo);
+  if(idx>-1){
+    rec.createdAt = list[idx].createdAt || Date.now();
+    list[idx] = Object.assign({}, list[idx], rec);
+  }else{
+    rec.createdAt = Date.now();
+    list.unshift(rec);
+  }
+  setJson(LS_CONTAINERS, list);
+
+  closeConfirm();
+
+  boxPill.className='pill ok';
+  boxPill.innerHTML='<span class="dot"></span>已保存';
+
+  syncCrpList();
+}
+
+/* seed */
+function seedPickupIfEmpty(){
+  const v=getJson(LS_PICKUPS, null);
+  if(Array.isArray(v)) return;
+  setJson(LS_PICKUPS, []);
+}
+
+/* init */
+seedPickupIfEmpty();
+syncCrpList();
+</script>
+</body>
+</html>
