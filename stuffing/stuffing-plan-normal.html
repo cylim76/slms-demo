@@ -1,0 +1,500 @@
+<!--
+File: index.html
+Version: index-v18
+Date: 2025-12-29
+
+更新点（v18，基于 v17 最新主线）：
+1) Stuffing 下拉菜单：
+   - CRP配箱 指向页面路径更新为：crp/container-assign-to-crp.html（原 container/container-claim-with-bl.html）
+2) Stuffing 下拉菜单：
+   - “装箱管理”改名为“装箱计划(normal)”，并指向：stuffing/stuffing-plan-normal.html（原 stuffing/stuffing-management.html）
+3) 右上角版本号与“页面功能要求”弹窗内容同步更新（按版本号规则维护）
+-->
+
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>SLMS</title>
+<style>
+:root{--brand:#e0205c;--bg:#f1f2f5;--text:#222;--muted:#7a7a7a;--line:#eee;}
+*{box-sizing:border-box}
+body{margin:0;font-family:Arial,"Microsoft YaHei";background:var(--bg);color:var(--text)}
+
+/* 顶部栏：参考截图风格 */
+.topbar{
+  height:56px;background:#fff;border-bottom:1px solid var(--line);
+  display:flex;align-items:center;justify-content:space-between;
+  padding:0 16px;position:relative;
+}
+
+/* 左侧：仅 Logo */
+.brand{display:flex;align-items:center;min-width:200px}
+.brand img{height:30px;width:auto;display:block}
+
+/* 顶部菜单（中间） */
+.menuWrap{flex:1;display:flex;justify-content:center}
+.menu{
+  display:flex;gap:34px;
+  font-weight:700;font-size:15px;color:var(--muted);
+}
+.menu span{
+  cursor:pointer;position:relative;
+  padding:18px 0;
+  user-select:none;
+}
+.menu span:hover{color:#555}
+.menu span.active{color:var(--text)}
+.menu span.active::after{
+  content:"";
+  position:absolute;left:0;right:0;bottom:0;
+  height:3px;border-radius:3px;background:var(--brand);
+}
+
+/* 右侧版本号 */
+.ver{
+  cursor:pointer;background:#f6f6f6;border:1px solid #eee;border-radius:999px;
+  padding:6px 10px;font-size:12px;
+  font-family:ui-monospace,Menlo,Consolas,monospace;
+  display:flex;align-items:center;gap:6px;
+}
+.ver .dot{width:8px;height:8px;border-radius:99px;background:var(--brand)}
+
+/* Stuffing 下拉（一级） */
+.dropdown{
+  position:absolute;top:56px;background:#fff;border:1px solid #ddd;border-radius:10px;
+  box-shadow:0 10px 30px rgba(0,0,0,.18);
+  min-width:280px;display:none;z-index:1000;
+  overflow:visible;
+}
+.dropdown .item{
+  padding:12px 14px;font-size:13px;font-weight:900;cursor:pointer;border-bottom:1px solid #eee;
+  display:flex;align-items:center;justify-content:space-between;gap:12px;
+}
+.dropdown .item:last-child{border-bottom:none}
+.dropdown .item:hover{background:#f6f6f6}
+
+/* 分割线 */
+.dropdown .divider{height:1px;background:#eee;margin:6px 0}
+
+/* ✅ 二级菜单容器（右侧展开） */
+.submenu{
+  position:absolute;
+  top:0;
+  left:calc(100% + 10px);
+  background:#fff;
+  border:1px solid #ddd;
+  border-radius:10px;
+  box-shadow:0 10px 30px rgba(0,0,0,.18);
+  min-width:220px;
+  display:none;
+  z-index:1100;
+}
+.submenu .subitem{
+  padding:12px 14px;font-size:13px;font-weight:900;cursor:pointer;border-bottom:1px solid #eee
+}
+.submenu .subitem:last-child{border-bottom:none}
+.submenu .subitem:hover{background:#f6f6f6}
+
+/* Mobile / Master item 的箭头 */
+.caret{font-size:12px;color:#aaa;font-weight:900}
+.item.hasSub:hover .caret{color:#666}
+
+/* 主体 */
+.main{height:calc(100vh - 56px);display:flex;flex-direction:column}
+.tabs{height:40px;background:#fafafa;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:6px;padding:0 8px;overflow-x:auto}
+.tab{background:#fff;border:1px solid #ddd;border-radius:8px;padding:7px 10px;font-size:12px;font-weight:900;cursor:pointer;white-space:nowrap;display:flex;align-items:center;gap:8px}
+.tab.active{border-color:var(--brand);color:var(--brand)}
+.tab .close{cursor:pointer}
+.content{flex:1}
+iframe{width:100%;height:100%;border:0}
+
+/* 功能要求弹窗 */
+.modalMask{position:fixed;inset:0;background:rgba(0,0,0,.35);display:none;align-items:center;justify-content:center;z-index:9999}
+.modal{width:900px;max-width:96vw;background:#fff;border-radius:12px;box-shadow:0 20px 60px rgba(0,0,0,.3);display:flex;flex-direction:column}
+.modalHd{padding:12px 16px;border-bottom:1px solid #eee;display:flex;justify-content:space-between;align-items:center}
+.modalBd{padding:16px;max-height:70vh;overflow-y:auto;font-size:13px;line-height:1.6}
+.modalBd h4{margin:14px 0 6px}
+.modalBd ol{margin:6px 0 0 18px}
+.modalBd code{background:#f6f6f6;border:1px solid #eee;border-radius:6px;padding:1px 6px}
+</style>
+</head>
+
+<body>
+<div class="topbar">
+  <div class="brand">
+    <img src="img/trademark2.6babe1d4.png" alt="SLMS Logo"/>
+  </div>
+
+  <div class="menuWrap">
+    <div class="menu" id="topMenu">
+      <span id="mSim">Simulation</span>
+      <span id="mShip">R/Shipping</span>
+      <span id="mBook">R/Booking</span>
+      <span id="stuffingBtn" class="active">Stuffing</span>
+    </div>
+  </div>
+
+  <div class="ver" id="verBtn" title="点击查看页面功能要求">
+    <span class="dot"></span>
+    <span>index-v18</span>
+  </div>
+
+  <!-- Stuffing 下拉菜单（一级） -->
+  <div class="dropdown" id="stuffingMenu">
+
+    <div class="item"
+      onclick="openFromMenu(
+        'crp-entry',
+        'CRP录入',
+        'crp/crp-entry.html'
+      )">
+      <span>CRP录入</span>
+    </div>
+
+    <div class="item"
+      onclick="openFromMenu(
+        'crp-send',
+        'CRP 发送',
+        'crp/send-crp.html'
+      )">
+      <span>CRP 发送</span>
+    </div>
+
+    <!-- ✅ v16：统一命名为 CRP配箱 -->
+    <div class="item"
+      onclick="openFromMenu(
+        'container-assign-to-crp',
+        'CRP配箱',
+        'crp/container-assign-to-crp.html'
+      )">
+      <span>CRP配箱</span>
+    </div>
+
+    <!-- ✅ v16：新增 CRP提箱现况RPT（挂在 CRP配箱 下方） -->
+    <div class="item"
+      onclick="openFromMenu(
+        'crp-rpt-trans-status',
+        'CRP提箱现况RPT',
+        'crp/rpt-crp-trans-status.html'
+      )">
+      <span>CRP提箱现况RPT</span>
+    </div>
+
+    <div class="item"
+      onclick="openFromMenu(
+        'container-edit',
+        '集装箱信息维护',
+        'container/container-edit.html'
+      )">
+      <span>集装箱信息维护</span>
+    </div>
+
+    <div class="divider"></div>
+
+    <div class="item"
+      onclick="openFromMenu(
+        'stuffing-plan-normal',
+        '装箱计划(normal)',
+        'stuffing/stuffing-plan-normal.html'
+      )">
+      <span>装箱计划(normal)</span>
+    </div>
+
+    <div class="divider"></div>
+
+    <!-- ✅ Mobile（二级菜单入口） -->
+    <div class="item hasSub" id="mobileBtn">
+      <span>Mobile</span>
+      <span class="caret">▶</span>
+
+      <!-- 二级菜单（右侧） -->
+      <div class="submenu" id="mobileMenu">
+
+        <!-- ✅ 改名+改路径：container-entry-truck.html -->
+        <div class="subitem"
+          onclick="openFromMenu(
+            'm-container-entry-truck',
+            '集装箱录入（拖车）',
+            'mobile/container-entry-truck.html'
+          )">集装箱录入（拖车）</div>
+
+        <!-- ✅ 改名+改路径：container-inspection-empty.html -->
+        <div class="subitem"
+          onclick="openFromMenu(
+            'm-container-inspection-empty',
+            '集装箱检查（空箱）',
+            'mobile/container-inspection-empty.html'
+          )">集装箱检查（空箱）</div>
+
+        <div class="subitem"
+          onclick="openFromMenu(
+            'm-stuffing',
+            '装箱',
+            'mobile/stuffing.html'
+          )">装箱</div>
+
+        <div class="subitem"
+          onclick="openFromMenu(
+            'm-picking',
+            '备货',
+            'mobile/picking.html'
+          )">备货</div>
+      </div>
+    </div>
+
+    <div class="divider"></div>
+
+    <!-- ✅ Master（一级菜单，放在 Stuffing 下拉最下面） -->
+    <div class="item hasSub" id="masterBtn">
+      <span>Master</span>
+      <span class="caret">▶</span>
+
+      <!-- 二级菜单（右侧） -->
+      <div class="submenu" id="masterMenu">
+        <div class="subitem"
+          onclick="openFromMenu(
+            'master-vessel',
+            '船舶主档管理',
+            'master/vessel-manage.html'
+          )">船舶主档管理</div>
+
+        <div class="subitem"
+          onclick="openFromMenu(
+            'master-voyage',
+            '航次管理',
+            'master/voyage-manage.html'
+          )">航次管理</div>
+
+        <div class="subitem"
+          onclick="openFromMenu(
+            'master-carrier',
+            '船公司管理',
+            'master/carrier-manage.html'
+          )">船公司管理</div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<div class="main">
+  <div class="tabs" id="tabs"></div>
+  <div class="content" id="content"></div>
+</div>
+
+<!-- 页面功能要求 -->
+<div class="modalMask" id="reqMask">
+  <div class="modal">
+    <div class="modalHd">
+      <b>页面功能要求（Index / index-v18）</b>
+      <span style="cursor:pointer" onclick="closeReq()">关闭</span>
+    </div>
+    <div class="modalBd">
+      <h4>一、顶部导航规范（index-v18）</h4>
+      <ol>
+        <li>顶部导航仅显示：<b>Simulation / R/Shipping / R/Booking / Stuffing</b></li>
+        <li>左上角仅显示系统 Logo 图片（<code>img/trademark2.6babe1d4.png</code>），不显示任何文字</li>
+        <li>顶部菜单采用“当前项下划线高亮”形式（参考截图）</li>
+        <li>Stuffing 采用下拉菜单（支持二级菜单），点击子功能在系统内新建 Tab 打开页面</li>
+      </ol>
+
+      <h4>二、系统导航与页面打开规范</h4>
+      <ol>
+        <li>系统采用【页签式工作台（Tabbed Workspace）】作为核心操作形态</li>
+        <li>点击菜单功能项时，在系统内部新建 Tab 打开页面</li>
+        <li>同一功能页面如已打开，再次点击菜单应切换至已有 Tab</li>
+        <li>Tab 标题默认显示功能名称，可动态追加关键业务编号</li>
+      </ol>
+
+      <h4>三、业务模块与功能归属说明（Stuffing）</h4>
+      <ol>
+        <li><b>CRP录入</b>：用于接收 FF 交接后的 CRP（提箱单）信息录入，并上传/归档 CRP 文件（页面：<code>crp/crp-entry.html</code>）。</li>
+        <li><b>CRP 发送</b>：用于将录入完成的 CRP 信息/文件发送至指定对象并归档发送记录（页面：<code>crp/send-crp.html</code>）。</li>
+        <li><b>CRP配箱</b>：用于将集装箱号匹配/分配给 CRP 记录，形成对应关系（页面：<code>crp/container-assign-to-crp.html</code>）。</li>
+        <li><b>CRP提箱现况RPT</b>：用于按条件查询提箱进度/状态，并统计各运输公司未完成数量（页面：<code>crp/rpt-crp-trans-status.html</code>）。</li>
+        <li><b>集装箱信息维护</b>：用于维护箱号、箱型、状态等基础信息。</li>
+        <li><b>装箱计划(normal)</b>：用于装箱作业计划/进度管理（页面：<code>stuffing/stuffing-plan-normal.html</code>）。</li>
+
+        <li><b>Mobile（二级菜单）</b>：面向手机端的现场操作入口。</li>
+        <li>Mobile 页面命名约定（区分场景，便于后续扩展）：</li>
+        <li style="list-style:none;margin-left:-18px">
+          <ol>
+            <li><b>集装箱录入（拖车/堆场）</b>：<code>mobile/container-entry-truck.html</code></li>
+            <li><b>集装箱检查（空箱）</b>：<code>mobile/container-inspection-empty.html</code></li>
+            <li><b>集装箱检查（装箱）</b>：预留命名 <code>mobile/container-inspection-stuffing.html</code>（后续新增）</li>
+          </ol>
+        </li>
+      </ol>
+
+      <h4>四、主数据（Master）模块入口（保留）</h4>
+      <ol>
+        <li>Stuffing 下拉菜单最下方新增 <b>Master</b> 一级菜单，包含二级菜单：</li>
+        <li style="list-style:none;margin-left:-18px">
+          <ol>
+            <li><b>船舶主档管理</b>：<code>master/vessel-manage.html</code></li>
+            <li><b>航次管理</b>：<code>master/voyage-manage.html</code></li>
+            <li><b>船公司管理</b>：<code>master/carrier-manage.html</code>（后续实现，先占位入口）</li>
+          </ol>
+        </li>
+      </ol>
+
+      <h4>五、文件命名与路径约定（重要）</h4>
+      <ol>
+        <li><b>页面文件名保持不变</b>：演示阶段不在 URL/文件名上追加版本号</li>
+        <li>页面版本号仅用于：右上角版本标识 + 本弹窗“页面功能要求”同步维护</li>
+        <li>页面路径与目录结构需与正式开发保持一致</li>
+      </ol>
+
+      <h4>六、页面类型与打开方式规范</h4>
+      <ol>
+        <li>主业务页面使用系统内 Tab 打开</li>
+        <li>单条数据编辑采用弹出窗口（Modal）</li>
+        <li>编辑完成后主页面状态保持不变</li>
+      </ol>
+    </div>
+  </div>
+</div>
+
+<script>
+/* 顶部菜单高亮 */
+const topMenu = document.getElementById('topMenu');
+function setTopActive(id){
+  Array.from(topMenu.querySelectorAll('span')).forEach(s=>s.classList.remove('active'));
+  const el=document.getElementById(id);
+  if(el) el.classList.add('active');
+}
+
+/* Stuffing 菜单 */
+const stuffingBtn=document.getElementById('stuffingBtn');
+const stuffingMenu=document.getElementById('stuffingMenu');
+
+stuffingBtn.onclick=e=>{
+  e.stopPropagation();
+  setTopActive('stuffingBtn');
+  const r=stuffingBtn.getBoundingClientRect();
+  stuffingMenu.style.left=r.left+'px';
+  stuffingMenu.style.display=stuffingMenu.style.display==='block'?'none':'block';
+  hideMobileSub();
+  hideMasterSub();
+};
+
+/* 其它菜单项（目前仅切换高亮） */
+document.getElementById('mSim').onclick=()=>{ stuffingMenu.style.display='none'; hideMobileSub(); hideMasterSub(); setTopActive('mSim'); };
+document.getElementById('mShip').onclick=()=>{ stuffingMenu.style.display='none'; hideMobileSub(); hideMasterSub(); setTopActive('mShip'); };
+document.getElementById('mBook').onclick=()=>{ stuffingMenu.style.display='none'; hideMobileSub(); hideMasterSub(); setTopActive('mBook'); };
+
+document.body.onclick=()=>{ stuffingMenu.style.display='none'; hideMobileSub(); hideMasterSub(); };
+
+/* Tab 工作台 */
+const tabs={}, tabsEl=document.getElementById('tabs'), contentEl=document.getElementById('content');
+
+function openFromMenu(key,title,url){
+  stuffingMenu.style.display='none';
+  hideMobileSub();
+  hideMasterSub();
+  openTab(key,title,url);
+}
+function openTab(key,title,url){
+  if(tabs[key]){ setActive(key); return; }
+
+  const tab=document.createElement('div');
+  tab.className='tab active';
+
+  const titleSpan=document.createElement('span');
+  titleSpan.textContent=title;
+
+  const closeSpan=document.createElement('span');
+  closeSpan.className='close';
+  closeSpan.textContent='×';
+
+  tab.appendChild(titleSpan);
+  tab.appendChild(closeSpan);
+
+  tab.onclick=()=>setActive(key);
+  closeSpan.onclick=e=>{ e.stopPropagation(); closeTab(key); };
+
+  const iframe=document.createElement('iframe');
+  iframe.src=url;
+
+  tabs[key]={tab,iframe,titleSpan};
+  tabsEl.appendChild(tab);
+  contentEl.appendChild(iframe);
+  setActive(key);
+}
+function setActive(key){
+  Object.values(tabs).forEach(t=>{
+    t.tab.classList.remove('active');
+    t.iframe.style.display='none';
+  });
+  tabs[key].tab.classList.add('active');
+  tabs[key].iframe.style.display='block';
+}
+function closeTab(key){
+  const t=tabs[key]; if(!t) return;
+  t.tab.remove(); t.iframe.remove(); delete tabs[key];
+  const r=Object.keys(tabs); if(r.length) setActive(r[0]);
+}
+
+/* 功能要求弹窗 */
+const reqMask=document.getElementById('reqMask');
+const verBtn=document.getElementById('verBtn');
+verBtn.onclick=()=>reqMask.style.display='flex';
+function closeReq(){ reqMask.style.display='none'; }
+reqMask.onclick=e=>{ if(e.target===reqMask) closeReq(); };
+
+/* ✅ Mobile 二级菜单（点击 Mobile 在右侧展开） */
+const mobileBtn=document.getElementById('mobileBtn');
+const mobileMenu=document.getElementById('mobileMenu');
+
+function showMobileSub(){
+  mobileMenu.style.top = mobileBtn.offsetTop + 'px';
+  mobileMenu.style.display='block';
+}
+function hideMobileSub(){ mobileMenu.style.display='none'; }
+
+mobileBtn.onclick=(e)=>{
+  e.stopPropagation();
+  const shown = mobileMenu.style.display==='block';
+  if(shown) hideMobileSub();
+  else{
+    hideMasterSub();
+    showMobileSub();
+  }
+};
+mobileMenu.onclick=(e)=>e.stopPropagation();
+
+// hover（保留你的原行为）
+mobileBtn.onmouseenter=()=>{ if(stuffingMenu.style.display==='block') showMobileSub(); };
+mobileBtn.onmouseleave=()=>{ setTimeout(()=>{ if(!mobileMenu.matches(':hover')) hideMobileSub(); }, 150); };
+mobileMenu.onmouseleave=()=>hideMobileSub();
+
+/* ✅ Master 二级菜单（放在 Stuffing 下拉最下面） */
+const masterBtn=document.getElementById('masterBtn');
+const masterMenu=document.getElementById('masterMenu');
+
+function showMasterSub(){
+  masterMenu.style.top = masterBtn.offsetTop + 'px';
+  masterMenu.style.display='block';
+}
+function hideMasterSub(){ masterMenu.style.display='none'; }
+
+masterBtn.onclick=(e)=>{
+  e.stopPropagation();
+  const shown = masterMenu.style.display==='block';
+  if(shown) hideMasterSub();
+  else{
+    hideMobileSub();
+    showMasterSub();
+  }
+};
+masterMenu.onclick=(e)=>e.stopPropagation();
+
+// hover（与 Mobile 一致）
+masterBtn.onmouseenter=()=>{ if(stuffingMenu.style.display==='block') showMasterSub(); };
+masterBtn.onmouseleave=()=>{ setTimeout(()=>{ if(!masterMenu.matches(':hover')) hideMasterSub(); }, 150); };
+masterMenu.onmouseleave=()=>hideMasterSub();
+</script>
+</body>
+</html>
