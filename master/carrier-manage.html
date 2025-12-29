@@ -1,1 +1,504 @@
 
+<!--
+File: master/carrier-manage.html
+Version: carrier-manage-v2
+Date: 2025-12-29
+
+功能要点：
+1) 船公司主档（Carrier Master）维护：新增/编辑/停用（软删除）
+2) Carrier Code 强唯一（必填，建议大写）；名称必填
+3) 查询：关键词（Code/Name）+ 状态
+4) 导出 CSV
+5) 右上角版本号可点击：显示“三件套”内容（随版本维护）
+6) 数据存储：localStorage key = slms_carriers_v1（供 voyage-manage.html 下拉引用）
+-->
+
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>船公司主档管理</title>
+<style>
+:root{
+  --brand:#e0205c;--bg:#f1f2f5;--card:#fff;--text:#222;--muted:#666;--line:#e9e9ee;
+  --ok:#1a7f37;--warn:#b54708;--bad:#b42318;
+}
+*{box-sizing:border-box}
+body{margin:0;font-family:Arial,"Microsoft YaHei";background:var(--bg);color:var(--text)}
+.topbar{height:56px;background:#fff;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;padding:0 16px}
+.left{font-weight:900}
+.right{display:flex;gap:10px;align-items:center}
+.btn{border:1px solid #ddd;background:#fff;border-radius:10px;padding:10px 14px;font-weight:900;font-size:13px;cursor:pointer}
+.btn.primary{background:var(--brand);border-color:var(--brand);color:#fff}
+.btn:active{transform:translateY(1px)}
+.ver{cursor:pointer;background:#f6f6f6;border:1px solid #eee;border-radius:999px;padding:6px 10px;font-size:12px;font-family:ui-monospace,Menlo,Consolas,monospace;display:flex;align-items:center;gap:6px}
+.ver .dot{width:8px;height:8px;border-radius:99px;background:var(--brand)}
+
+.wrap{max-width:1200px;margin:16px auto;padding:0 12px}
+.card{background:#fff;border:1px solid var(--line);border-radius:12px;box-shadow:0 6px 18px rgba(0,0,0,.04);overflow:hidden}
+.cardHd{padding:12px 14px;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;gap:10px;font-weight:900}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end}
+.field{display:flex;flex-direction:column;gap:6px}
+.label{font-size:12px;color:var(--muted)}
+.input,.select{border:1px solid #ddd;border-radius:10px;padding:10px;font-size:13px;background:#fff;outline:none}
+
+.tableScroll{overflow:auto}
+table{width:100%;border-collapse:collapse;min-width:980px}
+th,td{border-bottom:1px solid var(--line);padding:10px 10px;font-size:12px;white-space:nowrap}
+th{background:#fafafa;color:var(--muted);text-align:left;font-weight:900;position:sticky;top:0}
+tr:hover td{background:#fff7fb}
+.badge{display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border-radius:999px;border:1px solid var(--line);background:#fafafa;font-weight:900;font-size:12px}
+.badge.ok{border-color:rgba(26,127,55,.25);background:rgba(26,127,55,.06);color:#135d2a}
+.badge.off{border-color:rgba(180,35,24,.25);background:rgba(180,35,24,.06);color:#7a1b13}
+.ops{display:flex;gap:8px}
+.link{border:1px solid #ddd;background:#fff;border-radius:999px;padding:6px 10px;font-weight:900;font-size:12px;cursor:pointer}
+.link.danger{border-color:rgba(180,35,24,.35);color:#7a1b13}
+.small{font-size:12px;color:var(--muted)}
+
+.modalMask{position:fixed;inset:0;background:rgba(0,0,0,.35);display:none;align-items:center;justify-content:center;z-index:9999;padding:10px}
+.modal{width:min(920px,96vw);background:#fff;border-radius:12px;box-shadow:0 20px 60px rgba(0,0,0,.3);display:flex;flex-direction:column;overflow:hidden}
+.modalHd{padding:12px 16px;border-bottom:1px solid #eee;font-weight:900;display:flex;justify-content:space-between;align-items:center}
+.modalBd{padding:14px 16px;max-height:72vh;overflow:auto}
+.modalFt{padding:12px 16px;border-top:1px solid #eee;display:flex;justify-content:flex-end;gap:10px}
+.kv{display:grid;grid-template-columns:160px 1fr;gap:8px 10px;font-size:12px;color:#444}
+.kv .k{color:var(--muted)}
+
+.reqMask .modal{width:min(1080px,96vw)}
+.reqMask .modalBd{font-size:13px;line-height:1.6}
+.reqMask h4{margin:14px 0 6px}
+.reqMask pre{
+  margin:8px 0;
+  padding:12px;
+  background:#0b1020;
+  color:#e7e9ee;
+  border-radius:12px;
+  overflow:auto;
+  font-size:12px;
+  line-height:1.5;
+}
+.pill{display:inline-flex;align-items:center;gap:8px;padding:6px 10px;border-radius:999px;border:1px solid #eee;background:#f7f7fb;font-weight:900;font-size:12px}
+.pill .dot{width:8px;height:8px;border-radius:99px;background:var(--brand)}
+.tabRow{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0 0}
+.tbtn{cursor:pointer;border:1px solid #e6e6ee;background:#fff;border-radius:999px;padding:8px 10px;font-weight:900;font-size:12px}
+.tbtn.active{border-color:rgba(224,32,92,.35);color:var(--brand)}
+</style>
+</head>
+
+<body>
+<div class="topbar">
+  <div class="left">船公司主档管理</div>
+  <div class="right">
+    <button class="btn" type="button" onclick="exportCsv()">导出CSV</button>
+    <button class="btn primary" type="button" onclick="openEdit()">新增船公司</button>
+    <div class="ver" id="verBtn" title="点击查看三件套">
+      <span class="dot"></span>
+      <span>carrier-manage-v2</span>
+    </div>
+  </div>
+</div>
+
+<div class="wrap">
+  <div class="card">
+    <div class="cardHd">
+      <span>查询条件</span>
+      <div class="row">
+        <button class="btn" type="button" onclick="seedDemo()">生成演示数据</button>
+        <button class="btn" type="button" onclick="resetFilters()">重置</button>
+        <button class="btn primary" type="button" onclick="render()">查询</button>
+      </div>
+    </div>
+
+    <div style="padding:14px">
+      <div class="row">
+        <div class="field" style="min-width:320px;flex:1">
+          <div class="label">关键词（Code/Name）</div>
+          <input class="input" id="q" placeholder="例如：MAERSK / 地中海" oninput="render()">
+        </div>
+        <div class="field" style="min-width:180px">
+          <div class="label">状态</div>
+          <select class="select" id="q_status" onchange="render()">
+            <option value="">全部</option>
+            <option value="active">启用</option>
+            <option value="inactive">停用</option>
+          </select>
+        </div>
+        <div class="small" style="align-self:flex-end;padding-bottom:10px">
+          口径：停用=软删除（保留历史引用）
+        </div>
+      </div>
+    </div>
+
+    <div class="tableScroll">
+      <table>
+        <thead>
+          <tr>
+            <th style="min-width:140px">Carrier Code（唯一）</th>
+            <th style="min-width:240px">名称（Name）</th>
+            <th style="min-width:140px">SCAC</th>
+            <th style="min-width:160px">国家/地区</th>
+            <th style="min-width:140px">状态</th>
+            <th style="min-width:160px">更新时间</th>
+            <th style="min-width:160px">操作</th>
+          </tr>
+        </thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </div>
+
+    <div style="padding:12px 14px" class="small" id="foot"></div>
+  </div>
+</div>
+
+<!-- edit modal -->
+<div class="modalMask" id="editMask">
+  <div class="modal">
+    <div class="modalHd">
+      <span id="editTitle">新增/编辑船公司</span>
+      <span style="cursor:pointer;color:var(--muted)" onclick="closeEdit()">关闭</span>
+    </div>
+    <div class="modalBd">
+      <div class="kv">
+        <div class="k">Carrier Code<span style="color:var(--brand);font-weight:900">*</span></div>
+        <div><input class="input" id="f_code" placeholder="例如 MAERSK / MSC / OOCL（建议大写）"></div>
+
+        <div class="k">名称（Name）<span style="color:var(--brand);font-weight:900">*</span></div>
+        <div><input class="input" id="f_name" placeholder="例如 马士基 / 地中海航运"></div>
+
+        <div class="k">SCAC</div>
+        <div><input class="input" id="f_scac" placeholder="可选：4位字母，如 MAEU / MSCU"></div>
+
+        <div class="k">国家/地区</div>
+        <div><input class="input" id="f_country" placeholder="可选：DENMARK / SWITZERLAND 等"></div>
+
+        <div class="k">状态</div>
+        <div>
+          <select class="select" id="f_status">
+            <option value="active">启用</option>
+            <option value="inactive">停用</option>
+          </select>
+        </div>
+
+        <div class="k">备注</div>
+        <div><input class="input" id="f_remark" placeholder="可选"></div>
+      </div>
+      <div class="small" style="margin-top:10px">
+        唯一性：<code>Carrier Code</code> 必须全局唯一；停用=软删除，历史引用保留。
+      </div>
+    </div>
+    <div class="modalFt">
+      <button class="btn" type="button" onclick="closeEdit()">取消</button>
+      <button class="btn primary" type="button" onclick="save()">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- requirements (三件套) -->
+<div class="modalMask reqMask" id="reqMask">
+  <div class="modal">
+    <div class="modalHd">
+      <span class="pill"><span class="dot"></span>三件套（carrier-manage.html / carrier-manage-v2）</span>
+      <span style="cursor:pointer;color:var(--muted)" onclick="closeReq()">关闭</span>
+    </div>
+    <div class="modalBd">
+      <div class="small">说明：本弹窗内容需与版本号同步维护；用于把“结构/口径/交互”固化。</div>
+
+      <div class="tabRow">
+        <button class="tbtn active" id="t_schema" onclick="showKit('schema')">slms-schema.yaml</button>
+        <button class="tbtn" id="t_dict" onclick="showKit('dict')">slms-data-dict.md</button>
+        <button class="tbtn" id="t_ui" onclick="showKit('ui')">slms-ui-spec.md</button>
+      </div>
+
+      <div id="kit_schema">
+        <h4>slms-schema.yaml（结构唯一真源）</h4>
+        <pre><code># --- Carrier Master (船公司主档) ---
+# 演示版存储映射：localStorage key = slms_carriers_v1
+# 正式落库建议表名：slms_carriers
+
+tables:
+  slms_carriers:
+    pk: id
+    columns:
+      id: {type: string, required: true, note: "CAR-xxx"}
+      code: {type: string, required: true, note: "船公司代码，强唯一（建议大写）"}
+      name: {type: string, required: true, note: "名称，必填"}
+      scac: {type: string, required: false, note: "SCAC，可选"}
+      country: {type: string, required: false, note: "国家/地区，可选"}
+      status: {type: string, required: true, enum: [active, inactive], note: "inactive=软删除"}
+      remark: {type: string, required: false}
+      createdAt: {type: int64, required: true}
+      updatedAt: {type: int64, required: true}
+    uniques:
+      - name: uq_slms_carriers_code
+        columns: [code]
+    indexes:
+      - name: ix_slms_carriers_status_updatedAt
+        columns: [status, updatedAt]
+</code></pre>
+      </div>
+
+      <div id="kit_dict" style="display:none">
+        <h4>slms-data-dict.md（字段/口径说明）</h4>
+        <pre><code># Carrier Master 字段口径（slms_carriers）
+
+- id：主键（演示 CAR-时间戳；正式可用UUID/雪花ID）
+- code：船公司代码，必填，全局唯一（建议保存时转大写）
+- name：名称，必填
+- scac/country/remark：可选
+- status：
+  - active：启用（可被航次引用、下拉显示）
+  - inactive：停用=软删除（禁止新引用；历史引用保留）
+- createdAt/updatedAt：毫秒时间戳（演示版）；正式可用datetime
+
+校验口径：
+- code 强唯一：同一 code 只能存在一条记录（不区分状态）
+</code></pre>
+      </div>
+
+      <div id="kit_ui" style="display:none">
+        <h4>slms-ui-spec.md（页面交互/导出/入口）</h4>
+        <pre><code># carrier-manage.html 交互规范（carrier-manage-v2）
+
+入口/导航：
+- Index -> Master -> Carrier Master（船公司管理）
+
+查询：
+- 关键词：匹配 code/name（不区分大小写）
+- 状态：active / inactive / 全部
+
+新增/编辑：
+- 必填：code、name
+- 保存校验：
+  - code 格式建议：大写字母/数字（可含 . _ - /）
+  - code 全局唯一（排除当前编辑记录）
+
+停用/启用（软删除）：
+- 切换状态需二次确认
+- 停用后：不删除记录；仅状态变更 & updatedAt 更新
+
+导出：
+- 导出当前筛选结果 CSV
+- 字段：code, name, scac, country, status, updatedAt
+
+存储：
+- localStorage: slms_carriers_v1（演示）
+- 正式：slms_carriers 表（以 schema 为准）
+</code></pre>
+      </div>
+    </div>
+    <div class="modalFt">
+      <button class="btn" type="button" onclick="closeReq()">关闭</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const LS_CARRIERS = "slms_carriers_v1";
+const VERSION = "carrier-manage-v2";
+
+/* requirements */
+const reqMask = document.getElementById("reqMask");
+document.getElementById("verBtn").onclick = ()=> reqMask.style.display="flex";
+function closeReq(){ reqMask.style.display="none"; }
+reqMask.onclick = e=>{ if(e.target===reqMask) closeReq(); };
+
+/* 三件套 tabs */
+function setKitTab(active){
+  ["schema","dict","ui"].forEach(k=>{
+    document.getElementById("t_"+k).classList.toggle("active", k===active);
+    document.getElementById("kit_"+k).style.display = (k===active) ? "block" : "none";
+  });
+}
+function showKit(k){ setKitTab(k); }
+
+function pad2(n){ return String(n).padStart(2,'0'); }
+function fmt(ts){
+  if(!ts) return "-";
+  const d=new Date(ts);
+  return `${d.getFullYear()}-${pad2(d.getMonth()+1)}-${pad2(d.getDate())} ${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+}
+function esc(s){return String(s??'').replace(/[&<>"']/g,m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[m]));}
+function loadArr(){
+  try{ const s=localStorage.getItem(LS_CARRIERS); const v=s?JSON.parse(s):[]; return Array.isArray(v)?v:[]; }catch(_){ return []; }
+}
+function saveArr(arr){ try{ localStorage.setItem(LS_CARRIERS, JSON.stringify(arr)); }catch(_){ } }
+
+const tbody = document.getElementById("tbody");
+const foot = document.getElementById("foot");
+const q = document.getElementById("q");
+const q_status = document.getElementById("q_status");
+
+let editId = null;
+
+function resetFilters(){
+  q.value=""; q_status.value="";
+  render();
+}
+
+function normCode(s){ return String(s||"").trim().toUpperCase(); }
+
+function validateCode(code){
+  const s = normCode(code);
+  if(!s) return "Carrier Code 不能为空";
+  if(!/^[A-Z0-9][A-Z0-9._\/-]{0,19}$/.test(s)) return "Carrier Code 格式不合法：建议仅使用大写字母/数字，长度 1-20，可含 . _ - /";
+  return "";
+}
+
+function openEdit(row){
+  editId = row ? row.id : null;
+  document.getElementById("editTitle").textContent = row ? "编辑船公司" : "新增船公司";
+  document.getElementById("f_code").value = row?.code || "";
+  document.getElementById("f_name").value = row?.name || "";
+  document.getElementById("f_scac").value = row?.scac || "";
+  document.getElementById("f_country").value = row?.country || "";
+  document.getElementById("f_status").value = row?.status || "active";
+  document.getElementById("f_remark").value = row?.remark || "";
+  document.getElementById("editMask").style.display="flex";
+}
+function closeEdit(){ document.getElementById("editMask").style.display="none"; }
+document.getElementById("editMask").onclick = e=>{ if(e.target.id==="editMask") closeEdit(); };
+
+function save(){
+  const code = normCode(document.getElementById("f_code").value);
+  const name = document.getElementById("f_name").value.trim();
+  const scac = normCode(document.getElementById("f_scac").value);
+  const country = document.getElementById("f_country").value.trim();
+  const status = document.getElementById("f_status").value;
+  const remark = document.getElementById("f_remark").value.trim();
+
+  const codeErr = validateCode(code);
+  if(codeErr) return alert(codeErr);
+  if(!name) return alert("名称不能为空");
+
+  const arr = loadArr();
+
+  const dup = arr.find(x=>normCode(x.code)===code && x.id!==editId);
+  if(dup) return alert(`保存失败：Carrier Code 已存在（${dup.code} / ${dup.name}）`);
+
+  if(editId){
+    const idx = arr.findIndex(x=>x.id===editId);
+    if(idx<0) return alert("记录不存在");
+    arr[idx] = Object.assign({}, arr[idx], { code, name, scac, country, status, remark, updatedAt: Date.now() });
+  }else{
+    arr.unshift({ id:"CAR-"+Date.now(), code, name, scac, country, status, remark, createdAt: Date.now(), updatedAt: Date.now() });
+  }
+
+  saveArr(arr);
+  closeEdit();
+  render();
+}
+
+function toggleStatus(id){
+  const arr=loadArr();
+  const idx=arr.findIndex(x=>x.id===id);
+  if(idx<0) return;
+  const next = arr[idx].status==="active" ? "inactive" : "active";
+  const ok = confirm(`确认将该船公司状态改为：${next==="active"?"启用":"停用"}？`);
+  if(!ok) return;
+  arr[idx].status = next;
+  arr[idx].updatedAt = Date.now();
+  saveArr(arr);
+  render();
+}
+
+function buildView(){
+  const kw = q.value.trim().toLowerCase();
+  const st = q_status.value;
+
+  let list = loadArr().slice().sort((a,b)=>(b.updatedAt||0)-(a.updatedAt||0));
+  if(kw){
+    list = list.filter(x=>{
+      const t = `${x.code||""} ${x.name||""} ${x.scac||""} ${x.country||""}`.toLowerCase();
+      return t.includes(kw);
+    });
+  }
+  if(st) list = list.filter(x=>x.status===st);
+  return list;
+}
+
+function render(){
+  const list = buildView();
+  tbody.innerHTML="";
+  if(!list.length){
+    const tr=document.createElement("tr");
+    tr.innerHTML = `<td colspan="7" style="padding:16px;color:var(--muted)">暂无数据</td>`;
+    tbody.appendChild(tr);
+    foot.textContent = "0 条";
+    return;
+  }
+
+  list.forEach(x=>{
+    const tr=document.createElement("tr");
+    const st = x.status==="active"
+      ? `<span class="badge ok">启用</span>`
+      : `<span class="badge off">停用</span>`;
+    tr.innerHTML = `
+      <td><b>${esc(x.code||"")}</b></td>
+      <td>${esc(x.name||"")}</td>
+      <td>${esc(x.scac||"")}</td>
+      <td>${esc(x.country||"")}</td>
+      <td>${st}</td>
+      <td>${esc(fmt(x.updatedAt))}</td>
+      <td>
+        <div class="ops">
+          <button class="link" type="button" onclick='openEdit(${JSON.stringify(x).replace(/'/g,"&#39;")})'>编辑</button>
+          <button class="link danger" type="button" onclick="toggleStatus('${esc(x.id)}')">${x.status==="active"?"停用":"启用"}</button>
+        </div>
+      </td>
+    `;
+    tbody.appendChild(tr);
+  });
+
+  foot.textContent = `${list.length} 条`;
+}
+
+function csvEscape(v){
+  const s=String(v??"");
+  return /[",\n]/.test(s) ? `"${s.replace(/"/g,'""')}"` : s;
+}
+function downloadCsv(filename, rows){
+  const blob = new Blob([rows.join("\n")], {type:"text/csv;charset=utf-8;"});
+  const a=document.createElement("a");
+  a.href=URL.createObjectURL(blob);
+  a.download=filename;
+  document.body.appendChild(a);
+  a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(a.href), 800);
+}
+function exportCsv(){
+  const list = buildView();
+  const head = ["code","name","scac","country","status","updatedAt"].join(",");
+  const lines=[head];
+  list.forEach(x=>{
+    lines.push([x.code,x.name,x.scac,x.country,x.status,fmt(x.updatedAt)].map(csvEscape).join(","));
+  });
+  downloadCsv(`carriers_${new Date().toISOString().slice(0,10)}.csv`, lines);
+}
+
+function seedDemo(){
+  const ok = confirm("生成演示数据将追加写入本地（localStorage），确定？");
+  if(!ok) return;
+  const arr = loadArr();
+
+  const demo = [
+    {code:"MAERSK", name:"MAERSK", scac:"MAEU", country:"DENMARK", status:"active"},
+    {code:"MSC", name:"MSC", scac:"MSCU", country:"SWITZERLAND", status:"active"},
+    {code:"OOCL", name:"OOCL", scac:"OOLU", country:"HONG KONG", status:"active"},
+    {code:"COSCO", name:"COSCO", scac:"COSU", country:"CHINA", status:"active"},
+    {code:"HPL", name:"HAPAG-LLOYD", scac:"HLCU", country:"GERMANY", status:"inactive"}
+  ];
+
+  demo.forEach(d=>{
+    const code = normCode(d.code);
+    if(arr.some(x=>normCode(x.code)===code)) return;
+    arr.unshift({ id:"CAR-"+Date.now()+"-"+Math.random().toString(16).slice(2), ...d, code, createdAt:Date.now(), updatedAt:Date.now() });
+  });
+
+  saveArr(arr);
+  render();
+}
+
+render();
+</script>
+</body>
+</html>
