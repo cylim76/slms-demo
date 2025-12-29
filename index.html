@@ -1,17 +1,13 @@
 <!--
 File: index.html
-Version: index-v17
+Version: index-v18
 Date: 2025-12-29
 
-更新点（v17）：
+更新点（v18，基于 v17 最新主线）：
 1) Stuffing 下拉菜单：
-   - CRP录入 路径更新为：crp/crp-entry.html（原 crp/crp-management.html）
-2) Stuffing 下拉菜单最下方新增一级菜单：Master ▶
-   - 二级菜单包含：船舶管理 / 航次管理 / 船公司管理（占位入口）
-   - 路径分别指向：
-     * master/vessel-manage.html
-     * master/voyage-manage.html
-     * master/carrier-manage.html（后续创建）
+   - CRP配箱 指向页面路径更新为：crp/container-assign-to-crp.html（原 container/container-claim-with-bl.html）
+2) Stuffing 下拉菜单：
+   - “装箱管理”改名为“装箱计划(normal)”，并指向：stuffing/stuffing-plan-normal.html（原 stuffing/stuffing-management.html）
 3) 右上角版本号与“页面功能要求”弹窗内容同步更新（按版本号规则维护）
 -->
 
@@ -142,7 +138,7 @@ iframe{width:100%;height:100%;border:0}
 
   <div class="ver" id="verBtn" title="点击查看页面功能要求">
     <span class="dot"></span>
-    <span>index-v17</span>
+    <span>index-v18</span>
   </div>
 
   <!-- Stuffing 下拉菜单（一级） -->
@@ -169,9 +165,9 @@ iframe{width:100%;height:100%;border:0}
     <!-- ✅ v16：统一命名为 CRP配箱 -->
     <div class="item"
       onclick="openFromMenu(
-        'container-claim',
+        'container-assign-to-crp',
         'CRP配箱',
-        'container/container-claim-with-bl.html'
+        'crp/container-assign-to-crp.html'
       )">
       <span>CRP配箱</span>
     </div>
@@ -199,11 +195,11 @@ iframe{width:100%;height:100%;border:0}
 
     <div class="item"
       onclick="openFromMenu(
-        'stuffing-management',
-        '装箱管理',
-        'stuffing/stuffing-management.html'
+        'stuffing-plan-normal',
+        '装箱计划(normal)',
+        'stuffing/stuffing-plan-normal.html'
       )">
-      <span>装箱管理</span>
+      <span>装箱计划(normal)</span>
     </div>
 
     <div class="divider"></div>
@@ -292,11 +288,11 @@ iframe{width:100%;height:100%;border:0}
 <div class="modalMask" id="reqMask">
   <div class="modal">
     <div class="modalHd">
-      <b>页面功能要求（Index / index-v17）</b>
+      <b>页面功能要求（Index / index-v18）</b>
       <span style="cursor:pointer" onclick="closeReq()">关闭</span>
     </div>
     <div class="modalBd">
-      <h4>一、顶部导航规范（index-v17）</h4>
+      <h4>一、顶部导航规范（index-v18）</h4>
       <ol>
         <li>顶部导航仅显示：<b>Simulation / R/Shipping / R/Booking / Stuffing</b></li>
         <li>左上角仅显示系统 Logo 图片（<code>img/trademark2.6babe1d4.png</code>），不显示任何文字</li>
@@ -316,10 +312,10 @@ iframe{width:100%;height:100%;border:0}
       <ol>
         <li><b>CRP录入</b>：用于接收 FF 交接后的 CRP（提箱单）信息录入，并上传/归档 CRP 文件（页面：<code>crp/crp-entry.html</code>）。</li>
         <li><b>CRP 发送</b>：用于将录入完成的 CRP 信息/文件发送至指定对象并归档发送记录（页面：<code>crp/send-crp.html</code>）。</li>
-        <li><b>CRP配箱</b>：用于确定 CRP 与箱号之间的对应关系（装箱前置业务，页面：<code>container/container-claim-with-bl.html</code>）。</li>
+        <li><b>CRP配箱</b>：用于将集装箱号匹配/分配给 CRP 记录，形成对应关系（页面：<code>crp/container-assign-to-crp.html</code>）。</li>
         <li><b>CRP提箱现况RPT</b>：用于按条件查询提箱进度/状态，并统计各运输公司未完成数量（页面：<code>crp/rpt-crp-trans-status.html</code>）。</li>
         <li><b>集装箱信息维护</b>：用于维护箱号、箱型、状态等基础信息。</li>
-        <li><b>装箱管理</b>：用于装箱作业计划/进度管理（当前先占位，后续按实际页面补齐）。</li>
+        <li><b>装箱计划(normal)</b>：用于装箱作业计划/进度管理（页面：<code>stuffing/stuffing-plan-normal.html</code>）。</li>
 
         <li><b>Mobile（二级菜单）</b>：面向手机端的现场操作入口。</li>
         <li>Mobile 页面命名约定（区分场景，便于后续扩展）：</li>
@@ -332,7 +328,7 @@ iframe{width:100%;height:100%;border:0}
         </li>
       </ol>
 
-      <h4>四、主数据（Master）模块入口（新增）</h4>
+      <h4>四、主数据（Master）模块入口（保留）</h4>
       <ol>
         <li>Stuffing 下拉菜单最下方新增 <b>Master</b> 一级菜单，包含二级菜单：</li>
         <li style="list-style:none;margin-left:-18px">
