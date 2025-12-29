@@ -1,0 +1,436 @@
+# File: slms-schema.yaml
+# Version: slms-suite-v2025.12.29
+# Date: 2025-12-29
+# Note:
+# - 本文件是 SLMS 结构唯一真源（字段/枚举/关系）。
+# - 采用“模块块”组织：后续可按模块整段替换更新，避免影响其他模块。
+
+meta:
+  system: SLMS
+  schema_version: "slms-suite-v2025.12.29"
+  updated_date: "2025-12-29"
+  timezone: "Asia/Seoul"
+
+# =========================================================
+# Module: Common Enums（通用枚举）
+# =========================================================
+enums:
+  role:
+    - DRIVER
+    - INSPECTOR
+    - DISPATCHER
+    - ADMIN
+
+  created_source:
+    # 记录来源：用于系统自动区分入口，而非让用户手动选择“装箱类型”
+    - PLAN_ENTRY       # 本作业：从出运计划/订单/Shipping Plan 入口创建
+    - PREPACK_ENTRY    # 先装箱：专用入口创建（允许无计划）
+    - DIRECT_ENTRY     # 直装：生产计划↔出运计划匹配工作台生成
+    - IMPORT           # 导入/接口
+    - OTHER
+
+  yes_no:
+    - Y
+    - N
+
+  unassigned_reason:
+    # 未匹配原因（系统写入，可对管理员可见，对一线可隐藏）
+    - NONE
+    - PREPACK_LIKELY        # 先装箱入口或无计划装箱
+    - BOOKING_MISMATCH      # booking/关联不一致导致“看起来无计划”
+    - PLAN_NOT_IMPORTED     # 计划未导入/延迟导入
+    - DATA_ERROR            # 其他数据问题
+    - UNKNOWN
+
+  assignment_status:
+    - UNASSIGNED    # 未匹配出运计划/订单（统一管理入口）
+    - ASSIGNED      # 已匹配（有 plan_id / order_id）
+    - REASSIGNED    # 曾匹配后改绑（留痕）
+    - LOCKED        # 锁定（对账/出运后）
+
+  location_status:
+    # 当前位置状态：只回答“现在在哪”，不承载作业流程
+    - OUTSIDE_FACTORY
+    - IN_FACTORY
+    - AT_WORKSITE
+    - IN_TRANSIT_INSIDE
+    - LEFT_FACTORY
+
+# =========================================================
+# Module: Tables（表结构）
+# =========================================================
+tables:
+
+  # -------------------------
+  # Container（集装箱主表）
+  # -------------------------
+  container:
+    description: >
+      集装箱身份与有效性信息。原则：container 表不承载“作业流程状态”，
+      只承载箱号合法性/是否真实发生装箱/是否可统计，以及“当前在哪里”。
+    primary_key: container_id
+    fields:
+      container_id:
+        type: uuid
+        required: true
+        desc: 集装箱内部唯一ID
+      container_no:
+        type: string
+        required: true
+        desc: 集装箱号（ISO 6346）
+
+      container_status:
+        type: enum
+        required: true
+        enum:
+          - DRAFT
+          - CHECKED
+          - CONFIRMED
+          - PACKING_IN_PROGRESS
+          - PACKED
+          - REPACKED_OUT
+          - CLOSED
+          - VOID
+        desc: 集装箱业务状态（决定允许哪些更正操作）
+
+      container_effective_status:
+        type: enum
+        required: true
+        enum:
+          - FINAL
+          - REPLACED
+          - INVALID
+        desc: 统计口径有效性（仅 FINAL 进入统计/导出/结算）
+
+      container_abnormal_type:
+        type: enum
+        required: true
+        enum:
+          - NONE
+          - WRONG_NO
+          - DUPLICATE_ENTRY
+          - MERGED
+          - REPACKING
+          - DAMAGED_CONTAINER
+          - OTHER
+        desc: 异常类型标签（用于分析）
+
+      assignment_status:
+        type: enum
+        required: true
+        enum_ref: assignment_status
+        desc: 是否已匹配出运计划/订单
+      unassigned_reason:
+        type: enum
+        required: true
+        enum_ref: unassigned_reason
+        desc: 未匹配原因（系统写入）
+      created_source:
+        type: enum
+        required: true
+        enum_ref: created_source
+        desc: 创建入口（系统写入）
+
+      shipping_plan_id:
+        type: uuid
+        required: false
+        desc: 关联出运计划（可空：先装箱/异常时）
+      order_id:
+        type: uuid
+        required: false
+        desc: 关联订单（可空）
+
+      current_location_id:
+        type: uuid
+        required: false
+        desc: 当前位置/工位ID（FK location）
+      current_location_status:
+        type: enum
+        required: true
+        enum_ref: location_status
+        desc: 当前位置状态
+      current_location_updated_at:
+        type: datetime
+        required: false
+        desc: 位置最后更新时间
+
+      container_type:
+        type: string
+        required: false
+        desc: 箱型（UI 层可设为必填）
+      tare_weight_driver:
+        type: number
+        required: false
+        desc: 司机自重（追溯）
+      tare_weight_inspector:
+        type: number
+        required: false
+        desc: 检查员自重（追溯）
+      tare_weight_final:
+        type: number
+        required: false
+        desc: 最终自重（统计口径，司机优先）
+
+      carrier_inspector:
+        type: string
+        required: false
+        desc: 检查员录入运输公司（追溯）
+      carrier_final:
+        type: string
+        required: false
+        desc: 最终运输公司（司机为准）
+
+      created_at:
+        type: datetime
+        required: true
+      updated_at:
+        type: datetime
+        required: true
+
+  # -------------------------
+  # Shipping Plan（出运计划，对接约定）
+  # -------------------------
+  shipping_plan:
+    description: >
+      既有 Shipping Plan 数据（可能来自现有 SLMS/其他系统）。
+      本三件套仅定义对接所需字段，真实字段可扩展。
+    primary_key: shipping_plan_id
+    fields:
+      shipping_plan_id:
+        type: uuid
+        required: true
+        desc: 出运计划ID
+      customer:
+        type: string
+        required: true
+        desc: 客户
+      etd:
+        type: date
+        required: false
+        desc: ETD
+      carrier:
+        type: string
+        required: false
+        desc: 船公司
+      vessel:
+        type: string
+        required: false
+        desc: 船名
+      voyage:
+        type: string
+        required: false
+        desc: 航次
+      booking_no:
+        type: string
+        required: false
+        desc: 计划侧 booking（用于匹配/校验）
+      plan_container_qty:
+        type: number
+        required: false
+        desc: 计划箱量
+      plan_models:
+        type: array<string>
+        required: false
+        desc: 计划型号（支持混装）
+      created_at:
+        type: datetime
+        required: true
+      updated_at:
+        type: datetime
+        required: true
+
+  # -------------------------
+  # CRP（执行单/配载单）
+  # -------------------------
+  crp:
+    description: >
+      CRP 是执行侧业务对象。允许先录入再修复关联，但关键变更必须留痕。
+    primary_key: crp_id
+    fields:
+      crp_id:
+        type: uuid
+        required: true
+      shipping_plan_id:
+        type: uuid
+        required: false
+        desc: 关联出运计划（可空：先装箱/异常）
+      booking_no:
+        type: string
+        required: true
+        desc: 统一术语：Booking No
+      customer:
+        type: string
+        required: false
+      carrier:
+        type: string
+        required: false
+      vessel:
+        type: string
+        required: false
+      voyage:
+        type: string
+        required: false
+      planned_qty:
+        type: number
+        required: false
+        desc: 计划箱量/数量
+
+      crp_status:
+        type: enum
+        required: true
+        enum:
+          - DRAFT
+          - READY
+          - CONTAINER_ASSIGNED
+          - SENT
+          - CLOSED
+          - VOID
+        desc: CRP 生命周期状态
+
+      created_at:
+        type: datetime
+        required: true
+      updated_at:
+        type: datetime
+        required: true
+
+  crp_container_link:
+    description: CRP 与集装箱多对多关联（用于混装/多箱）
+    primary_key: link_id
+    fields:
+      link_id: {type: uuid, required: true}
+      crp_id: {type: uuid, required: true}
+      container_id: {type: uuid, required: true}
+      models: {type: array<string>, required: false, desc: "该箱包含型号（混装）"}
+      assigned_qty: {type: number, required: false}
+      created_at: {type: datetime, required: true}
+
+  # -------------------------
+  # Packing Task（装箱任务）
+  # -------------------------
+  packing_task:
+    description: >
+      装箱作业任务，记录装箱进度。原则：进度属于任务，不属于 container。
+    primary_key: task_id
+    fields:
+      task_id: {type: uuid, required: true}
+      task_source: {type: enum, required: true, enum_ref: created_source, desc: "任务来源入口"}
+      shipping_plan_id: {type: uuid, required: false}
+      crp_id: {type: uuid, required: false}
+      container_id: {type: uuid, required: false}
+      worksite_id: {type: uuid, required: false, desc: "计划作业地/工位"}
+
+      task_status:
+        type: enum
+        required: true
+        enum:
+          - PRE_CHECK
+          - READY
+          - PACKING
+          - PAUSED
+          - PACKED
+          - CANCELLED
+        desc: 装箱进度状态
+
+      started_at: {type: datetime, required: false}
+      finished_at: {type: datetime, required: false}
+      created_at: {type: datetime, required: true}
+      updated_at: {type: datetime, required: true}
+
+  # -------------------------
+  # Production Plan（生产计划：直装工作台）
+  # -------------------------
+  production_plan:
+    description: 生产计划（直装匹配工作台左侧数据源）
+    primary_key: production_plan_id
+    fields:
+      production_plan_id: {type: uuid, required: true}
+      line: {type: string, required: true, desc: "生产线"}
+      product: {type: string, required: true}
+      model: {type: string, required: true}
+      customer: {type: string, required: false}
+      start_time: {type: datetime, required: false}
+      end_time: {type: datetime, required: false}
+      qty: {type: number, required: true}
+
+      status:
+        type: enum
+        required: true
+        enum: [NEW, GENERATED, LOCKED, CANCELLED]
+        desc: 直装生成状态（点击生成后变化）
+
+      linked_task_id: {type: uuid, required: false}
+      linked_container_id: {type: uuid, required: false}
+      linked_booking_no: {type: string, required: false}
+      created_at: {type: datetime, required: true}
+      updated_at: {type: datetime, required: true}
+
+  # -------------------------
+  # Audit / Events（审计与事件）
+  # -------------------------
+  container_change_log:
+    description: 箱号更正/合并/作废/掏箱/匹配计划等审计日志（必须）
+    primary_key: log_id
+    fields:
+      log_id: {type: uuid, required: true}
+      container_id: {type: uuid, required: true}
+
+      change_type:
+        type: enum
+        required: true
+        enum:
+          - EDIT_FIELD
+          - CORRECT_CONTAINER_NO
+          - MERGE_RECORD
+          - MERGE_BUSINESS_RESULTS
+          - REPACKING
+          - VOID
+          - ASSIGN_PLAN
+          - REASSIGN_PLAN
+        desc: 变更类型
+
+      field_name: {type: string, required: false}
+      old_value: {type: string, required: false}
+      new_value: {type: string, required: false}
+
+      changed_by_role: {type: enum, required: true, enum_ref: role}
+      changed_by_user: {type: string, required: false}
+
+      reason_code: {type: string, required: true}
+      reason_text: {type: string, required: false}
+      happened_at: {type: datetime, required: true}
+
+  container_location_event:
+    description: 集装箱位置变化轨迹（建议）
+    primary_key: event_id
+    fields:
+      event_id: {type: uuid, required: true}
+      container_id: {type: uuid, required: true}
+      from_location_id: {type: uuid, required: false}
+      to_location_id: {type: uuid, required: true}
+      happened_at: {type: datetime, required: true}
+      source: {type: string, required: false}
+      related_task_id: {type: uuid, required: false}
+      note: {type: string, required: false}
+
+  task_status_event:
+    description: 任务状态变化轨迹（建议）
+    primary_key: event_id
+    fields:
+      event_id: {type: uuid, required: true}
+      task_id: {type: uuid, required: true}
+      from_status: {type: string, required: false}
+      to_status: {type: string, required: true}
+      happened_at: {type: datetime, required: true}
+      operator_role: {type: enum, required: false, enum_ref: role}
+      operator_user: {type: string, required: false}
+      reason: {type: string, required: false}
+
+# =========================================================
+# Module: UI Pages（页面索引，仅用于文档对齐）
+# =========================================================
+ui_pages:
+  - container-management
+  - plan-container-match-workbench
+  - direct-loading-workbench
+  - crp-entry-and-assign
