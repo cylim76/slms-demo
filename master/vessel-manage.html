@@ -1,6 +1,6 @@
 <!--
 File: master/vessel-manage.html
-Version: vessel-manage-v2
+Version: vessel-manage-v3
 Date: 2025-12-29
 
 功能要点：
@@ -8,7 +8,7 @@ Date: 2025-12-29
 2) IMO 作为强唯一字段（必填）；船名必填
 3) 查询：关键词（船名/IMO）+ 状态
 4) 导出 CSV
-5) 右上角版本号可点击：显示“三件套”内容（随版本维护）
+5) 右上角版本号可点击：显示“三件套”内容（统一弹窗模板 + 一键复制）
 -->
 
 <!doctype html>
@@ -56,16 +56,31 @@ tr:hover td{background:#fff7fb}
 
 .modalMask{position:fixed;inset:0;background:rgba(0,0,0,.35);display:none;align-items:center;justify-content:center;z-index:9999;padding:10px}
 .modal{width:min(980px,96vw);background:#fff;border-radius:12px;box-shadow:0 20px 60px rgba(0,0,0,.3);display:flex;flex-direction:column;overflow:hidden}
-.modalHd{padding:12px 16px;border-bottom:1px solid #eee;font-weight:900;display:flex;justify-content:space-between;align-items:center}
+.modalHd{padding:12px 16px;border-bottom:1px solid #eee;font-weight:900;display:flex;justify-content:space-between;align-items:center;gap:10px}
 .modalBd{padding:14px 16px;max-height:72vh;overflow:auto}
 .modalFt{padding:12px 16px;border-top:1px solid #eee;display:flex;justify-content:flex-end;gap:10px}
 
-.reqMask .modal{width:min(1080px,96vw)}
+/* 三件套统一弹窗模板 */
+.reqMask .modal{width:min(1120px,96vw)}
 .reqMask .modalBd{font-size:13px;line-height:1.6}
-.reqMask h3{margin:0 0 8px}
-.reqMask h4{margin:14px 0 6px}
+.pill{display:inline-flex;align-items:center;gap:8px;padding:6px 10px;border-radius:999px;border:1px solid #eee;background:#f7f7fb;font-weight:900;font-size:12px}
+.pill .dot{width:8px;height:8px;border-radius:99px;background:var(--brand)}
+.kitTop{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-top:6px}
+.tabRow{display:flex;gap:8px;flex-wrap:wrap}
+.tbtn{cursor:pointer;border:1px solid #e6e6ee;background:#fff;border-radius:999px;padding:8px 10px;font-weight:900;font-size:12px}
+.tbtn.active{border-color:rgba(224,32,92,.35);color:var(--brand)}
+.actions{display:flex;gap:8px;flex-wrap:wrap}
+.abtn{cursor:pointer;border:1px solid #e6e6ee;background:#fff;border-radius:10px;padding:8px 10px;font-weight:900;font-size:12px}
+.abtn.primary{border-color:rgba(224,32,92,.35);color:#fff;background:var(--brand)}
+.abtn:active{transform:translateY(1px)}
+.toast{
+  position:fixed;left:50%;bottom:18px;transform:translateX(-50%);
+  background:#111827;color:#fff;padding:10px 12px;border-radius:12px;
+  font-size:12px;font-weight:900;box-shadow:0 14px 40px rgba(0,0,0,.25);
+  display:none;z-index:99999;
+}
 .reqMask pre{
-  margin:8px 0;
+  margin:10px 0 0;
   padding:12px;
   background:#0b1020;
   color:#e7e9ee;
@@ -74,12 +89,6 @@ tr:hover td{background:#fff7fb}
   font-size:12px;
   line-height:1.5;
 }
-.reqMask code{font-family:ui-monospace,Menlo,Consolas,monospace}
-.pill{display:inline-flex;align-items:center;gap:8px;padding:6px 10px;border-radius:999px;border:1px solid #eee;background:#f7f7fb;font-weight:900;font-size:12px}
-.pill .dot{width:8px;height:8px;border-radius:99px;background:var(--brand)}
-.tabRow{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0 0}
-.tbtn{cursor:pointer;border:1px solid #e6e6ee;background:#fff;border-radius:999px;padding:8px 10px;font-weight:900;font-size:12px}
-.tbtn.active{border-color:rgba(224,32,92,.35);color:var(--brand)}
 </style>
 </head>
 
@@ -91,7 +100,7 @@ tr:hover td{background:#fff7fb}
     <button class="btn primary" type="button" onclick="openEdit()">新增船舶</button>
     <div class="ver" id="verBtn" title="点击查看三件套">
       <span class="dot"></span>
-      <span>vessel-manage-v2</span>
+      <span>vessel-manage-v3</span>
     </div>
   </div>
 </div>
@@ -203,25 +212,34 @@ tr:hover td{background:#fff7fb}
   </div>
 </div>
 
-<!-- requirements (三件套) -->
+<!-- requirements (三件套：统一模板 + 复制按钮) -->
 <div class="modalMask reqMask" id="reqMask">
   <div class="modal">
     <div class="modalHd">
-      <span class="pill"><span class="dot"></span>三件套（vessel-manage.html / vessel-manage-v2）</span>
+      <span class="pill"><span class="dot"></span>三件套（vessel-manage.html / vessel-manage-v3）</span>
       <span style="cursor:pointer;color:var(--muted)" onclick="closeReq()">关闭</span>
     </div>
-    <div class="modalBd">
-      <div class="small">说明：本弹窗内容需与版本号同步维护；用于把“结构/口径/交互”固化，避免页面改了但约定没更新。</div>
 
-      <div class="tabRow">
-        <button class="tbtn active" id="t_schema" onclick="showKit('schema')">slms-schema.yaml</button>
-        <button class="tbtn" id="t_dict" onclick="showKit('dict')">slms-data-dict.md</button>
-        <button class="tbtn" id="t_ui" onclick="showKit('ui')">slms-ui-spec.md</button>
+    <div class="modalBd">
+      <div class="small">
+        说明：本弹窗内容需与版本号同步维护；用于把“结构/口径/交互”固化，避免页面改了但约定没更新。
+      </div>
+
+      <div class="kitTop">
+        <div class="tabRow">
+          <button class="tbtn active" id="t_schema" onclick="showKit('schema')">slms-schema.yaml</button>
+          <button class="tbtn" id="t_dict" onclick="showKit('dict')">slms-data-dict.md</button>
+          <button class="tbtn" id="t_ui" onclick="showKit('ui')">slms-ui-spec.md</button>
+        </div>
+
+        <div class="actions">
+          <button class="abtn" type="button" onclick="copyCurrentKit()">复制当前Tab</button>
+          <button class="abtn primary" type="button" onclick="copyAllKits()">复制全部三件套</button>
+        </div>
       </div>
 
       <div id="kit_schema">
-        <h4>slms-schema.yaml（结构唯一真源）</h4>
-        <pre><code># --- Vessel Master (船舶主档) ---
+        <pre id="txt_schema"><code># --- Vessel Master (船舶主档) ---
 # 演示版存储映射：localStorage key = slms_vessels_v1
 # 正式落库建议表名：slms_vessels
 
@@ -250,8 +268,7 @@ tables:
       </div>
 
       <div id="kit_dict" style="display:none">
-        <h4>slms-data-dict.md（字段/口径说明）</h4>
-        <pre><code># Vessel Master 字段口径（slms_vessels）
+        <pre id="txt_dict"><code># Vessel Master 字段口径（slms_vessels）
 
 - id：主键（演示 VES-时间戳；正式可用UUID/雪花ID）
 - name：船名(EN)，必填
@@ -269,8 +286,7 @@ tables:
       </div>
 
       <div id="kit_ui" style="display:none">
-        <h4>slms-ui-spec.md（页面交互/导出/入口）</h4>
-        <pre><code># vessel-manage.html 交互规范（vessel-manage-v2）
+        <pre id="txt_ui"><code># vessel-manage.html 交互规范（vessel-manage-v3）
 
 入口/导航：
 - Index 里归属 Master 一级菜单下的二级菜单：Vessel Master（船舶）
@@ -288,6 +304,7 @@ tables:
 停用/启用（软删除）：
 - 切换状态需二次确认
 - 停用后：不删除记录；仅状态变更 & updatedAt 更新
+- 停用后不应出现在“航次管理”等引用下拉中（仅显示 active）
 
 导出：
 - 导出当前筛选结果 CSV
@@ -296,27 +313,41 @@ tables:
 存储：
 - localStorage: slms_vessels_v1（演示）
 - 正式：slms_vessels 表（以 schema 为准）
+
+版本维护要求：
+- 每次页面生成/修改：必须同步更新
+  1) 右上角版本号显示
+  2) 版本号弹窗中的“三件套”内容（schema/dict/ui）
 </code></pre>
       </div>
     </div>
+
     <div class="modalFt">
       <button class="btn" type="button" onclick="closeReq()">关闭</button>
     </div>
   </div>
 </div>
 
+<div class="toast" id="toast"></div>
+
 <script>
 const LS_VESSELS = "slms_vessels_v1";
-const VERSION = "vessel-manage-v2";
+const VERSION = "vessel-manage-v3";
 
 /* requirements */
 const reqMask = document.getElementById("reqMask");
-document.getElementById("verBtn").onclick = ()=> reqMask.style.display="flex";
+document.getElementById("verBtn").onclick = ()=> {
+  reqMask.style.display="flex";
+  // 每次打开默认停留在 schema
+  showKit("schema");
+};
 function closeReq(){ reqMask.style.display="none"; }
 reqMask.onclick = e=>{ if(e.target===reqMask) closeReq(); };
 
-/* 三件套 tabs */
+/* 三件套 tabs（统一模板） */
+let activeKit = "schema";
 function setKitTab(active){
+  activeKit = active;
   ["schema","dict","ui"].forEach(k=>{
     document.getElementById("t_"+k).classList.toggle("active", k===active);
     document.getElementById("kit_"+k).style.display = (k===active) ? "block" : "none";
@@ -324,6 +355,57 @@ function setKitTab(active){
 }
 function showKit(k){ setKitTab(k); }
 
+/* toast */
+const toastEl = document.getElementById("toast");
+let toastTimer = null;
+function toast(msg){
+  toastEl.textContent = msg;
+  toastEl.style.display = "block";
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(()=> toastEl.style.display="none", 1500);
+}
+
+/* copy helpers */
+function getTextFromPre(id){
+  const el = document.getElementById(id);
+  return el ? el.innerText.replace(/\n+$/,"") : "";
+}
+async function copyText(text){
+  try{
+    await navigator.clipboard.writeText(text);
+    toast("已复制到剪贴板");
+  }catch(_){
+    // fallback
+    const ta=document.createElement("textarea");
+    ta.value=text;
+    ta.style.position="fixed";
+    ta.style.left="-9999px";
+    document.body.appendChild(ta);
+    ta.select();
+    try{ document.execCommand("copy"); toast("已复制到剪贴板"); }catch(e){ alert("复制失败，请手动复制"); }
+    ta.remove();
+  }
+}
+function copyCurrentKit(){
+  const map = {schema:"txt_schema", dict:"txt_dict", ui:"txt_ui"};
+  const txt = getTextFromPre(map[activeKit]);
+  copyText(txt);
+}
+function copyAllKits(){
+  const all =
+`# ===== slms-schema.yaml =====
+${getTextFromPre("txt_schema")}
+
+# ===== slms-data-dict.md =====
+${getTextFromPre("txt_dict")}
+
+# ===== slms-ui-spec.md =====
+${getTextFromPre("txt_ui")}
+`;
+  copyText(all.trim());
+}
+
+/* page helpers */
 function pad2(n){ return String(n).padStart(2,'0'); }
 function fmt(ts){
   if(!ts) return "-";
