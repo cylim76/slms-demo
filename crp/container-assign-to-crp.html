@@ -3,12 +3,18 @@ File: crp/container-assign-to-crp.html
 Version: container-assign-to-crp-v1
 Date: 2025-12-29
 
-v1 变更点（由 container/container-claim-with-bl-v6 + container/container-edit-v4 合并而来）：
-1) ✅ 文件改名 + 目录调整：container/container-claim-with-bl.html -> crp/container-assign-to-crp.html
-2) ✅ “编辑”不再新开页面：把 container-edit 的表单/校验/保存逻辑完整合并为本页弹窗（Modal）
-3) ✅ 版本号弹窗按 SLMS-ThreeKitStyle 固定样式：左侧导航（schema/dict/ui-spec）+ 右侧单文档内容区（docCard+copy+pre）
-4) ✅ 全部列表默认滚动规则：根据画面大小自适应，溢出自动出现滚动条（优先纵向；宽表支持横向）
-   - 左侧提箱单明细、右侧箱号明细、三件套右侧内容区、代码块均确保 overflow:auto
+v1 变更点（基于 container-claim-with-bl-v6 重构并改名）：
+1) ✅ 文件改名并移动目录：crp/container-assign-to-crp.html
+2) ✅ 编辑按钮：彻底移除 window.open，改为页面内 Modal（无地址栏/不新开窗口）
+3) ✅ 编辑 Modal 表单：完整合并 container-edit（v4）表单，并新增字段：
+   - Booking No. / Tare / 车辆号码（自动带入已有值）
+4) ✅ 新增“错误箱号更正”流程（在编辑 Modal 内）：
+   - 勾选后出现红色警示容器
+   - 输入正确箱号 + “检查”按钮：若系统存在该箱号则带入其字段（预览）；若不存在提示“无当前箱号”
+   - 保存时：把“错误箱号”的字段带入正确箱号记录（必要时创建新记录）
+   - 若原箱号已匹配 CRP：CRP 对应箱型已配箱数量 -1，并把绑定/任务转移到正确箱号（并按新箱型+1）
+5) ✅ 版本号弹窗：按 SLMS-ThreeKitStyle 固定为三件套（schema/dict/ui-spec），内容超出自动滚动
+6) ✅ 所有列表默认滚动规则：容器自适应；溢出自动纵向滚动；宽表/长行支持横向滚动（本页左右明细均已实现）
 -->
 
 <!doctype html>
@@ -18,7 +24,7 @@ v1 变更点（由 container/container-claim-with-bl-v6 + container/container-ed
   <meta name="viewport" content="width=device-width,initial-scale=1"/>
   <title>提箱单（CRP）配箱</title>
   <style>
-    :root{--brand:#e0205c; --bg:#f1f2f5; --card:#fff; --text:#222; --muted:#666; --line:#e6e6e6; --ok:#1a7f37; --warn:#b54708; --bad:#b42318;}
+    :root{--brand:#e0205c; --bg:#f1f2f5; --card:#fff; --text:#222; --muted:#666; --line:#e6e6e6; --bad:#b42318;}
     *{box-sizing:border-box}
     body{margin:0;font-family:Arial,"Microsoft YaHei";background:var(--bg);color:var(--text)}
     .topbar{background:#fff;border-bottom:1px solid #eee;padding:10px 14px;display:flex;align-items:center;justify-content:space-between;gap:10px}
@@ -75,18 +81,17 @@ v1 变更点（由 container/container-claim-with-bl-v6 + container/container-ed
 
     .card{
       background:var(--card);
-      border-radius:10px;
+      border-radius:8px;
       box-shadow:0 2px 10px rgba(0,0,0,.08);
       padding:12px;
       display:flex;
       flex-direction:column;
       min-width:0;
       width:100%;
-      border:1px solid var(--line);
     }
     h3{margin:0 0 8px;font-size:15px}
     label{font-size:12px;color:var(--muted);font-weight:800}
-    input,select{width:100%;padding:7px 8px;border:1px solid #ccc;border-radius:8px;outline:none}
+    input,select{width:100%;padding:7px 8px;border:1px solid #ccc;border-radius:6px}
     .grid6{display:grid;grid-template-columns:repeat(6,1fr);gap:8px}
     .grid4{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
     .actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:8px}
@@ -94,13 +99,14 @@ v1 变更点（由 container/container-claim-with-bl-v6 + container/container-ed
     .btn.primary{background:var(--brand);border-color:var(--brand);color:#fff}
     .btn.danger{border-color:var(--brand);color:var(--brand)}
     .hint{font-size:12px;color:var(--muted)}
+    .small{font-size:12px;color:var(--muted);line-height:1.6}
 
-    /* ====== 明细滚动：支持横向 + 纵向（默认规则） ====== */
+    /* ====== 明细滚动：支持横向 + 纵向 ====== */
     .scroll{
       flex:1;
       overflow:auto;
       border:1px solid #eee;
-      border-radius:10px;
+      border-radius:8px;
       margin-top:10px;
       min-height:0;
       background:#fff;
@@ -115,23 +121,23 @@ v1 变更点（由 container/container-claim-with-bl-v6 + container/container-ed
     th{background:#f6f6f6;position:sticky;top:0;z-index:1}
 
     tr.unclaimed td{background:#fff0f0}
-    tr.rowSelected td{outline:2px solid rgba(224,32,92,.25);background:#fff7fb}
+    tr.rowSelected{outline:2px solid var(--brand)}
     .tag{padding:2px 10px;border-radius:999px;font-size:12px;font-weight:900}
     .tag.ok{background:#eefaf2;color:#1e7f3b}
     .tag.warn{background:#fff0f0;color:#d4003a}
     .ops{display:flex;gap:6px;justify-content:center}
     .linkbtn{padding:5px 10px;border-radius:999px;border:1px solid #ddd;background:#fff;cursor:pointer;font-weight:800;font-size:12px}
-    .detail{background:#fafafa;border:1px solid #eee;border-radius:10px;padding:10px;margin-top:8px;font-size:12px;color:#444;line-height:1.6}
-    .log{height:160px;overflow:auto;border:1px solid #eee;border-radius:10px;padding:8px;font-size:12px;color:#444;margin-top:10px}
+    .detail{background:#fafafa;border:1px solid #eee;border-radius:8px;padding:10px;margin-top:8px;font-size:12px;color:#444;line-height:1.6}
+    .log{height:160px;overflow:auto;border:1px solid #eee;border-radius:8px;padding:8px;font-size:12px;color:#444;margin-top:10px}
     .log .t{color:#999;font-family:ui-monospace,Menlo,Consolas,monospace}
 
-    /* ====== 通用 Modal ====== */
+    /* modal base */
     .modalMask{position:fixed;inset:0;background:rgba(0,0,0,.35);display:none;align-items:center;justify-content:center;padding:14px;z-index:9999}
     .modal{width:min(980px,96vw);background:#fff;border-radius:12px;box-shadow:0 20px 60px rgba(0,0,0,.28);overflow:hidden;display:flex;flex-direction:column}
     .modalHd{display:flex;justify-content:space-between;gap:10px;align-items:center;padding:12px 14px;border-bottom:1px solid #eee}
     .modalHd b{font-size:14px}
     .modalBd{padding:12px 14px;max-height:74vh;overflow:auto}
-    .modalFt{padding:12px 14px;border-top:1px solid #eee;display:flex;justify-content:flex-end;gap:10px;flex-wrap:wrap}
+    .modalFt{display:flex;justify-content:flex-end;gap:10px;padding:12px 14px;border-top:1px solid #eee}
     .close{border:1px solid #ddd;background:#fff;border-radius:999px;padding:6px 12px;cursor:pointer;font-weight:900}
 
     .kv{display:grid;grid-template-columns:140px 1fr;gap:8px;font-size:12px;color:#444;margin-top:6px}
@@ -140,13 +146,27 @@ v1 变更点（由 container/container-claim-with-bl-v6 + container/container-ed
     /* 拖动时防止选中文本 */
     .dragging, .dragging *{ cursor:col-resize !important; user-select:none !important; }
 
-    /* ====== 编辑弹窗（合并 container-edit） ====== */
-    .editWrap{display:flex;flex-direction:column;gap:10px}
-    .editCard{border:1px solid var(--line);border-radius:12px;background:#fff;padding:12px}
-    .editHint{font-size:12px;color:var(--muted);line-height:1.6;margin-top:2px}
-    .editGrid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-top:10px}
-    .preview{margin-top:10px;background:#fafafa;border:1px solid #eee;border-radius:10px;padding:10px;font-size:12px;color:#444;line-height:1.6}
+    /* ====== 编辑 Modal 表单（合并自 container-edit） ====== */
+    .formCard{border:1px solid var(--line);border-radius:10px;padding:14px;background:#fff}
+    .formGrid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
+    .full{grid-column:1 / -1}
+    .preview{margin-top:12px;background:#fafafa;border:1px solid #eee;border-radius:10px;padding:10px;font-size:12px;color:#444;line-height:1.6}
     code{font-family:ui-monospace,Menlo,Consolas,monospace}
+
+    .warnBox{
+      border:1px solid rgba(180,35,24,.35);
+      background:rgba(180,35,24,.08);
+      border-radius:12px;
+      padding:12px;
+      margin-top:10px;
+    }
+    .warnTitle{font-weight:900;color:#8a0f33;margin-bottom:8px}
+    .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+    .mini{padding:6px 10px;border-radius:999px;border:1px solid #ddd;background:#fff;cursor:pointer;font-weight:900;font-size:12px}
+    .mini.primary{background:var(--brand);border-color:var(--brand);color:#fff}
+    .mini.danger{border-color:rgba(180,35,24,.45);background:rgba(180,35,24,.08);color:#7a1410}
+    .tipBad{margin-top:8px;font-size:12px;color:#7a1410}
+    .tipOk{margin-top:8px;font-size:12px;color:#135d2a}
 
     /* ===== 三件套弹窗（SLMS-ThreeKitStyle） ===== */
     .reqModal{width:1180px;max-width:96vw}
@@ -176,26 +196,15 @@ v1 变更点（由 container/container-claim-with-bl-v6 + container/container-ed
       background:rgba(224,32,92,.06);
       color:#8a0f33;
     }
-    .reqMain{
-      flex:1 1 auto;
-      min-width:0;
-      padding:14px 16px;
-      overflow:auto; /* 右侧内容区优先纵向滚动 */
-    }
+    .reqMain{flex:1 1 auto;min-width:0;padding:14px 16px;overflow:auto}
     .docCard{border:1px solid var(--line);border-radius:12px;overflow:hidden;background:#fff}
     .docCardHd{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 12px;background:#fafafa;border-bottom:1px solid var(--line)}
     .docCardHd b{font-size:13px}
     .badge{font-size:12px;color:var(--muted);border:1px solid #eee;background:#fff;border-radius:999px;padding:4px 10px}
     .copyBtn{padding:6px 10px;border-radius:999px;border:1px solid #ddd;background:#fff;font-size:12px;font-weight:900;cursor:pointer}
     pre.code{
-      margin:0;
-      padding:12px;
-      font-size:12px;
-      line-height:1.6;
-      font-family: ui-monospace, Menlo, Consolas, monospace;
-      white-space:pre;
-      overflow:auto; /* 代码块/长行支持横向滚动 */
-      background:#fbfbfd
+      margin:0;padding:12px;font-size:12px;line-height:1.6;font-family: ui-monospace, Menlo, Consolas, monospace;
+      white-space:pre;overflow:auto;background:#fbfbfd
     }
     .hidden{display:none}
   </style>
@@ -346,74 +355,110 @@ v1 变更点（由 container/container-claim-with-bl-v6 + container/container-ed
     </div>
   </div>
 
-  <!-- ✅ 编辑弹窗（合并 container-edit 表单） -->
+  <!-- ===== 编辑 Modal（页面内，不新开窗口） ===== -->
   <div class="modalMask" id="editMask">
-    <div class="modal" style="width:min(980px,96vw)">
+    <div class="modal" style="width:min(1020px,96vw)">
       <div class="modalHd">
-        <b>集装箱编辑（内嵌弹窗）</b>
+        <b>箱号编辑 / 更正（页面内弹窗）</b>
         <button class="close" type="button" onclick="closeEdit()">关闭</button>
       </div>
+
       <div class="modalBd">
-        <div class="editWrap">
-          <div class="editCard">
-            <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap">
-              <div>
-                <b style="font-size:13px">集装箱信息维护</b>
-                <div class="editHint">
-                  - 从本页右侧列表点击“编辑”打开（不再新开窗口）。<br/>
-                  - 保存后直接更新本页数据（并保持已配箱/未配箱状态与提箱单计数一致）。
+        <div class="small" id="editHint" style="margin-bottom:10px"></div>
+
+        <div class="formCard">
+          <div class="formGrid">
+            <div>
+              <label>箱号（可编辑）</label>
+              <input id="fNo" placeholder="例如 MSCU1234567"/>
+            </div>
+            <div>
+              <label>箱型</label>
+              <select id="fType">
+                <option value="20GP">20GP</option>
+                <option value="40GP">40GP</option>
+                <option value="40HQ">40HQ</option>
+              </select>
+            </div>
+            <div>
+              <label>运输公司</label>
+              <select id="fTrans">
+                <option value="中集">中集</option>
+                <option value="顺航">顺航</option>
+              </select>
+            </div>
+            <div>
+              <label>船公司</label>
+              <select id="fShip">
+                <option value="OOCL">OOCL</option>
+                <option value="MAERSK">MAERSK</option>
+              </select>
+            </div>
+            <div>
+              <label>目的港</label>
+              <select id="fPod">
+                <option value="LOS ANGELES">LOS ANGELES</option>
+                <option value="HAMBURG">HAMBURG</option>
+                <option value="BUSAN">BUSAN</option>
+              </select>
+            </div>
+            <div>
+              <label>提箱日期</label>
+              <input type="date" id="fDate"/>
+            </div>
+
+            <!-- 新增字段 -->
+            <div>
+              <label>Booking No.</label>
+              <input id="fBookingNo" placeholder="可空 / 自动带入（如有）"/>
+            </div>
+            <div>
+              <label>Tare（自重）</label>
+              <input id="fTare" placeholder="例如 3800（kg）" inputmode="numeric"/>
+            </div>
+            <div class="full">
+              <label>车辆号码</label>
+              <input id="fVehicleNo" placeholder="例如 津A12345 / 津B·12345"/>
+            </div>
+
+            <div class="full">
+              <label style="display:flex;gap:8px;align-items:center">
+                <input type="checkbox" id="fixNoChk" onchange="toggleFixBox()"/>
+                错误箱号更正（勾选后：把当前记录的字段/绑定/任务转移到正确箱号）
+              </label>
+
+              <div class="warnBox" id="fixBox" style="display:none">
+                <div class="warnTitle">⚠ 错误箱号更正（红色警示区）</div>
+
+                <div class="row" style="margin-top:6px">
+                  <div style="flex:1;min-width:260px">
+                    <label>新的正确箱号</label>
+                    <input id="newNo" placeholder="请输入正确箱号，例如 MSCU7654321" oninput="clearFixTip()"/>
+                  </div>
+                  <div style="align-self:flex-end">
+                    <button class="mini primary" type="button" onclick="checkNewNo()">检查</button>
+                  </div>
                 </div>
-              </div>
-              <div class="hint">
-                编辑目标：<code id="editTargetNo">(未选择)</code>
+
+                <div class="small" style="margin-top:8px">
+                  规则：
+                  <ul style="margin:6px 0 0 18px">
+                    <li>点击“检查”：若系统已有该箱号 → 预览其字段；若没有 → 提示“无当前箱号”（保存时会创建新记录）</li>
+                    <li>保存时：把上方（错误箱号）的字段带入正确箱号记录，并把绑定/任务转移</li>
+                    <li>若错误箱号已匹配 CRP：先把该 CRP 对应箱型已配箱数 -1，再按正确箱号箱型 +1</li>
+                  </ul>
+                </div>
+
+                <div id="fixTip" class="tipBad" style="display:none"></div>
+                <div id="fixPreview" class="preview" style="display:none"></div>
               </div>
             </div>
-
-            <div class="editGrid">
-              <div>
-                <label>箱号（可编辑）</label>
-                <input id="edit_fNo" placeholder="例如 MSCU1234567"/>
-              </div>
-              <div>
-                <label>箱型</label>
-                <select id="edit_fType">
-                  <option value="20GP">20GP</option>
-                  <option value="40GP">40GP</option>
-                  <option value="40HQ">40HQ</option>
-                </select>
-              </div>
-              <div>
-                <label>运输公司</label>
-                <select id="edit_fTrans">
-                  <option value="中集">中集</option>
-                  <option value="顺航">顺航</option>
-                </select>
-              </div>
-              <div>
-                <label>船公司</label>
-                <select id="edit_fShip">
-                  <option value="OOCL">OOCL</option>
-                  <option value="MAERSK">MAERSK</option>
-                </select>
-              </div>
-              <div>
-                <label>目的港</label>
-                <select id="edit_fPod">
-                  <option value="LOS ANGELES">LOS ANGELES</option>
-                  <option value="HAMBURG">HAMBURG</option>
-                  <option value="BUSAN">BUSAN</option>
-                </select>
-              </div>
-              <div>
-                <label>提箱日期</label>
-                <input type="date" id="edit_fDate"/>
-              </div>
-            </div>
-
-            <div class="preview" id="edit_preview"></div>
           </div>
+
+          <div class="preview" id="preview"></div>
         </div>
       </div>
+
       <div class="modalFt">
         <button class="btn" type="button" onclick="closeEdit()">取消</button>
         <button class="btn primary" type="button" onclick="saveEdit()">保存</button>
@@ -421,7 +466,7 @@ v1 变更点（由 container/container-claim-with-bl-v6 + container/container-ed
     </div>
   </div>
 
-  <!-- ✅ 三件套（SLMS-ThreeKitStyle） -->
+  <!-- ===== 三件套（SLMS-ThreeKitStyle） ===== -->
   <div class="modalMask" id="reqMask">
     <div class="modal reqModal">
       <div class="modalHd">
@@ -436,8 +481,8 @@ v1 变更点（由 container/container-claim-with-bl-v6 + container/container-ed
             <button class="reqNavBtn active" id="navSchema" onclick="showDoc('schema')">slms-schema.yaml</button>
             <button class="reqNavBtn" id="navDict" onclick="showDoc('dict')">slms-data-dict.md</button>
             <button class="reqNavBtn" id="navUi" onclick="showDoc('ui')">slms-ui-spec.md</button>
-            <div class="hint" style="margin-top:8px">
-              提示：版本号与本弹窗三件套内容需同步维护（当前：<code id="kitVerInline"></code>）。
+            <div class="small" style="margin-top:8px">
+              提示：右上角版本号与本弹窗内容必须随版本同步维护（当前：<code id="verInline"></code>）。
             </div>
           </div>
 
@@ -446,7 +491,7 @@ v1 变更点（由 container/container-claim-with-bl-v6 + container/container-ed
             <div id="docSchema" class="docCard">
               <div class="docCardHd">
                 <b>slms-schema.yaml</b>
-                <div class="ops">
+                <div class="row">
                   <span class="badge">结构唯一真源（Schema）</span>
                   <button class="copyBtn" type="button" onclick="copyText('schemaText')">复制</button>
                 </div>
@@ -458,156 +503,159 @@ module: crp_container_assign
 entities:
 
   crp_bl:
-    description: "提箱单（CRP）主数据（演示内存数据 bls）。"
+    description: "提箱单（CRP）抬头（演示：左侧列表）。claimed 口径=已配箱数量。"
     primary_key: bl
     fields:
-      bl:       { type: string, required: true, note: "提箱单号/提单号（演示字段）" }
-      carrier:  { type: enum,   required: true, values: ["OOCL","MAERSK"] }
-      vessel:   { type: string, required: true, note: "航次/船名航次（演示字段）" }
-      etd:      { type: date,   required: true }
-      vendor:   { type: enum,   required: true, values: ["中集","顺航"] }
-      pod:      { type: enum,   required: true, values: ["LOS ANGELES","HAMBURG","BUSAN"] }
-      country:  { type: string, required: true }
-      quota:
-        type: object
-        required: true
-        note: "箱型配额（演示：20GP/40GP/40HQ）"
-      claimed:
-        type: object
-        required: true
-        note: "已配箱计数（字段名沿用 claimed；语义=已配箱）"
+      bl:      { type: string, required: true }
+      ship:    { type: string, required: true }   # 船公司
+      vessel:  { type: string, required: true }   # 航次/船名航次（演示字段）
+      etd:     { type: date,   required: true }
+      trans:   { type: string, required: true }   # 运输公司
+      pod:     { type: string, required: true }
+      country: { type: string, required: true }
+      quota:   { type: object, required: true }   # {20GP,40GP,40HQ}
+      claimed: { type: object, required: true }   # {20GP,40GP,40HQ}
 
   container:
-    description: "箱号明细（配箱对象）。"
-    primary_key: containerNo
+    description: "箱号明细（配箱对象）。status=unclaimed/claimed"
+    primary_key: no
     fields:
-      containerNo: { type: string, required: true }
-      releaseDate: { type: date,   required: true }
-      vendor:      { type: enum,   required: true, values: ["中集","顺航"] }
-      carrier:     { type: enum,   required: true, values: ["OOCL","MAERSK"] }
-      pod:         { type: enum,   required: true, values: ["LOS ANGELES","HAMBURG","BUSAN"] }
-      boxType:     { type: enum,   required: true, values: ["20GP","40GP","40HQ"] }
-      bl:          { type: string, required: false, note: "已配箱时写入提箱单号" }
-      status:      { type: enum,   required: true, values: ["unclaimed","claimed"], note: "未配箱/已配箱" }
+      no:          { type: string, required: true } # 箱号
+      ship:        { type: string, required: true } # 船公司
+      trans:       { type: string, required: true } # 运输公司
+      pod:         { type: string, required: true } # 目的港
+      type:        { type: enum, required: true, values: ["20GP","40GP","40HQ"] }
+      releaseDate: { type: date, required: true }   # 提箱日期
+      bl:          { type: string, required: false, note: "已配箱时=绑定的 CRP 单号" }
+      status:      { type: enum, required: true, values: ["unclaimed","claimed"] }
+
+      bookingNo:   { type: string, required: false }
+      tare:        { type: string, required: false, note: "演示：字符串保存（kg），后续可改为数字" }
+      vehicleNo:   { type: string, required: false }
+
+      tasks:
+        type: object
+        required: false
+        note: "演示：空箱检查任务等"
+        fields:
+          emptyCheck: { type: boolean, required: false }
 
 operations:
-  bind_atomic:
-    note: "配箱并绑定（All-or-Nothing）：任何校验失败则全部不操作"
-    checks:
-      - "箱号不能已配箱（claimed）"
-      - "箱号的 carrier/pod 与提箱单一致"
-      - "箱型配额充足（claimed + need <= quota）"
-    effects:
-      - "container.status=claimed; container.bl=crp_bl.bl; crp_bl.claimed[boxType] += 1"
+
+  assign_atomic:
+    description: "配箱并绑定（All-or-Nothing）。校验通过才落库。"
 
   unbind:
-    note: "解绑：清空箱号的 bl，并回退提箱单 claimed 计数"
-    effects:
-      - "container.status=unclaimed; container.bl=''; crp_bl.claimed[boxType] -= 1 (>=0)"
+    description: "解绑：清空 container.bl，status 回退为 unclaimed，并回退 crp_bl.claimed[type]"
 
-ui_contract:
-  layout:
-    left:  "提箱单（CRP）查询/明细/抬头"
-    right: "箱号明细（配箱对象）查询/多选/编辑"
-  splitter:
-    draggable: true
-    persist_key: slms_demo_split_left_pct_v1
+  edit_in_modal:
+    description: "编辑按钮打开页面内 Modal（无 window.open）。保存后更新 containers 列表并刷新。"
 
-integration:
-  edit_modal:
-    note: "编辑不再新开页面，使用本页 Modal；保存后直接更新 containers 并刷新列表"</pre>
+  fix_wrong_container_no:
+    description: "错误箱号更正（在编辑 Modal 内）"
+    steps:
+      - "勾选更正 -> 输入 newNo -> 点击检查：若系统已有 newNo 则显示预览；无则提示无当前箱号"
+      - "保存时把错误箱号当前表单字段带入正确箱号记录（必要时创建新记录）"
+      - "若错误箱号 status=claimed 且有 bl：把对应 crp_bl.claimed[oldType] -1"
+      - "把错误箱号的 bl/status/tasks 转移给正确箱号，并按正确箱号 type 做 +1（需校验 quota）"</pre>
             </div>
 
             <!-- dict -->
             <div id="docDict" class="docCard hidden">
               <div class="docCardHd">
                 <b>slms-data-dict.md</b>
-                <div class="ops">
+                <div class="row">
                   <span class="badge">字段/口径说明（Data Dictionary）</span>
                   <button class="copyBtn" type="button" onclick="copyText('dictText')">复制</button>
                 </div>
               </div>
-<pre class="code" id="dictText"># SLMS - 提箱单（CRP）配箱（container-assign-to-crp）数据字典（v1）
+<pre class="code" id="dictText"># SLMS - 提箱单（CRP）配箱 + 箱号更正（container-assign-to-crp）数据字典（v1）
 
-## 1) 左侧：提箱单（CRP）bls（演示数据）
-- bl：提箱单号（页面显示“提箱单号/提单号”）
-- ship/carrier：船公司（OOCL/MAERSK）
-- vessel：航次（演示字段）
-- etd：开船日
-- trans/vendor：运输公司（中集/顺航）
-- pod：目的港（LOS ANGELES/HAMBURG/BUSAN）
-- country：目的国家（由 pod 映射）
-- quota：箱型配额（20GP/40GP/40HQ）
-- claimed：已配箱计数（字段名沿用 claimed，语义=已配箱）
+## 1) CRP（提箱单）侧
+- quota：箱型配额
+- claimed：已配箱数量（口径=已绑定到该提箱单的箱号数量）
+- 显示格式：claimed/quota
 
-## 2) 右侧：箱号明细 containers（演示数据）
-- no/containerNo：箱号（可编辑，保存时会自动转大写）
-- releaseDate：提箱日期（yyyy-mm-dd）
-- trans/vendor：运输公司
-- ship/carrier：船公司
-- pod：目的港
-- type/boxType：箱型（20GP/40GP/40HQ）
-- bl：已配箱时写入对应提箱单号
-- status：unclaimed=未配箱；claimed=已配箱
+## 2) 箱号侧（container）
+- no：箱号（主键）
+- type：箱型（20GP/40GP/40HQ）
+- ship/trans/pod/releaseDate：基础字段
+- bl/status：
+  - status=unclaimed：未配箱，bl 为空
+  - status=claimed：已配箱，bl=提箱单号
+- bookingNo/tare/vehicleNo：本页编辑弹窗新增字段（可空，自动带入已有值）
+- tasks.emptyCheck：演示用“空箱检查任务”标识（用于更正时转移）
 
-## 3) 口径与校验
-### A) 配箱并绑定（原子）
-- 任一箱号已配箱 -> 全部失败
-- 船公司/目的港必须与左侧提箱单一致
-- 箱型配额：claimed + need <= quota
-
-### B) 解绑
-- 仅允许解绑已配箱箱号
-- 解绑后：清空箱号的 bl，status=unclaimed，并回退提箱单 claimed[箱型]
-
-### C) 编辑（本页弹窗）
-- 允许修改：箱号/箱型/运输公司/船公司/目的港/提箱日期
-- 保存校验（演示）：箱号非空且长度>=8
-- 保存后直接更新本页数据；若箱号被改名，会同步更新选中集合与高亮行</pre>
+## 3) 错误箱号更正规则（核心口径）
+当用户在编辑弹窗勾选“错误箱号更正”并保存：
+1) 源箱号=oldNo（当前正在编辑的记录）
+2) 目标箱号=newNo（用户输入的新箱号）
+3) 字段带入：把源箱号表单当前字段（ship/trans/pod/type/releaseDate/bookingNo/tare/vehicleNo）写入目标箱号记录
+4) 绑定/计数：
+   - 若源箱号原本已配箱（status=claimed 且 bl 非空）：
+     - 对应提箱单 claimed[源箱型] -= 1
+     - 然后将绑定转移到目标箱号：
+       - 目标箱号 status=claimed, bl=源箱号 bl
+       - 对应提箱单 claimed[目标箱型] += 1（需校验不超过 quota）
+   - 源箱号回退为未配箱：status=unclaimed, bl=""
+5) 任务转移：
+   - tasks.emptyCheck 等从源箱号转移到目标箱号（若目标已有任务则合并）</pre>
             </div>
 
             <!-- ui -->
             <div id="docUi" class="docCard hidden">
               <div class="docCardHd">
                 <b>slms-ui-spec.md</b>
-                <div class="ops">
+                <div class="row">
                   <span class="badge">页面交互/约束（UI Spec）</span>
                   <button class="copyBtn" type="button" onclick="copyText('uiText')">复制</button>
                 </div>
               </div>
-<pre class="code" id="uiText"># SLMS - 提箱单（CRP）配箱 UI Spec（v1）
+<pre class="code" id="uiText"># SLMS - 提箱单（CRP）配箱（container-assign-to-crp）UI Spec（v1）
 
 ## 1) 页面布局
-- 左：提箱单（CRP）查询 + 列表 + 抬头详情
-- 右：箱号明细（配箱对象）查询 + 列表 + 多选操作
-- 中间分割线可拖动调整左右宽度，并记住比例（localStorage）
+- 左侧：提箱单（CRP）查询 + 抬头详情 + 明细表
+- 右侧：箱号明细（配箱对象）
+- 中间：拖动分割条（记住上次比例 localStorage）
 
-## 2) 列表滚动默认规则（全局约定）
-- 所有显示列表（表格/列表视图）根据画面大小自适应：
-  - 内容溢出时自动出现滚动条（优先纵向滚动）
-  - 宽表/长行支持横向滚动
-- 本页：左侧明细、右侧明细、日志区、三件套内容区、代码块均按此规则实现
+## 2) 列表滚动默认规则（统一约定）
+- 所有显示列表（表格/列表视图）根据画面大小自适应
+- 内容溢出时自动出现滚动条：优先纵向滚动；宽表/长行支持横向滚动
 
-## 3) 选择与联动
-- 点击左侧提箱单行：更新抬头详情，并刷新 Tab 标题
-- 点击右侧箱号行：高亮；若已配箱则自动定位并高亮对应提箱单
+## 3) 配箱并绑定（All-or-Nothing）
+- 前提：必须选择左侧提箱单 + 右侧至少勾选1个箱号
+- 校验：
+  - 已配箱必须先解绑
+  - 船公司/目的港一致
+  - 提箱单箱型配额充足
+- 失败：列出全部原因并阻止全部操作
+- 成功：更新 container.status/bl，并同步 crp.claimed
 
-## 4) 配箱并绑定（原子）
-- 前置：必须先选中左侧提箱单，且右侧至少勾选 1 个箱号
-- 校验失败：弹窗列出全部原因，且阻止全部操作
-- 校验通过：将选中箱号全部绑定到该提箱单，并更新已配箱计数
+## 4) 解绑
+- 仅对已配箱箱号生效
+- 解绑后：
+  - container.status=unclaimed, bl=""
+  - crp.claimed[type] -= 1
 
-## 5) 解绑
-- 仅解绑已配箱箱号
-- 弹窗确认列表后执行
-- 执行后：清空箱号的提箱单号，并回退提箱单已配箱计数
+## 5) 编辑（页面内 Modal）
+- 右侧每行“编辑”打开页面内 Modal（无 window.open，无地址栏）
+- Modal 字段：
+  - 原字段：箱号、箱型、运输公司、船公司、目的港、提箱日期
+  - 新增：Booking No. / Tare / 车辆号码
+- 保存后：更新本页数据并刷新列表；若该箱已配箱且修改了箱型，需同步调整 claimed（本演示以更正流程为主）
 
-## 6) 编辑（内嵌弹窗，替代新开页面）
-- 入口：右侧每行“编辑”按钮
-- 弹窗内可编辑：箱号/箱型/运输公司/船公司/目的港/提箱日期
-- 保存校验（演示）：箱号不能为空，长度>=8
-- 保存后立即刷新本页列表并高亮该箱号（如改名则同步更新选中集合）</pre>
+## 6) 错误箱号更正（编辑 Modal 内）
+- 勾选“错误箱号更正”后显示红色警示区
+- “检查”按钮：
+  - 若系统存在 newNo：显示其字段预览
+  - 若不存在：提示“无当前箱号”（保存时创建新记录）
+- 保存时：
+  - 把错误箱号表单字段带入正确箱号记录
+  - 若错误箱号已配箱：先 claimed[oldType] -= 1，再 claimed[newType] += 1（需校验 quota）
+  - 把空箱检查任务等从错误箱号转移到正确箱号
+  - 错误箱号回退为未配箱</pre>
             </div>
+
           </div>
         </div>
       </div>
@@ -619,19 +667,18 @@ integration:
   </div>
 
 <script>
-/* ================= 版本 & 三件套（必须随版本维护） ================= */
+/* ================= 版本 & 三件套弹窗 ================= */
 const VERSION = "container-assign-to-crp-v1";
 verText.textContent = VERSION;
+verInline.textContent = VERSION;
 
 const reqMask = document.getElementById("reqMask");
-const kitVerInline = document.getElementById("kitVerInline");
-const reqVer = document.getElementById("reqVer");
-kitVerInline.textContent = VERSION;
-reqVer.textContent = VERSION;
-
-function openReq(){ reqMask.style.display = "flex"; }
+const reqVer  = document.getElementById("reqVer");
+document.getElementById("verBtn").addEventListener("click", ()=>{
+  reqVer.textContent = VERSION;
+  reqMask.style.display = "flex";
+});
 function closeReq(){ reqMask.style.display = "none"; }
-verBtn.addEventListener("click", openReq);
 reqMask.addEventListener("click", (e)=>{ if(e.target===reqMask) closeReq(); });
 
 function showDoc(which){
@@ -643,16 +690,11 @@ function showDoc(which){
   });
 }
 function copyText(id){
-  const el = document.getElementById(id);
-  const txt = el ? el.textContent : '';
+  const el=document.getElementById(id);
+  const txt=el?el.textContent:'';
   if(!txt) return;
   try{ navigator.clipboard.writeText(txt); logLine("已复制三件套内容到剪贴板"); }
   catch(_){ alert("复制失败：请手动选择文本复制"); }
-}
-
-function escapeHtml(s){
-  return String(s??"").replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;")
-    .replaceAll('"',"&quot;").replaceAll("'","&#39;");
 }
 
 /* ================= Tab title sync (for index tab workspace) ================= */
@@ -713,14 +755,11 @@ function applySplit(leftPct){
   window.addEventListener("pointerup", end);
 })();
 
-/* ================= Sample Data ================= */
-const TYPES = ["20GP","40GP","40HQ"];
-const SHIPS = ["OOCL","MAERSK"];
-const TRANS = ["中集","顺航"];
-const PODS  = ["LOS ANGELES","HAMBURG","BUSAN"];
-const COUNTRIES = { "LOS ANGELES":"USA", "HAMBURG":"DE", "BUSAN":"KR" };
-const VESSELS = ["STAR RIVER 012W","BLUE OCEAN 118E","PACIFIC 003N","EAGLE 021S"];
-
+/* ================= 工具 ================= */
+function escapeHtml(s){
+  return String(s??"").replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;")
+    .replaceAll('"',"&quot;").replaceAll("'","&#39;");
+}
 function pad(n){ return String(n).padStart(2,"0"); }
 function iso(d){ return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`; }
 function todayISO(){ return iso(new Date()); }
@@ -734,6 +773,14 @@ function logLine(msg){
   const stamp = `${pad(t.getHours())}:${pad(t.getMinutes())}:${pad(t.getSeconds())}`;
   log.innerHTML = `<div><span class="t">${stamp}</span> ${escapeHtml(msg)}</div>` + log.innerHTML;
 }
+
+/* ================= Sample Data ================= */
+const TYPES = ["20GP","40GP","40HQ"];
+const SHIPS = ["OOCL","MAERSK"];
+const TRANS = ["中集","顺航"];
+const PODS  = ["LOS ANGELES","HAMBURG","BUSAN"];
+const COUNTRIES = { "LOS ANGELES":"USA", "HAMBURG":"DE", "BUSAN":"KR" };
+const VESSELS = ["STAR RIVER 012W","BLUE OCEAN 118E","PACIFIC 003N","EAGLE 021S"];
 
 /* BLs: 24 rows */
 const bls = Array.from({length:24}, (_,i)=>{
@@ -768,7 +815,14 @@ const containers = Array.from({length:30}, (_,i)=>{
     type,
     releaseDate: addDaysISO(todayISO(), -(i%18)),
     bl: "",
-    status: "unclaimed"
+    status: "unclaimed",
+
+    // 新增字段（演示：部分有值）
+    bookingNo: (i%7===0) ? `BK202512${pad(10+(i%15))}-0${(i%3)+1}` : "",
+    tare: (i%5===0) ? String(3600 + (i%6)*120) : "",
+    vehicleNo: (i%8===0) ? `津A${pad(10+(i%89))}${pad(20+(i%79))}` : "",
+
+    tasks: { emptyCheck: (i%9===0) } // 演示：空箱检查任务
   };
 });
 
@@ -807,8 +861,8 @@ function renderContainers(){
   containerBody.innerHTML = "";
 
   const rows = containers.filter(c=>{
-    if(box && !String(c.no||"").toUpperCase().includes(box)) return false;
-    if(bl && !(c.bl||"").toUpperCase().includes(bl)) return false;
+    if(box && !c.no.includes(box)) return false;
+    if(bl && !(c.bl||"").includes(bl)) return false;
     if(st && c.status!==st) return false;
     if(tr && c.trans!==tr) return false;
     if(ds && c.releaseDate<ds) return false;
@@ -822,7 +876,7 @@ function renderContainers(){
     if(c.no===selectedRowNo) trEl.classList.add("rowSelected");
 
     trEl.innerHTML = `
-      <td><input type="checkbox" onclick="selectOne(event,'${escapeHtml(c.no)}')"></td>
+      <td><input type="checkbox" onclick="selectOne(event,'${c.no}')"></td>
       <td>${escapeHtml(c.no)}</td>
       <td>${escapeHtml(c.releaseDate)}</td>
       <td>${escapeHtml(c.trans)}</td>
@@ -831,7 +885,7 @@ function renderContainers(){
       <td>${escapeHtml(c.type)}</td>
       <td>${escapeHtml(c.bl||"")}</td>
       <td>${c.status==="claimed" ? `<span class="tag ok">已配箱</span>` : `<span class="tag warn">未配箱</span>`}</td>
-      <td><div class="ops"><button class="linkbtn" onclick="openEdit(event,'${escapeHtml(c.no)}')">编辑</button></div></td>
+      <td><div class="ops"><button class="linkbtn" onclick="openEditModal(event,'${c.no}')">编辑</button></div></td>
     `;
 
     trEl.addEventListener("click", ()=>{
@@ -880,9 +934,9 @@ function renderBLs(){
       <td>${escapeHtml(b.trans)}</td>
       <td>${escapeHtml(b.country)}</td>
       <td>${escapeHtml(b.pod)}</td>
-      <td>${escapeHtml(b.claimed["20GP"])}/${escapeHtml(b.quota["20GP"])}</td>
-      <td>${escapeHtml(b.claimed["40GP"])}/${escapeHtml(b.quota["40GP"])}</td>
-      <td>${escapeHtml(b.claimed["40HQ"])}/${escapeHtml(b.quota["40HQ"])}</td>
+      <td>${b.claimed["20GP"]}/${b.quota["20GP"]}</td>
+      <td>${b.claimed["40GP"]}/${b.quota["40GP"]}</td>
+      <td>${b.claimed["40HQ"]}/${b.quota["40HQ"]}</td>
     `;
     trEl.addEventListener("click", ()=>{
       currentBL = b;
@@ -906,7 +960,7 @@ function updateBLDetail(){
     提箱单号：<b>${escapeHtml(currentBL.bl)}</b> ｜ 船公司：<b>${escapeHtml(currentBL.ship)}</b> ｜ 航次：<b>${escapeHtml(currentBL.vessel)}</b><br/>
     运输公司：<b>${escapeHtml(currentBL.trans)}</b> ｜ FF担当：<b>${escapeHtml(currentBL.ff)}</b> ｜ ETD：<b>${escapeHtml(currentBL.etd)}</b><br/>
     目的国家：<b>${escapeHtml(currentBL.country)}</b> ｜ 目的港：<b>${escapeHtml(currentBL.pod)}</b><br/>
-    箱型配额：20GP <b>${escapeHtml(currentBL.claimed["20GP"])}</b>/<b>${escapeHtml(currentBL.quota["20GP"])}</b> ｜ 40GP <b>${escapeHtml(currentBL.claimed["40GP"])}</b>/<b>${escapeHtml(currentBL.quota["40GP"])}</b> ｜ 40HQ <b>${escapeHtml(currentBL.claimed["40HQ"])}</b>/<b>${escapeHtml(currentBL.quota["40HQ"])}</b>
+    箱型配额：20GP <b>${currentBL.claimed["20GP"]}</b>/<b>${currentBL.quota["20GP"]}</b> ｜ 40GP <b>${currentBL.claimed["40GP"]}</b>/<b>${currentBL.quota["40GP"]}</b> ｜ 40HQ <b>${currentBL.claimed["40HQ"]}</b>/<b>${currentBL.quota["40HQ"]}</b>
   `;
   refreshTabTitle();
 }
@@ -950,109 +1004,6 @@ function locateBL(blNo){
   logLine(`已定位提箱单：${blNo}`);
 }
 
-/* ================= ✅ 编辑：打开内嵌弹窗（替代 window.open） ================= */
-const editMask = document.getElementById("editMask");
-const editTargetNo = document.getElementById("editTargetNo");
-const edit_fNo = document.getElementById("edit_fNo");
-const edit_fType = document.getElementById("edit_fType");
-const edit_fTrans = document.getElementById("edit_fTrans");
-const edit_fShip = document.getElementById("edit_fShip");
-const edit_fPod = document.getElementById("edit_fPod");
-const edit_fDate = document.getElementById("edit_fDate");
-const edit_preview = document.getElementById("edit_preview");
-
-let editOldNo = "";
-function openEdit(e, containerNo){
-  e.stopPropagation();
-  const no = String(containerNo||"").trim().toUpperCase();
-  const c = containers.find(x=>String(x.no||"").toUpperCase()===no);
-  if(!c){
-    alert("未找到箱号：" + no);
-    return;
-  }
-
-  editOldNo = c.no; // 保留原始
-  editTargetNo.textContent = c.no;
-
-  // 回填表单（字段沿用 v4：no/type/trans/ship/pod/releaseDate）
-  edit_fNo.value = String(c.no||"").toUpperCase();
-  edit_fType.value = c.type || "20GP";
-  edit_fTrans.value = c.trans || "中集";
-  edit_fShip.value = c.ship || "OOCL";
-  edit_fPod.value = c.pod || "LOS ANGELES";
-  edit_fDate.value = c.releaseDate || todayISO();
-
-  renderEditPreview();
-  editMask.style.display = "flex";
-}
-function closeEdit(){
-  editMask.style.display = "none";
-  editOldNo = "";
-}
-editMask.addEventListener("click", (e)=>{ if(e.target===editMask) closeEdit(); });
-
-function renderEditPreview(){
-  const newNo = (edit_fNo.value||"").trim().toUpperCase();
-  edit_preview.innerHTML = `
-    <b>保存更新预览</b><br/>
-    oldNo: <code>${escapeHtml(editOldNo||"(空)")}</code><br/>
-    newNo: <code>${escapeHtml(newNo||"(空)")}</code><br/>
-    ship: <code>${escapeHtml(edit_fShip.value)}</code> ｜ trans: <code>${escapeHtml(edit_fTrans.value)}</code><br/>
-    pod: <code>${escapeHtml(edit_fPod.value)}</code> ｜ type: <code>${escapeHtml(edit_fType.value)}</code><br/>
-    releaseDate: <code>${escapeHtml(edit_fDate.value||"(空)")}</code>
-  `;
-}
-
-// v4 的 input+change 双保险（这里同样做）
-[edit_fNo, edit_fDate].forEach(el=>el.addEventListener("input", renderEditPreview));
-[edit_fType, edit_fTrans, edit_fShip, edit_fPod].forEach(el=>{
-  el.addEventListener("input", renderEditPreview);
-  el.addEventListener("change", renderEditPreview);
-});
-
-function saveEdit(){
-  const newNo = (edit_fNo.value || "").trim().toUpperCase();
-  if(!newNo){
-    alert("箱号不能为空。");
-    return;
-  }
-  if(newNo.length < 8){
-    alert("箱号长度看起来不正确（演示校验），请检查。");
-    return;
-  }
-
-  // 允许改名，但需避免与现有箱号冲突（除自己）
-  const conflict = containers.find(x=>{
-    const n = String(x.no||"").trim().toUpperCase();
-    return n === newNo && String(x.no||"") !== String(editOldNo||"");
-  });
-  if(conflict){
-    alert("保存失败：目标箱号已存在（" + newNo + "）");
-    return;
-  }
-
-  const payload = {
-    oldNo: editOldNo || newNo,
-    newNo,
-    ship: edit_fShip.value,
-    trans: edit_fTrans.value,
-    pod: edit_fPod.value,
-    type: edit_fType.value,
-    releaseDate: edit_fDate.value || todayISO(),
-    ts: Date.now()
-  };
-
-  // 直接更新本页数据（不再跨页面）
-  applyContainerUpdate(payload);
-
-  // 兼容兜底：仍写 localStorage（如未来需要别的页面监听）
-  try{ localStorage.setItem("slms_demo_container_updated", JSON.stringify(payload)); }catch(_){}
-
-  logLine(`编辑保存：${payload.oldNo} → ${payload.newNo}`);
-  closeEdit();
-}
-
-/* ================= 解绑 / 配箱 ================= */
 function unbindConfirm(){
   const targets = containers.filter(c=>selected.has(c.no));
   const claimed = targets.filter(c=>c.status==="claimed");
@@ -1126,59 +1077,352 @@ function bindAtomic(){
   updateBLDetail();
 }
 
-/* ================= Cross-page Update（保留 applyContainerUpdate 作为统一入口） ================= */
-window.addEventListener("storage", (ev)=>{
-  if(ev.key !== "slms_demo_container_updated") return;
-  try{
-    const payload = JSON.parse(ev.newValue || "{}");
-    applyContainerUpdate(payload);
-  }catch(_){}
+/* ================= 编辑 Modal：核心逻辑 ================= */
+const editMask = document.getElementById("editMask");
+let editCtx = {
+  oldNo: "",
+  oldType: "",
+  oldBl: "",
+  wasClaimed: false,
+  snapshot: null
+};
+let newNoCheck = { checkedNo:"", exists:false, found:null };
+
+function getQueryByNo(no){
+  return containers.find(x=>x.no===no);
+}
+
+function openEditModal(e, containerNo){
+  e.stopPropagation();
+
+  const c = getQueryByNo(containerNo);
+  if(!c){ alert("未找到箱号记录"); return; }
+
+  // 记录上下文（用于更正/回滚）
+  editCtx.oldNo = c.no;
+  editCtx.oldType = c.type;
+  editCtx.oldBl = c.bl || "";
+  editCtx.wasClaimed = (c.status==="claimed" && !!c.bl);
+  editCtx.snapshot = JSON.parse(JSON.stringify(c));
+
+  // 填表
+  fNo.value = c.no || "";
+  fType.value = c.type || "20GP";
+  fTrans.value = c.trans || "中集";
+  fShip.value  = c.ship  || "OOCL";
+  fPod.value   = c.pod   || "BUSAN";
+  fDate.value  = c.releaseDate || todayISO();
+
+  fBookingNo.value = c.bookingNo || "";
+  fTare.value = c.tare || "";
+  fVehicleNo.value = c.vehicleNo || "";
+
+  fixNoChk.checked = false;
+  toggleFixBox();
+
+  editHint.innerHTML = `
+    当前箱号：<code>${escapeHtml(c.no)}</code>
+    ｜ 状态：<code>${escapeHtml(c.status)}</code>
+    ｜ 提箱单：<code>${escapeHtml(c.bl||"(无)")}</code>
+    ${c.tasks?.emptyCheck ? "｜ 任务：<code>emptyCheck=Y</code>" : ""}
+  `;
+
+  renderEditPreview();
+  editMask.style.display = "flex";
+}
+
+function closeEdit(){
+  editMask.style.display = "none";
+  editCtx = { oldNo:"", oldType:"", oldBl:"", wasClaimed:false, snapshot:null };
+  newNoCheck = { checkedNo:"", exists:false, found:null };
+}
+
+editMask.addEventListener("click", (ev)=>{ if(ev.target===editMask) closeEdit(); });
+
+function toggleFixBox(){
+  const on = fixNoChk.checked;
+  fixBox.style.display = on ? "block" : "none";
+  if(!on){
+    newNo.value = "";
+    fixTip.style.display = "none";
+    fixPreview.style.display = "none";
+    newNoCheck = { checkedNo:"", exists:false, found:null };
+  }else{
+    clearFixTip();
+  }
+  renderEditPreview();
+}
+
+function clearFixTip(){
+  fixTip.style.display = "none";
+  fixPreview.style.display = "none";
+  newNoCheck = { checkedNo:"", exists:false, found:null };
+}
+
+function normalizeNo(v){
+  return (v||"").trim().toUpperCase();
+}
+
+/* 演示校验：箱号长度 >= 8（后续可替换正式校验算法） */
+function basicNoCheck(no){
+  if(!no) return "箱号不能为空";
+  if(no.length < 8) return "箱号长度看起来不正确（演示校验）";
+  return "";
+}
+
+function checkNewNo(){
+  const nn = normalizeNo(newNo.value);
+  const err = basicNoCheck(nn);
+  if(err){
+    fixTip.className = "tipBad";
+    fixTip.textContent = "检查失败：" + err;
+    fixTip.style.display = "block";
+    fixPreview.style.display = "none";
+    newNoCheck = { checkedNo: nn, exists:false, found:null };
+    return;
+  }
+
+  const found = containers.find(x=>x.no===nn);
+  newNoCheck = { checkedNo: nn, exists: !!found, found: found ? JSON.parse(JSON.stringify(found)) : null };
+
+  if(!found){
+    fixTip.className = "tipBad";
+    fixTip.textContent = "无当前箱号：系统中未找到该箱号（保存时将创建新记录，并带入上方错误箱号字段）。";
+    fixTip.style.display = "block";
+    fixPreview.style.display = "none";
+    return;
+  }
+
+  fixTip.className = "tipOk";
+  fixTip.textContent = "已找到该箱号：保存时将把上方（错误箱号）的字段覆盖带入该箱号，并转移绑定/任务。";
+  fixTip.style.display = "block";
+
+  fixPreview.style.display = "block";
+  fixPreview.innerHTML = `
+    <b>系统中已存在的新箱号记录（仅预览）</b><br/>
+    no: <code>${escapeHtml(found.no)}</code> ｜ status: <code>${escapeHtml(found.status)}</code> ｜ bl: <code>${escapeHtml(found.bl||"(无)")}</code><br/>
+    ship/trans: <code>${escapeHtml(found.ship)}</code> / <code>${escapeHtml(found.trans)}</code> ｜ pod: <code>${escapeHtml(found.pod)}</code><br/>
+    type: <code>${escapeHtml(found.type)}</code> ｜ releaseDate: <code>${escapeHtml(found.releaseDate)}</code><br/>
+    Booking: <code>${escapeHtml(found.bookingNo||"(空)")}</code> ｜ Tare: <code>${escapeHtml(found.tare||"(空)")}</code> ｜ 车辆: <code>${escapeHtml(found.vehicleNo||"(空)")}</code><br/>
+    tasks.emptyCheck: <code>${found.tasks?.emptyCheck ? "Y" : "N"}</code>
+  `;
+}
+
+function renderEditPreview(){
+  const nn = normalizeNo(fNo.value);
+  const payload = {
+    oldNo: editCtx.oldNo || "(空)",
+    newNo: nn || "(空)",
+    ship: fShip.value,
+    trans: fTrans.value,
+    pod: fPod.value,
+    type: fType.value,
+    releaseDate: fDate.value || "(空)",
+    bookingNo: (fBookingNo.value||"").trim(),
+    tare: (fTare.value||"").trim(),
+    vehicleNo: (fVehicleNo.value||"").trim(),
+    fixWrongNo: fixNoChk.checked ? "Y" : "N",
+    fixTargetNo: fixNoChk.checked ? (normalizeNo(newNo.value)||"(空)") : "(无)"
+  };
+
+  preview.innerHTML = `
+    <b>保存预览</b><br/>
+    oldNo: <code>${escapeHtml(payload.oldNo)}</code> → newNo: <code>${escapeHtml(payload.newNo)}</code><br/>
+    ship/trans/pod: <code>${escapeHtml(payload.ship)}</code> / <code>${escapeHtml(payload.trans)}</code> / <code>${escapeHtml(payload.pod)}</code><br/>
+    type: <code>${escapeHtml(payload.type)}</code> ｜ releaseDate: <code>${escapeHtml(payload.releaseDate)}</code><br/>
+    Booking: <code>${escapeHtml(payload.bookingNo||"(空)")}</code> ｜ Tare: <code>${escapeHtml(payload.tare||"(空)")}</code> ｜ 车辆: <code>${escapeHtml(payload.vehicleNo||"(空)")}</code><br/>
+    错误箱号更正: <code>${payload.fixWrongNo}</code> ｜ 目标箱号: <code>${escapeHtml(payload.fixTargetNo)}</code>
+  `;
+}
+
+function bindLive(){
+  renderEditPreview();
+}
+[fNo,fBookingNo,fTare,fVehicleNo,fDate,newNo].forEach(el=>el.addEventListener("input", bindLive));
+[fType,fTrans,fShip,fPod].forEach(el=>{
+  el.addEventListener("input", bindLive);
+  el.addEventListener("change", bindLive);
 });
 
-function applyContainerUpdate(payload){
-  if(!payload || !payload.oldNo) return;
-  const { oldNo, newNo, ship, trans, pod, type, releaseDate } = payload;
+function saveEdit(){
+  // 找源记录
+  const src = containers.find(x=>x.no===editCtx.oldNo);
+  if(!src){
+    alert("保存失败：源箱号记录不存在（可能已被删除）");
+    closeEdit();
+    return;
+  }
 
-  const c = containers.find(x=>x.no===oldNo);
-  if(!c){
-    // 可能 oldNo 已被改名，再尝试按 newNo 找
-    const c2 = containers.find(x=>x.no===newNo);
-    if(!c2){
-      logLine(`收到编辑回传，但未找到箱号：${oldNo}`);
+  // 表单箱号（正常编辑场景：允许修改箱号）
+  const desiredNo = normalizeNo(fNo.value);
+  const e1 = basicNoCheck(desiredNo);
+  if(e1){ alert(e1); return; }
+
+  // 若勾选错误箱号更正，则以 newNo 为最终目标箱号（箱号更正优先）
+  const doFix = fixNoChk.checked;
+  const targetNo = doFix ? normalizeNo(newNo.value) : desiredNo;
+
+  if(doFix){
+    const e2 = basicNoCheck(targetNo);
+    if(e2){ alert("更正失败：" + e2); return; }
+    if(targetNo === editCtx.oldNo){
+      alert("更正失败：新的正确箱号不能与错误箱号相同。");
       return;
     }
   }
 
-  const target = containers.find(x=>x.no===oldNo) || containers.find(x=>x.no===newNo);
-  if(!target) return;
-
-  // 如果改了箱型，需要保持提箱单已配箱计数一致（仅当已配箱时）
-  if(target.status==="claimed" && target.bl){
-    const b = bls.find(x=>x.bl===target.bl);
-    if(b){
-      const oldType = target.type;
-      const nextType = type || oldType;
-      if(oldType !== nextType){
-        b.claimed[oldType] = Math.max(0, (b.claimed[oldType]||0) - 1);
-        b.claimed[nextType] = (b.claimed[nextType]||0) + 1;
-      }
+  // 目标箱号冲突校验（普通改号时）
+  if(!doFix && desiredNo !== editCtx.oldNo){
+    const dup = containers.find(x=>x.no===desiredNo);
+    if(dup){
+      alert(`保存失败：目标箱号已存在（${dup.no}）。若是更正箱号，请勾选“错误箱号更正”。`);
+      return;
     }
   }
 
-  target.no = (newNo || target.no).trim().toUpperCase();
-  if(ship) target.ship = ship;
-  if(trans) target.trans = trans;
-  if(pod) target.pod = pod;
-  if(type) target.type = type;
-  if(releaseDate) target.releaseDate = releaseDate;
+  // 组装“要带入的字段”（来自当前表单：错误箱号字段 -> 正确箱号）
+  const patch = {
+    ship: fShip.value,
+    trans: fTrans.value,
+    pod: fPod.value,
+    type: fType.value,
+    releaseDate: fDate.value || todayISO(),
+    bookingNo: (fBookingNo.value||"").trim(),
+    tare: (fTare.value||"").trim(),
+    vehicleNo: (fVehicleNo.value||"").trim()
+  };
 
-  // 同步 selection / 高亮
+  // 任务（用于转移/合并）
+  const srcTasks = src.tasks ? JSON.parse(JSON.stringify(src.tasks)) : {};
+  const srcHadEmptyCheck = !!srcTasks.emptyCheck;
+
+  // ========= 分支 A：错误箱号更正 =========
+  if(doFix){
+    const blNo = src.bl || "";
+    const wasClaimed = (src.status==="claimed" && !!blNo);
+    const blObj = blNo ? bls.find(x=>x.bl===blNo) : null;
+
+    // 找/建目标箱号记录
+    let tgt = containers.find(x=>x.no===targetNo);
+    const tgtExists = !!tgt;
+
+    // 先做配额/计数的原子校验（避免改到一半失败）
+    // 1) 若源已配箱：将要 -1（源箱型=src.type）
+    // 2) 目标将要 +1（目标箱型=patch.type）
+    if(wasClaimed && blObj){
+      const oldType = src.type;
+      const newType = patch.type;
+
+      // 先计算“回退后”的 claimed
+      const claimedAfterRemove = Object.assign({}, blObj.claimed);
+      claimedAfterRemove[oldType] = Math.max(0, (claimedAfterRemove[oldType]||0) - 1);
+
+      // 再计算“加上目标”后的 claimed
+      const afterAdd = Object.assign({}, claimedAfterRemove);
+      afterAdd[newType] = (afterAdd[newType]||0) + 1;
+
+      if(afterAdd[newType] > (blObj.quota[newType]||0)){
+        alert(`更正失败：目标箱型 ${newType} 超出该提箱单配额（当前已配箱 ${claimedAfterRemove[newType]||0}，配额 ${blObj.quota[newType]||0}）。`);
+        return;
+      }
+    }
+
+    // ========= 执行更正（原子式更新） =========
+
+    // (1) 若源已配箱，先把 claimed[源箱型] -1，并解绑源
+    if(wasClaimed && blObj){
+      blObj.claimed[src.type] = Math.max(0, (blObj.claimed[src.type]||0) - 1);
+    }
+
+    // 源回退为未配箱（无论之前是否配箱，都作为“错误箱号”留档）
+    src.status = "unclaimed";
+    src.bl = "";
+
+    // (2) 目标记录：存在则覆盖字段，不存在则新建
+    if(!tgt){
+      tgt = {
+        no: targetNo,
+        ship: patch.ship,
+        trans: patch.trans,
+        pod: patch.pod,
+        type: patch.type,
+        releaseDate: patch.releaseDate,
+        bl: "",
+        status: "unclaimed",
+        bookingNo: patch.bookingNo,
+        tare: patch.tare,
+        vehicleNo: patch.vehicleNo,
+        tasks: {}
+      };
+      containers.push(tgt);
+    }else{
+      // 覆盖带入（按你的要求：把错误箱号相关字段带入正确箱号）
+      tgt.ship = patch.ship;
+      tgt.trans = patch.trans;
+      tgt.pod = patch.pod;
+      tgt.type = patch.type;
+      tgt.releaseDate = patch.releaseDate;
+      tgt.bookingNo = patch.bookingNo;
+      tgt.tare = patch.tare;
+      tgt.vehicleNo = patch.vehicleNo;
+      if(!tgt.tasks) tgt.tasks = {};
+    }
+
+    // (3) 绑定转移：若源之前有 bl，则把 bl/status 赋给目标，并 claimed[目标箱型] +1
+    if(wasClaimed && blNo){
+      tgt.status = "claimed";
+      tgt.bl = blNo;
+
+      const blObj2 = bls.find(x=>x.bl===blNo);
+      if(blObj2){
+        blObj2.claimed[tgt.type] = (blObj2.claimed[tgt.type]||0) + 1;
+      }
+    }
+
+    // (4) 任务转移（示例：emptyCheck）
+    // 规则：从源转移到目标；若目标已有任务则合并（OR）
+    if(srcHadEmptyCheck){
+      tgt.tasks.emptyCheck = true;
+    }
+
+    // (5) 选中状态迁移
+    if(selected.has(editCtx.oldNo)){
+      selected.delete(editCtx.oldNo);
+      selected.add(targetNo);
+    }
+    selectedRowNo = targetNo;
+
+    logLine(`错误箱号更正：${editCtx.oldNo} → ${targetNo}${tgtExists ? "（目标已存在）" : "（已新建目标）"}${wasClaimed ? "｜绑定/计数/任务已转移" : ""}`);
+    closeEdit();
+    renderContainers();
+    renderBLs();
+    updateBLDetail();
+    return;
+  }
+
+  // ========= 分支 B：普通编辑（不勾选更正） =========
+  // 允许改号（若不冲突）
+  const oldNo = src.no;
+  src.no = desiredNo;
+
+  src.ship = patch.ship;
+  src.trans = patch.trans;
+  src.pod = patch.pod;
+  src.type = patch.type;
+  src.releaseDate = patch.releaseDate;
+  src.bookingNo = patch.bookingNo;
+  src.tare = patch.tare;
+  src.vehicleNo = patch.vehicleNo;
+
+  // 更新选中集合
   if(selected.has(oldNo)){
     selected.delete(oldNo);
-    selected.add(target.no);
+    selected.add(desiredNo);
   }
-  selectedRowNo = target.no;
+  selectedRowNo = desiredNo;
 
+  logLine(`编辑保存：${oldNo} → ${desiredNo}`);
+  closeEdit();
   renderContainers();
   renderBLs();
   updateBLDetail();
