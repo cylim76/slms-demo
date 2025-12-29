@@ -1,14 +1,16 @@
 <!--
 File: master/vessel-manage.html
-Version: vessel-manage-v1
+Version: vessel-manage-v2
 Date: 2025-12-29
 
-功能要点：
-1) 船舶主档（Vessel Master）维护：新增/编辑/停用（软删除）
-2) IMO 作为强唯一字段（必填）；船名必填
-3) 查询：关键词（船名/IMO）+ 状态
-4) 导出 CSV
-5) 右上角版本号可点击：显示页面功能要求（随版本维护）
+v2 变更点（在 v1 基础上，不丢功能）：
+1) 输入更受控：
+   - IMO：仅数字，最多7位（必填，强唯一）
+   - MMSI：仅数字，最多9位（可选）
+   - Call Sign / Flag：自动转大写（可选）
+   - 船名：自动压缩多余空格（必填）
+2) requirements 弹窗与右上角版本号同步更新为 v2
+3) 数据结构保持兼容：localStorage['slms_vessels_v1'] => {id,name,imo,mmsi,callSign,flag,type,status,remark,createdAt,updatedAt}
 -->
 
 <!doctype html>
@@ -75,7 +77,7 @@ code{font-family:ui-monospace,Menlo,Consolas,monospace}
     <button class="btn primary" type="button" onclick="openEdit()">新增船舶</button>
     <div class="ver" id="verBtn" title="点击查看页面功能要求">
       <span class="dot"></span>
-      <span>vessel-manage-v1</span>
+      <span>vessel-manage-v2</span>
     </div>
   </div>
 </div>
@@ -144,19 +146,23 @@ code{font-family:ui-monospace,Menlo,Consolas,monospace}
     <div class="modalBd">
       <div class="kv">
         <div class="k">船名（EN）<span style="color:var(--brand);font-weight:900">*</span></div>
-        <div><input class="input" id="f_name" placeholder="例如 STAR RIVER"></div>
+        <div><input class="input" id="f_name" placeholder="例如 STAR RIVER" oninput="onNameInput()"></div>
 
         <div class="k">IMO（唯一）<span style="color:var(--brand);font-weight:900">*</span></div>
-        <div><input class="input" id="f_imo" placeholder="7位数字，例如 9312345"></div>
+        <div>
+          <input class="input" id="f_imo" placeholder="7位数字，例如 9312345" inputmode="numeric" maxlength="7" oninput="onImoInput()">
+        </div>
 
         <div class="k">MMSI</div>
-        <div><input class="input" id="f_mmsi" placeholder="可选"></div>
+        <div>
+          <input class="input" id="f_mmsi" placeholder="可选（最多9位数字）" inputmode="numeric" maxlength="9" oninput="onMmsiInput()">
+        </div>
 
         <div class="k">Call Sign</div>
-        <div><input class="input" id="f_call" placeholder="可选"></div>
+        <div><input class="input" id="f_call" placeholder="可选" oninput="onUpper('f_call')"></div>
 
         <div class="k">Flag</div>
-        <div><input class="input" id="f_flag" placeholder="可选：PANAMA 等"></div>
+        <div><input class="input" id="f_flag" placeholder="可选：PANAMA 等" oninput="onUpper('f_flag')"></div>
 
         <div class="k">类型</div>
         <div>
@@ -179,6 +185,9 @@ code{font-family:ui-monospace,Menlo,Consolas,monospace}
         <div class="k">备注</div>
         <div><input class="input" id="f_remark" placeholder="可选"></div>
       </div>
+      <div class="small" style="margin-top:10px">
+        规则：IMO 强唯一；停用=软删除（历史引用保留）。
+      </div>
     </div>
     <div class="modalFt">
       <button class="btn" type="button" onclick="closeEdit()">取消</button>
@@ -191,13 +200,14 @@ code{font-family:ui-monospace,Menlo,Consolas,monospace}
 <div class="modalMask reqMask" id="reqMask">
   <div class="modal">
     <div class="modalHd">
-      <span>页面功能要求（vessel-manage.html / vessel-manage-v1）</span>
+      <span>页面功能要求（vessel-manage.html / vessel-manage-v2）</span>
       <span style="cursor:pointer;color:var(--muted)" onclick="closeReq()">关闭</span>
     </div>
     <div class="modalBd">
       <ol>
         <li>船舶主档支持新增/编辑/停用（软删除）；停用不删除历史引用。</li>
-        <li>IMO 为强唯一字段（必填）；船名必填；保存时做唯一性校验。</li>
+        <li>IMO 为强唯一字段（必填，7位数字）；船名必填；保存时做唯一性校验。</li>
+        <li>输入规范化：IMO/MMSI 仅数字；Call Sign/Flag 自动转大写；船名多空格压缩。</li>
         <li>支持查询：关键词（船名/IMO）+ 状态。</li>
         <li>列表支持导出 CSV。</li>
         <li>右上角版本号可点击弹窗：显示本页页面功能要求（与版本同步维护）。</li>
@@ -211,7 +221,7 @@ code{font-family:ui-monospace,Menlo,Consolas,monospace}
 
 <script>
 const LS_VESSELS = "slms_vessels_v1";
-const VERSION = "vessel-manage-v1";
+const VERSION = "vessel-manage-v2";
 
 /* requirements */
 const reqMask = document.getElementById("reqMask");
@@ -238,6 +248,29 @@ const q_status = document.getElementById("q_status");
 
 let editId = null;
 
+/* ===== 输入规范化 ===== */
+function collapseSpaces(s){ return String(s||"").trim().replace(/\s+/g,' '); }
+function digitsOnly(s, maxLen){
+  const t = String(s||"").replace(/\D/g,'');
+  return maxLen ? t.slice(0, maxLen) : t;
+}
+function onUpper(id){
+  const el=document.getElementById(id);
+  el.value = String(el.value||"").toUpperCase();
+}
+function onNameInput(){
+  const el=document.getElementById("f_name");
+  el.value = collapseSpaces(el.value);
+}
+function onImoInput(){
+  const el=document.getElementById("f_imo");
+  el.value = digitsOnly(el.value, 7);
+}
+function onMmsiInput(){
+  const el=document.getElementById("f_mmsi");
+  el.value = digitsOnly(el.value, 9);
+}
+
 function resetFilters(){
   q.value=""; q_status.value="";
   render();
@@ -254,6 +287,10 @@ function openEdit(row){
   document.getElementById("f_type").value = row?.type || "";
   document.getElementById("f_status").value = row?.status || "active";
   document.getElementById("f_remark").value = row?.remark || "";
+
+  // 规范化一次（避免历史数据乱格式）
+  onNameInput(); onImoInput(); onMmsiInput(); onUpper("f_call"); onUpper("f_flag");
+
   document.getElementById("editMask").style.display="flex";
 }
 function closeEdit(){ document.getElementById("editMask").style.display="none"; }
@@ -266,11 +303,11 @@ function validateIMO(imo){
 }
 
 function save(){
-  const name = document.getElementById("f_name").value.trim();
-  const imo  = document.getElementById("f_imo").value.trim();
-  const mmsi = document.getElementById("f_mmsi").value.trim();
-  const call = document.getElementById("f_call").value.trim();
-  const flag = document.getElementById("f_flag").value.trim();
+  let name = collapseSpaces(document.getElementById("f_name").value);
+  let imo  = digitsOnly(document.getElementById("f_imo").value, 7);
+  let mmsi = digitsOnly(document.getElementById("f_mmsi").value, 9);
+  let call = String(document.getElementById("f_call").value||"").trim().toUpperCase();
+  let flag = String(document.getElementById("f_flag").value||"").trim().toUpperCase();
   const type = document.getElementById("f_type").value.trim();
   const status = document.getElementById("f_status").value;
   const remark = document.getElementById("f_remark").value.trim();
@@ -341,6 +378,10 @@ function render(){
     const st = x.status==="active"
       ? `<span class="badge ok">启用</span>`
       : `<span class="badge off">停用</span>`;
+
+    // 注意：这里用对象字面量传参（JSON string 直接作为 JS 对象文本）
+    const objLiteral = JSON.stringify(x).replace(/</g,'\\u003c');
+
     tr.innerHTML = `
       <td><b>${esc(x.name||"")}</b></td>
       <td>${esc(x.imo||"")}</td>
@@ -352,7 +393,7 @@ function render(){
       <td>${esc(fmt(x.updatedAt))}</td>
       <td>
         <div class="ops">
-          <button class="link" type="button" onclick='openEdit(${JSON.stringify(x).replace(/'/g,"&#39;")})'>编辑</button>
+          <button class="link" type="button" onclick='openEdit(${objLiteral})'>编辑</button>
           <button class="link danger" type="button" onclick="toggleStatus('${esc(x.id)}')">${x.status==="active"?"停用":"启用"}</button>
         </div>
       </td>
@@ -399,7 +440,12 @@ function seedDemo(){
   ];
   demo.forEach(d=>{
     if(arr.some(x=>x.imo===d.imo)) return;
-    arr.unshift({ id:"VES-"+Date.now()+"-"+Math.random().toString(16).slice(2), ...d, createdAt:Date.now(), updatedAt:Date.now() });
+    arr.unshift({
+      id:"VES-"+Date.now()+"-"+Math.random().toString(16).slice(2),
+      ...d,
+      createdAt:Date.now(),
+      updatedAt:Date.now()
+    });
   });
   saveArr(arr);
   render();
