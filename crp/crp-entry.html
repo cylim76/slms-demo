@@ -1,12 +1,14 @@
 <!--
-File: crp/crp-management.html
-Version: crp-management-v16
+File: crp/crp-entry.html
+Version: crp-entry-v17
 Date: 2025-12-29
 
-v16 变更点（在 v15 基础上，确保不丢失任何功能）：
-1) 生成并内嵌“三件套”文本（slms-schema.yaml / slms-data-dict.md / slms-ui-spec.md）
-2) 点击右上角版本号弹窗：用“三件套”内容替换原 requirements 列表展示
-3) 右上角版本号显示与弹窗标题同步更新为 v16
+v17 变更点（在 v16 基础上，确保不丢失任何功能）：
+1) 航次选择改为读取 master/voyage-manage 的主数据：localStorage['slms_voyages_v1']
+2) 船公司/船舶从字典表取显示值：carriers=slms_carriers_v1(code), vessels=slms_vessels_v1(name)
+3) 本页“新建航次”兜底改为：下拉选船公司/船舶（不允许自由输入），并写入 slms_voyages_v1
+4) 文件名从 crp-management.html 改为 crp-entry.html（录入语义）
+5) 右上角版本号显示与“三件套”弹窗标题同步更新为 v17
 -->
 
 <!doctype html>
@@ -14,7 +16,7 @@ v16 变更点（在 v15 基础上，确保不丢失任何功能）：
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>CRP管理</title>
+<title>CRP录入</title>
 
 <style>
 :root{
@@ -200,7 +202,7 @@ pre.code{
     </label>
     <div class="ver" id="verBtn" title="点击查看三件套（schema / dict / ui spec）">
       <span class="dot"></span>
-      <span>crp-management-v16</span>
+      <span>crp-entry-v17</span>
     </div>
   </div>
 </div>
@@ -418,25 +420,29 @@ pre.code{
 
       <div style="height:1px;background:var(--line);margin:12px 0"></div>
 
+      <!-- v17: 新建航次（兜底：下拉选择船公司/船舶，不允许自由输入） -->
       <div id="newVoyBox" style="display:none">
-        <b>新建航次</b>
+        <b>新建航次（兜底演示：写入主数据）</b>
         <div class="formGrid" style="margin-top:10px">
           <div class="field">
             <div class="label">船公司<span class="req">*</span></div>
-            <input class="input" id="newCarrier" placeholder="例如：MSK">
+            <select class="select" id="newCarrierId"></select>
           </div>
           <div class="field">
             <div class="label">ETD<span class="req">*</span></div>
             <input class="input" id="newEtd" type="date">
           </div>
           <div class="field">
-            <div class="label">船名<span class="req">*</span></div>
-            <input class="input" id="newVessel" placeholder="例如：MSC ARINA">
+            <div class="label">船舶<span class="req">*</span></div>
+            <select class="select" id="newVesselId"></select>
           </div>
           <div class="field">
             <div class="label">航次<span class="req">*</span></div>
             <input class="input" id="newVoyage" placeholder="例如：552S">
           </div>
+        </div>
+        <div class="small" style="margin-top:8px">
+          说明：为保证受控，本页新建时不允许手输船公司/船舶；若下拉为空，请先维护 master 字典。
         </div>
         <div class="row" style="margin-top:10px">
           <button class="btn primary" type="button" onclick="createVoyage()">保存并加入主数据</button>
@@ -471,7 +477,7 @@ pre.code{
 <div class="modalMask" id="reqMask">
   <div class="modal" style="width:1060px;max-width:96vw">
     <div class="modalHd">
-      <span>三件套（CRP 录入 / crp-management-v16）</span>
+      <span>三件套（CRP 录入 / crp-entry-v17）</span>
       <span style="cursor:pointer;color:var(--muted)" onclick="closeReq()">关闭</span>
     </div>
     <div class="modalBd">
@@ -575,7 +581,7 @@ ui_contract:
           <span class="badge">字段/口径说明（Data Dictionary）</span>
         </div>
         <div class="docBd">
-<pre class="code"># SLMS - CRP 录入（crp-management）数据字典
+<pre class="code"># SLMS - CRP 录入（crp-entry）数据字典
 
 ## 1) voyage_master（航次主数据）
 | 字段 | 类型 | 必填 | 口径/说明 | 规则/校验 |
@@ -625,12 +631,12 @@ ui_contract:
           <span class="badge">页面交互/校验/入口（UI Spec）</span>
         </div>
         <div class="docBd">
-<pre class="code"># SLMS - CRP 录入页（crp-management）UI Spec
+<pre class="code"># SLMS - CRP 录入页（crp-entry）UI Spec
 
 ## 0. 页面定位
 - 用途：录入 CRP（按 Booking No 汇总）并在右侧列表检索/触发发送。
 - 一次录入：仅 1 个 Booking No（单行输入模型）。
-- 入口：crp/crp-management.html
+- 入口：crp/crp-entry.html
 
 ## 1. 布局与自适应
 - 顶部：标题 + 权限模拟开关（发送CRP） + 版本号（点击打开三件套弹窗）。
@@ -684,11 +690,12 @@ ui_contract:
 ## 3. 航次选择弹窗（系统主数据）
 - 列表：支持按 “船公司/船名/航次/ETD” 模糊搜索
 - 选择：点击“选择”回填主页面并关闭弹窗
-- 新建航次：
+- 新建航次（兜底）：
   - 点击“+ 新建航次”展开表单
-  - 必填：船公司、船名、航次、ETD
-  - 规则：完全相同（carrier+vessel+voyage+etd）不允许重复
-  - 保存后：写入主数据列表并自动回填主页面
+  - 必填：船公司（下拉）、船舶（下拉）、航次、ETD
+  - 规则：完全相同（carrierId+vesselId+voyageNo+etd）不允许重复
+  - 保存后：写入主数据 slms_voyages_v1 并自动回填主页面
+- 推荐：日常维护应在 master/voyage-manage.html 统一维护（本页新建仅作兜底演示）
 
 ## 4. 右侧 CRP 列表（按 Booking 汇总）
 - 数据源：localStorage['slms_crp_bookings_v1']（演示）
@@ -728,7 +735,7 @@ ui_contract:
       </div>
 
       <div class="small" style="margin-top:10px">
-        提示：本弹窗内容与版本号同步维护（v16）。
+        提示：本弹窗内容与版本号同步维护（v17）。
       </div>
     </div>
     <div class="modalFt">
@@ -743,6 +750,52 @@ const LS_KEY = 'slms_crp_bookings_v1';
 const LS_SPLIT = 'slms_crp_split_leftW_v1';
 const SEND_PAGE = 'send-crp.html';
 const VENDORS_SENT = ['中集','顺航'];
+
+/* ========= Master Data Keys（对齐 master/vessel-manage & voyage-manage） ========= */
+const LS_CARRIERS = 'slms_carriers_v1';
+const LS_VESSELS  = 'slms_vessels_v1';
+const LS_VOYAGES  = 'slms_voyages_v1';
+
+/* ========= Master Data Loaders ========= */
+function loadArr(key){
+  try{
+    const s = localStorage.getItem(key);
+    const arr = s ? JSON.parse(s) : [];
+    return Array.isArray(arr) ? arr : [];
+  }catch(e){ return []; }
+}
+function getCarrierCodeById(id){
+  const c = loadArr(LS_CARRIERS).find(x=>x.id===id);
+  return c?.code || '';
+}
+function getVesselNameById(id){
+  const v = loadArr(LS_VESSELS).find(x=>x.id===id);
+  return v?.name || '';
+}
+
+/* 将 voyage-manage 的结构映射为本页显示结构 */
+function mapVoyageRow(x){
+  // voyage-manage: {id, carrierId, vesselId, voyageNo, etd, status, ...}
+  const carrier = getCarrierCodeById(x.carrierId);
+  const vessel  = getVesselNameById(x.vesselId);
+  return {
+    id: x.id,
+    carrierId: x.carrierId,
+    vesselId: x.vesselId,
+    carrier,
+    vessel,
+    voyage: (x.voyageNo || ''),
+    etd: (x.etd || ''),
+    status: (x.status || 'active'),
+    _raw: x
+  };
+}
+
+/* 读取可用航次：只取 active */
+function loadVoyageMasters(){
+  const rows = loadArr(LS_VOYAGES).filter(x=>x && x.status !== 'inactive');
+  return rows.map(mapVoyageRow);
+}
 
 /* req */
 const reqMask = document.getElementById('reqMask');
@@ -853,17 +906,18 @@ function normalizeQty(v){
   return s;
 }
 
-/* 航次主数据 */
-let voyageMasters = [
-  { id:'V001', carrier:'MSK', vessel:'MAERSK SANTA', voyage:'123W', etd:'2025-12-28' },
-  { id:'V002', carrier:'MSC', vessel:'MSC ARINA', voyage:'552S', etd:'2025-12-29' },
-  { id:'V003', carrier:'COSCO', vessel:'COSCO SHIPPING', voyage:'88E', etd:'2025-12-30' },
-];
+/* 航次选择 -> 回填主页面 */
 let selectedVoyageIdMain = '';
 function applyVoyageToMain(v){
+  // v 为 mapVoyageRow 结构
   selectedVoyageIdMain = v.id;
-  carrier.value=v.carrier; vessel.value=v.vessel; voyage.value=v.voyage; etd.value=v.etd;
-  voyHint.textContent = `已选择：${v.carrier} / ${v.vessel} / ${v.voyage} / ETD ${v.etd}`;
+  carrier.value = v.carrier || '';
+  vessel.value  = v.vessel || '';
+  voyage.value  = v.voyage || '';
+  etd.value     = v.etd || '';
+  voyHint.textContent = v.id
+    ? `已选择：${carrier.value} / ${vessel.value} / ${voyage.value} / ETD ${etd.value}`
+    : '未选择航次';
 }
 function clearVoyageMain(){
   selectedVoyageIdMain=''; carrier.value=''; vessel.value=''; voyage.value=''; etd.value='';
@@ -885,40 +939,127 @@ function closeVoyageModal(){ voyMask.style.display='none'; }
 voyMask.onclick = e=>{ if(e.target===voyMask) closeVoyageModal(); };
 
 function renderVoyages(){
-  const q=(voySearch.value||'').trim().toLowerCase();
+  const q = (voySearch.value||'').trim().toLowerCase();
+  const masters = loadVoyageMasters();
+
   voyTbody.innerHTML='';
-  const list = voyageMasters.filter(v=>{
+
+  const list = masters.filter(v=>{
     if(!q) return true;
     return (`${v.carrier} ${v.vessel} ${v.voyage} ${v.etd}`.toLowerCase()).includes(q);
   });
+
+  if(!masters.length){
+    const tr=document.createElement('tr');
+    tr.innerHTML = `
+      <td colspan="5" style="color:var(--muted);padding:16px">
+        当前系统没有可用航次主数据。请先到 <b>master/voyage-manage.html</b> 维护航次（并确保状态=启用）。
+        <div style="margin-top:8px" class="small">也可点击右上角 <b>+ 新建航次</b>（兜底演示，会写入主数据 slms_voyages_v1）。</div>
+      </td>`;
+    voyTbody.appendChild(tr);
+    return;
+  }
+
   if(!list.length){
     const tr=document.createElement('tr');
-    tr.innerHTML=`<td colspan="5" style="color:var(--muted);padding:16px">未找到匹配航次。你可以点击右上角 <b>+ 新建航次</b>。</td>`;
-    voyTbody.appendChild(tr); return;
+    tr.innerHTML = `<td colspan="5" style="color:var(--muted);padding:16px">未找到匹配航次（可尝试搜索船公司/船名/航次/ETD）。</td>`;
+    voyTbody.appendChild(tr);
+    return;
   }
+
   list.forEach(v=>{
     const tr=document.createElement('tr');
     tr.className='vRow' + (v.id===selectedVoyageIdMain?' selected':'');
     tr.innerHTML=`
-      <td>${esc(v.carrier)}</td><td>${esc(v.vessel)}</td><td><b>${esc(v.voyage)}</b></td><td>${esc(v.etd)}</td>
+      <td>${esc(v.carrier)}</td>
+      <td>${esc(v.vessel)}</td>
+      <td><b>${esc(v.voyage)}</b></td>
+      <td>${esc(v.etd)}</td>
       <td><button class="btn" style="padding:8px 10px;font-size:12px" type="button" onclick="chooseVoyage('${escJs(v.id)}')">选择</button></td>`;
     voyTbody.appendChild(tr);
   });
 }
 function chooseVoyage(id){
-  const v=voyageMasters.find(x=>x.id===id); if(!v) return;
-  applyVoyageToMain(v); closeVoyageModal(); showToast('已回填航次信息', true);
+  const masters = loadVoyageMasters();
+  const v = masters.find(x=>x.id===id);
+  if(!v) return;
+  applyVoyageToMain(v);
+  closeVoyageModal();
+  showToast('已回填航次信息（来自主数据）', true);
 }
-function openNewVoyage(){ newVoyBox.style.display='block'; newCarrier.value='';newVessel.value='';newVoyage.value='';newEtd.value=''; }
+
+/* v17: 新建航次（兜底：下拉选船公司/船舶） */
+function fillSelect(sel, placeholder, rows, getLabel, getVal){
+  sel.innerHTML = '';
+  const o0=document.createElement('option');
+  o0.value=''; o0.textContent=placeholder;
+  sel.appendChild(o0);
+  rows.forEach(r=>{
+    const o=document.createElement('option');
+    o.value = getVal(r);
+    o.textContent = getLabel(r);
+    sel.appendChild(o);
+  });
+}
+
+function openNewVoyage(){
+  newVoyBox.style.display='block';
+
+  const carriers = loadArr(LS_CARRIERS).filter(x=>x && x.status!=='inactive');
+  const vessels  = loadArr(LS_VESSELS).filter(x=>x && x.status!=='inactive');
+
+  fillSelect(document.getElementById('newCarrierId'), '— 请选择船公司 —', carriers, r=>r.code, r=>r.id);
+  fillSelect(document.getElementById('newVesselId'),  '— 请选择船舶 —',  vessels,  r=>`${r.name}（IMO ${r.imo}）`, r=>r.id);
+
+  document.getElementById('newEtd').value = '';
+  document.getElementById('newVoyage').value = '';
+}
 function cancelNewVoyage(){ newVoyBox.style.display='none'; }
 function createVoyage(){
-  const c=(newCarrier.value||'').trim(), ves=(newVessel.value||'').trim(), voy=(newVoyage.value||'').trim(), e=(newEtd.value||'').trim();
-  if(!c||!ves||!voy||!e){ alert('请填写：船公司、船名、航次、ETD'); return; }
-  if(voyageMasters.some(v=>v.carrier===c&&v.vessel===ves&&v.voyage===voy&&v.etd===e)){ alert('该航次已存在（完全相同）'); return; }
-  const id='V'+String(Date.now());
-  const nv={id,carrier:c,vessel:ves,voyage:voy,etd:e};
-  voyageMasters.unshift(nv);
-  cancelNewVoyage(); applyVoyageToMain(nv); closeVoyageModal(); showToast('已新建航次并回填', true);
+  const carrierId = document.getElementById('newCarrierId').value;
+  const vesselId  = document.getElementById('newVesselId').value;
+  const etd = (document.getElementById('newEtd').value||'').trim();
+  const voyageNo = (document.getElementById('newVoyage').value||'').trim().toUpperCase();
+
+  if(!carrierId || !vesselId || !voyageNo || !etd){
+    alert('请填写：船公司、船舶、航次、ETD');
+    return;
+  }
+
+  const all = loadArr(LS_VOYAGES);
+
+  // 唯一：carrierId + vesselId + voyageNo + etd
+  const dup = all.find(x =>
+    x && x.carrierId===carrierId && x.vesselId===vesselId &&
+    String(x.voyageNo||'')===voyageNo && String(x.etd||'')===etd &&
+    x.status!=='inactive'
+  );
+  if(dup){
+    alert('该航次已存在（carrier+vessel+voyageNo+etd 完全相同）');
+    return;
+  }
+
+  const row = {
+    id: 'VOY-' + Date.now(),
+    carrierId, vesselId,
+    voyageNo,
+    pol: '', pod: '',
+    etd,
+    eta: '',
+    status: 'active',
+    remark: 'created from crp-entry fallback',
+    createdAt: Date.now(),
+    updatedAt: Date.now()
+  };
+  all.unshift(row);
+  try{ localStorage.setItem(LS_VOYAGES, JSON.stringify(all)); }catch(e){}
+
+  // 回填
+  const v = mapVoyageRow(row);
+  cancelNewVoyage();
+  applyVoyageToMain(v);
+  closeVoyageModal();
+  showToast('已新建航次并回填（已写入 slms_voyages_v1）', true);
 }
 
 /* 主数据 */
@@ -1180,7 +1321,10 @@ function seedDemoIfEmpty(){
 function fillDemo(){
   entry={ bookingNo:'BK20251224-01', gp20:'0', gp40:'1', hc40:'2', rh40:'' };
   renderEntry();
-  applyVoyageToMain(voyageMasters[0]);
+
+  const ms = loadVoyageMasters();
+  if(ms.length) applyVoyageToMain(ms[0]);
+
   ffOwner.value='FF-A'; clOwner.value='CL-B';
 }
 function clearFormAll(){
