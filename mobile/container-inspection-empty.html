@@ -1,0 +1,576 @@
+<!--
+File: mobile/container-inspection-empty.html
+Version: container-inspection-empty-v2
+Date: 2025-12-29
+
+v2 更新点（基于你给的 v1 代码直接改）：
+1) ✅ 版本号同步：右上角显示 v2；弹窗标题同步 v2
+2) ✅ requirements 弹窗改为“三件套”风格（schema / data-dict / ui-spec），并随版本维护
+3) ✅ 兜底跳转指向最新录入页：mobile/container-entry-truck.html（原来是 container-entry-truck.html）
+4) ✅ 支持从录入页返回参数 ?container=MSKU... 自动查找（保留 v1 行为）
+-->
+
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>集装箱检查（空箱）</title>
+
+<style>
+:root{
+  --brand:#e0205c;--bg:#f1f2f5;--card:#fff;--text:#222;--muted:#666;--line:#e9e9ee;
+  --ok:#1a7f37;--warn:#b54708;--bad:#b42318;
+}
+*{box-sizing:border-box}
+body{margin:0;font-family:Arial,"Microsoft YaHei";background:var(--bg);color:var(--text)}
+.topbar{
+  height:56px;background:#fff;border-bottom:1px solid var(--line);
+  display:flex;align-items:center;justify-content:space-between;padding:0 14px;
+}
+.left{font-weight:900}
+.right{display:flex;align-items:center;gap:10px}
+.ver{
+  cursor:pointer;background:#f6f6f6;border:1px solid #eee;border-radius:999px;
+  padding:6px 10px;font-size:12px;font-family:ui-monospace,Menlo,Consolas,monospace;
+  display:flex;align-items:center;gap:6px
+}
+.ver .dot{width:8px;height:8px;border-radius:99px;background:var(--brand)}
+.wrap{max-width:1100px;margin:14px auto;padding:0 12px}
+.card{
+  background:#fff;border:1px solid var(--line);border-radius:14px;
+  box-shadow:0 6px 18px rgba(0,0,0,.05);
+  overflow:hidden
+}
+.cardHd{
+  padding:12px 14px;border-bottom:1px solid var(--line);
+  display:flex;align-items:center;justify-content:space-between;gap:10px
+}
+.cardHd b{font-size:14px}
+.cardBd{padding:14px}
+.small{font-size:12px;color:var(--muted)}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.field{display:flex;flex-direction:column;gap:6px;flex:1;min-width:240px}
+.label{font-size:12px;color:var(--muted)}
+.req{color:var(--brand);font-weight:900;margin-left:4px}
+.input,.select,.textarea{
+  width:100%;
+  border:1px solid #ddd;border-radius:12px;padding:10px 12px;font-size:13px;background:#fff;outline:none
+}
+.textarea{min-height:90px;resize:vertical}
+.btn{
+  border:1px solid #ddd;background:#fff;border-radius:12px;
+  padding:10px 14px;font-weight:900;font-size:13px;cursor:pointer
+}
+.btn.primary{background:var(--brand);border-color:var(--brand);color:#fff}
+.btn.ok{background:var(--ok);border-color:var(--ok);color:#fff}
+.btn.warn{background:var(--warn);border-color:var(--warn);color:#fff}
+.btn:active{transform:translateY(1px)}
+.hr{height:1px;background:var(--line);margin:12px 0}
+.kv{
+  display:grid;grid-template-columns:160px 1fr;gap:8px 10px;
+  font-size:12px;color:var(--muted);background:#fafafa;border:1px solid var(--line);
+  padding:10px 12px;border-radius:12px
+}
+.kv b{color:var(--text)}
+.toast{
+  margin-top:12px;padding:10px 12px;border-radius:12px;border:1px solid var(--line);
+  background:#fafafa;color:var(--muted);font-size:12px;display:none
+}
+.toast.show{display:block}
+.toast.ok{border-color:rgba(26,127,55,.25);background:rgba(26,127,55,.06)}
+.toast.bad{border-color:rgba(180,35,24,.25);background:rgba(180,35,24,.06)}
+
+.tableBox{border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.tableHd{background:#fafafa;border-bottom:1px solid var(--line);padding:10px 12px;font-weight:900}
+.tableBd{padding:12px}
+table{width:100%;border-collapse:collapse;font-size:12px}
+th,td{border-bottom:1px solid var(--line);padding:8px 10px;white-space:nowrap;text-align:left}
+th{background:#fafafa;color:var(--muted);font-weight:900}
+tr:hover td{background:#fff7fb}
+
+/* modal */
+.modalMask{position:fixed;inset:0;background:rgba(0,0,0,.35);display:none;align-items:center;justify-content:center;z-index:9999}
+.modal{width:920px;max-width:96vw;background:#fff;border-radius:14px;box-shadow:0 20px 60px rgba(0,0,0,.3);display:flex;flex-direction:column}
+.modalHd{padding:12px 16px;border-bottom:1px solid #eee;font-weight:900;display:flex;justify-content:space-between;align-items:center}
+.modalBd{padding:16px;max-height:70vh;overflow:auto;font-size:13px;line-height:1.7}
+.modalBd ol{margin:6px 0 0 18px}
+
+/* v2: 三件套展示 */
+.kitNote{font-size:12px;color:var(--muted);margin-top:6px}
+.docBlock{border:1px solid #eee;border-radius:14px;overflow:hidden;margin:12px 0;background:#fff}
+.docHd{padding:10px 12px;background:#fafafa;border-bottom:1px solid #eee;display:flex;align-items:center;justify-content:space-between;gap:10px}
+.docHd b{font-size:13px}
+.badge2{font-size:12px;color:var(--muted);border:1px solid #eee;background:#fff;border-radius:999px;padding:4px 10px}
+pre.codebox{
+  margin:0;
+  padding:12px;
+  border:1px solid #f0f0f0;
+  border-radius:12px;
+  background:#fbfbfd;
+  overflow:auto;
+  font-size:12px;
+  line-height:1.6;
+  font-family:ui-monospace,Menlo,Consolas,monospace;
+  white-space:pre;
+}
+</style>
+</head>
+
+<body>
+<div class="topbar">
+  <div class="left">集装箱检查（空箱）</div>
+  <div class="right">
+    <div class="ver" id="verBtn" title="点击查看三件套（schema / dict / ui spec）">
+      <span class="dot"></span>
+      <span id="verText"></span>
+    </div>
+  </div>
+</div>
+
+<div class="wrap">
+  <div class="card">
+    <div class="cardHd">
+      <b>检查入口（按箱号）</b>
+      <div class="row">
+        <button class="btn" type="button" onclick="fillDemo()">填入示例</button>
+        <button class="btn warn" type="button" onclick="openEntryFallback()">兜底录入箱号/自重</button>
+      </div>
+    </div>
+
+    <div class="cardBd">
+      <div class="row">
+        <div class="field" style="min-width:320px;flex:2">
+          <div class="label">箱号<span class="req">*</span></div>
+          <input class="input" id="q_container" placeholder="例如：MSKU1234567" onkeydown="if(event.key==='Enter') search()">
+          <div class="small">检查员通常只看得到箱号：输入后点击“查找”。</div>
+        </div>
+        <div class="field" style="min-width:180px;flex:1">
+          <div class="label">检查员（演示）</div>
+          <select class="select" id="inspector">
+            <option value="OQC-A">OQC-A</option>
+            <option value="OQC-B">OQC-B</option>
+            <option value="OQC-C">OQC-C</option>
+          </select>
+        </div>
+        <div class="field" style="min-width:220px;flex:1;align-self:flex-end">
+          <div class="row">
+            <button class="btn primary" type="button" onclick="search()">查找</button>
+            <button class="btn" type="button" onclick="resetAll()">重置</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="toast" id="toast"></div>
+
+      <div class="hr"></div>
+
+      <div class="small" style="margin-bottom:8px">箱号主档信息（最终运输公司以司机确认值为准）</div>
+      <div class="kv" id="kvBox">
+        <div>箱号</div><div><b id="kvNo">-</b></div>
+        <div>最终运输公司（统计口径）</div><div><b id="kvVendorFinal">-</b></div>
+        <div>自重（最终）</div><div><b id="kvWeightFinal">-</b></div>
+        <div>检查员录入（追溯）</div><div><b id="kvInspector">-</b></div>
+        <div>司机确认（追溯）</div><div><b id="kvDriver">-</b></div>
+        <div>关联历史</div><div><b id="kvLinks">-</b></div>
+      </div>
+
+      <div class="hr"></div>
+
+      <div class="tableBox">
+        <div class="tableHd">检查结果录入（当前箱号）</div>
+        <div class="tableBd">
+          <div class="row">
+            <div class="field">
+              <div class="label">外观/结构</div>
+              <select class="select" id="chkAppearance">
+                <option value="OK">OK</option>
+                <option value="NG">NG</option>
+              </select>
+            </div>
+            <div class="field">
+              <div class="label">门封/铰链</div>
+              <select class="select" id="chkDoor">
+                <option value="OK">OK</option>
+                <option value="NG">NG</option>
+              </select>
+            </div>
+            <div class="field">
+              <div class="label">清洁/异味</div>
+              <select class="select" id="chkClean">
+                <option value="OK">OK</option>
+                <option value="NG">NG</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="row" style="margin-top:10px">
+            <div class="field" style="flex:2;min-width:320px">
+              <div class="label">备注</div>
+              <textarea class="textarea" id="chkRemark" placeholder="例如：角件轻微变形，已拍照"></textarea>
+            </div>
+            <div class="field" style="flex:1;min-width:260px">
+              <div class="label">现场照片（演示：仅记录文件名）</div>
+              <input class="input" type="file" id="photo" multiple>
+              <div class="small" id="photoHint">未选择文件</div>
+            </div>
+          </div>
+
+          <div class="row" style="margin-top:10px">
+            <button class="btn ok" type="button" onclick="saveInspection()">保存检查结果</button>
+            <button class="btn warn" type="button" onclick="openEntryFallback()">查不到？去录入箱号/自重</button>
+          </div>
+
+          <div class="small" style="margin-top:8px">
+            说明：如箱号主档不存在（司机未录入），可点击“兜底录入箱号/自重”创建后再回来继续检查。
+          </div>
+        </div>
+      </div>
+
+      <div class="hr"></div>
+
+      <div class="tableBox">
+        <div class="tableHd">该箱号的检查记录（最近 20 条）</div>
+        <div class="tableBd" style="padding:0">
+          <div style="max-height:320px;overflow:auto">
+            <table>
+              <thead>
+                <tr>
+                  <th style="min-width:160px">时间</th>
+                  <th style="min-width:120px">检查员</th>
+                  <th style="min-width:100px">外观</th>
+                  <th style="min-width:100px">门封</th>
+                  <th style="min-width:110px">清洁</th>
+                  <th>备注</th>
+                </tr>
+              </thead>
+              <tbody id="logBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- v2: 三件套（替代旧 requirements 列表） -->
+<div class="modalMask" id="reqMask">
+  <div class="modal">
+    <div class="modalHd">
+      <span>三件套（container-inspection-empty.html / <span id="reqVer"></span>）</span>
+      <span style="cursor:pointer;color:var(--muted)" onclick="closeReq()">关闭</span>
+    </div>
+    <div class="modalBd">
+      <div class="kitNote">
+        说明：右上角版本号与本弹窗内容必须随版本同步维护（当前：<code>container-inspection-empty-v2</code>）。
+      </div>
+
+      <div class="docBlock">
+        <div class="docHd">
+          <b>slms-schema.yaml</b>
+          <span class="badge2">结构唯一真源（Schema）</span>
+        </div>
+<pre class="codebox">version: slms-container-inspection-empty-schema-v1
+domain: slms
+module: mobile_container_inspection_empty
+
+storage_keys:
+  containers: slms_containers_v1
+  inspections: slms_container_inspections_v1
+
+entities:
+  container_master (from slms_containers_v1):
+    key: containerNo
+    fields_used:
+      containerNo: string
+      # 统计口径：最终运输公司/自重以司机确认为准（本页仅展示）
+      vendorFinal: string?
+      tareWeightFinal: string?
+      # 追溯：检查员/司机当时输入（如存在）
+      vendorByInspector: string?
+      weightByInspector: string?
+      inspectorAt: number?
+      vendorByDriver: string?
+      weightByDriver: string?
+      driverConfirmedAt: number?
+      links: array?
+
+  inspection_record (slms_container_inspections_v1):
+    key: id
+    fields:
+      id: string
+      containerNo: string
+      inspector: string
+      appearance: enum(OK|NG)
+      door: enum(OK|NG)
+      clean: enum(OK|NG)
+      remark: string?
+      photos: string[]?
+      inspectionType: string  # empty
+      createdAt: number</pre>
+
+      <div class="docBlock">
+        <div class="docHd">
+          <b>slms-data-dict.md</b>
+          <span class="badge2">字段/口径说明（Data Dictionary）</span>
+        </div>
+<pre class="codebox"># SLMS - 集装箱检查（空箱）
+
+## 主档读取（slms_containers_v1）
+- 本页只按 containerNo 查找主档
+- 最终口径展示：
+  - vendorFinal：最终运输公司（统计口径，以司机确认值为准）
+  - tareWeightFinal：自重（最终，以司机确认值为准）
+- 追溯展示（如字段存在）：
+  - vendorByInspector/weightByInspector + inspectorAt
+  - vendorByDriver/weightByDriver + driverConfirmedAt
+
+## 检查记录（slms_container_inspections_v1）
+- 一次保存生成一条独立记录（允许同箱号多条）
+- photos：仅保存文件名列表（演示用）
+- inspectionType：固定 empty（预留 future: stuffing 等）</pre>
+
+      <div class="docBlock">
+        <div class="docHd">
+          <b>slms-ui-spec.md</b>
+          <span class="badge2">页面交互/约束（UI Spec）</span>
+        </div>
+<pre class="codebox"># UI Spec - mobile/container-inspection-empty
+
+## 1) 检查入口
+- 检查员输入箱号 -> 点击“查找”
+- 查不到主档：
+  - 仍显示该箱号（KV）
+  - Toast 提示：去兜底录入创建记录
+  - “兜底录入箱号/自重”按钮可跳转录入页
+
+## 2) 兜底录入跳转（v2）
+- 跳转到：mobile/container-entry-truck.html
+- 带参数：
+  - role=inspector
+  - container=MSKU...
+  - return=mobile/container-inspection-empty.html
+  - ts=时间戳（防缓存）
+
+## 3) 检查结果录入与保存
+- 仅当主档存在时允许保存检查结果
+- 保存：写入 slms_container_inspections_v1（unshift），列表显示最近20条
+- 不更改主档“最终运输公司/自重”（最终口径由司机确认覆盖）
+
+## 4) 回跳支持
+- 支持 ?container=MSKU... 自动带入并触发查找</pre>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ================= v2: Version ================= */
+const VERSION = "container-inspection-empty-v2";
+document.getElementById('verText').textContent = VERSION;
+
+/* ========= Storage Key ========= */
+const LS_CONTAINERS = 'slms_containers_v1';
+const LS_INSPECTIONS = 'slms_container_inspections_v1';
+
+/* ========= DOM ========= */
+const toast = document.getElementById('toast');
+const qContainer = document.getElementById('q_container');
+const inspector = document.getElementById('inspector');
+const logBody = document.getElementById('logBody');
+const photo = document.getElementById('photo');
+const photoHint = document.getElementById('photoHint');
+
+/* ========= Utils ========= */
+function showToast(msg, ok=true){
+  toast.className = 'toast show ' + (ok ? 'ok' : 'bad');
+  toast.textContent = msg;
+  setTimeout(()=>toast.className='toast', 2600);
+}
+function pad2(n){ return String(n).padStart(2,'0'); }
+function fmt(ts){
+  const d=new Date(ts||Date.now());
+  return `${d.getFullYear()}-${pad2(d.getMonth()+1)}-${pad2(d.getDate())} ${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+}
+function normNo(v){
+  return String(v||'').trim().toUpperCase().replace(/\s+/g,'');
+}
+function esc(s){return String(s??'').replace(/[&<>"']/g,m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[m]));}
+
+/* ========= Storage ========= */
+function loadContainers(){
+  try{
+    const s=localStorage.getItem(LS_CONTAINERS);
+    const arr=s?JSON.parse(s):[];
+    return Array.isArray(arr)?arr:[];
+  }catch(e){ return []; }
+}
+function loadInspections(){
+  try{
+    const s=localStorage.getItem(LS_INSPECTIONS);
+    const arr=s?JSON.parse(s):[];
+    return Array.isArray(arr)?arr:[];
+  }catch(e){ return []; }
+}
+function saveInspections(arr){
+  try{ localStorage.setItem(LS_INSPECTIONS, JSON.stringify(arr)); }catch(e){}
+}
+function findContainer(arr, no){
+  return arr.find(x=>String(x.containerNo||'')===no);
+}
+
+/* ========= UI Update ========= */
+function updateKV(rec, no){
+  document.getElementById('kvNo').textContent = no || '-';
+  document.getElementById('kvVendorFinal').textContent = rec?.vendorFinal || '-';
+  document.getElementById('kvWeightFinal').textContent = rec?.tareWeightFinal || '-';
+
+  const ins = rec?.inspectorAt ? `${rec.vendorByInspector||'-'} / ${rec.weightByInspector||'-'}（${fmt(rec.inspectorAt)}）` : '-';
+  const drv = rec?.driverConfirmedAt ? `${rec.vendorByDriver||'-'} / ${rec.weightByDriver||'-'}（${fmt(rec.driverConfirmedAt)}）` : '-';
+  document.getElementById('kvInspector').textContent = ins;
+  document.getElementById('kvDriver').textContent = drv;
+
+  const links = Array.isArray(rec?.links) ? rec.links.length : 0;
+  document.getElementById('kvLinks').textContent = links ? `${links} 条` : '-';
+}
+
+function renderLog(containerNo){
+  const no = normNo(containerNo);
+  logBody.innerHTML='';
+  if(!no){
+    logBody.innerHTML = `<tr><td colspan="6" style="padding:14px;color:#666">请先输入箱号并查找</td></tr>`;
+    return;
+  }
+
+  const all = loadInspections();
+  const list = all
+    .filter(x=>String(x.containerNo||'')===no)
+    .sort((a,b)=>(b.createdAt||0)-(a.createdAt||0))
+    .slice(0,20);
+
+  if(!list.length){
+    logBody.innerHTML = `<tr><td colspan="6" style="padding:14px;color:#666">暂无检查记录</td></tr>`;
+    return;
+  }
+
+  list.forEach(x=>{
+    const tr=document.createElement('tr');
+    tr.innerHTML = `
+      <td>${fmt(x.createdAt)}</td>
+      <td>${esc(x.inspector||'-')}</td>
+      <td>${esc(x.appearance||'-')}</td>
+      <td>${esc(x.door||'-')}</td>
+      <td>${esc(x.clean||'-')}</td>
+      <td title="${esc(x.remark||'')}">${esc((x.remark||'').slice(0,60))}${(x.remark||'').length>60?'…':''}</td>
+    `;
+    logBody.appendChild(tr);
+  });
+}
+
+/* ========= Actions ========= */
+function search(){
+  const no = normNo(qContainer.value);
+  if(!no){ showToast('请输入箱号', false); return; }
+
+  const arr = loadContainers();
+  const rec = findContainer(arr, no);
+
+  if(!rec){
+    updateKV(null, no);
+    renderLog(no);
+    showToast('系统中查不到该箱号：可点击“兜底录入箱号/自重”创建后再检查', false);
+    return;
+  }
+
+  updateKV(rec, no);
+  renderLog(no);
+  showToast('已找到箱号主档，可继续录入检查结果', true);
+}
+
+function openEntryFallback(){
+  const no = normNo(qContainer.value);
+  // ✅ v2：指向最新录入页（mobile/ 目录）
+  const url = `mobile/container-entry-truck.html?role=inspector&container=${encodeURIComponent(no)}&return=${encodeURIComponent('mobile/container-inspection-empty.html')}&ts=${Date.now()}`;
+  location.href = url;
+}
+
+function saveInspection(){
+  const no = normNo(qContainer.value);
+  if(!no){ showToast('请先输入箱号并查找', false); return; }
+
+  const containers = loadContainers();
+  const rec = findContainer(containers, no);
+  if(!rec){
+    showToast('箱号主档不存在：请先兜底录入箱号/自重', false);
+    return;
+  }
+
+  const appearance = document.getElementById('chkAppearance').value;
+  const door = document.getElementById('chkDoor').value;
+  const clean = document.getElementById('chkClean').value;
+  const remark = document.getElementById('chkRemark').value.trim();
+  const ins = inspector.value;
+
+  const files = Array.from(photo.files||[]).map(f=>f.name);
+
+  const all = loadInspections();
+  all.unshift({
+    id: 'INSP-' + Date.now(),
+    containerNo: no,
+    inspector: ins,
+    appearance, door, clean,
+    remark,
+    photos: files,
+    createdAt: Date.now(),
+    inspectionType: 'empty'
+  });
+  saveInspections(all);
+
+  document.getElementById('chkRemark').value='';
+  photo.value='';
+  photoHint.textContent='未选择文件';
+
+  renderLog(no);
+  showToast('检查结果已保存（演示写入 localStorage）', true);
+}
+
+function resetAll(){
+  qContainer.value='';
+  updateKV(null,'');
+  renderLog('');
+  showToast('已重置', true);
+}
+
+function fillDemo(){
+  qContainer.value='MSKU1234567';
+  showToast('已填入示例箱号，点击“查找”', true);
+}
+
+photo.onchange = ()=>{
+  const files = Array.from(photo.files||[]);
+  if(!files.length) photoHint.textContent='未选择文件';
+  else photoHint.textContent = `已选 ${files.length} 个：` + files.map(f=>f.name).slice(0,3).join('、') + (files.length>3?'…':'');
+};
+
+/* ========= 三件套 Modal ========= */
+const reqMask = document.getElementById('reqMask');
+const reqVer = document.getElementById('reqVer');
+document.getElementById('verBtn').onclick=()=>{ reqVer.textContent = VERSION; reqMask.style.display='flex'; };
+function closeReq(){ reqMask.style.display='none'; }
+reqMask.onclick=e=>{ if(e.target===reqMask) closeReq(); };
+
+/* ========= Init: auto search if param ========= */
+(function init(){
+  const u=new URL(location.href);
+  const c=u.searchParams.get('container')||'';
+  if(c){
+    qContainer.value=c;
+    setTimeout(search, 60);
+  }else{
+    updateKV(null,'');
+    renderLog('');
+  }
+})();
+</script>
+</body>
+</html>
