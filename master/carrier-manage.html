@@ -1,4 +1,3 @@
-
 <!--
 File: master/carrier-manage.html
 Version: carrier-manage-v2
@@ -8,9 +7,10 @@ Date: 2025-12-29
 1) 船公司主档（Carrier Master）维护：新增/编辑/停用（软删除）
 2) Carrier Code 强唯一（必填，建议大写）；名称必填
 3) 查询：关键词（Code/Name）+ 状态
-4) 导出 CSV
-5) 右上角版本号可点击：显示“三件套”内容（随版本维护）
-6) 数据存储：localStorage key = slms_carriers_v1（供 voyage-manage.html 下拉引用）
+4) 一键复制船公司：复制选中行，快速新建（code 需改）
+5) 导出 CSV
+6) 右上角版本号可点击：显示“三件套”内容（随版本维护）
+7) 数据存储：localStorage key = slms_carriers_v1（供 voyage-manage.html 下拉引用）
 -->
 
 <!doctype html>
@@ -48,6 +48,7 @@ table{width:100%;border-collapse:collapse;min-width:980px}
 th,td{border-bottom:1px solid var(--line);padding:10px 10px;font-size:12px;white-space:nowrap}
 th{background:#fafafa;color:var(--muted);text-align:left;font-weight:900;position:sticky;top:0}
 tr:hover td{background:#fff7fb}
+tr.selected td{background:#fff7fb;outline:2px solid rgba(224,32,92,.22)}
 .badge{display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border-radius:999px;border:1px solid var(--line);background:#fafafa;font-weight:900;font-size:12px}
 .badge.ok{border-color:rgba(26,127,55,.25);background:rgba(26,127,55,.06);color:#135d2a}
 .badge.off{border-color:rgba(180,35,24,.25);background:rgba(180,35,24,.06);color:#7a1b13}
@@ -90,6 +91,7 @@ tr:hover td{background:#fff7fb}
   <div class="left">船公司主档管理</div>
   <div class="right">
     <button class="btn" type="button" onclick="exportCsv()">导出CSV</button>
+    <button class="btn" type="button" onclick="copySelected()">复制船公司</button>
     <button class="btn primary" type="button" onclick="openEdit()">新增船公司</button>
     <div class="ver" id="verBtn" title="点击查看三件套">
       <span class="dot"></span>
@@ -212,22 +214,22 @@ tr:hover td{background:#fff7fb}
       <div id="kit_schema">
         <h4>slms-schema.yaml（结构唯一真源）</h4>
         <pre><code># --- Carrier Master (船公司主档) ---
-# 演示版存储映射：localStorage key = slms_carriers_v1
-# 正式落库建议表名：slms_carriers
+# 演示存储：localStorage key = slms_carriers_v1（供 voyage-manage.html 下拉引用）
+# 正式建议：table = slms_carriers
 
 tables:
   slms_carriers:
     pk: id
     columns:
-      id: {type: string, required: true, note: "CAR-xxx"}
-      code: {type: string, required: true, note: "船公司代码，强唯一（建议大写）"}
-      name: {type: string, required: true, note: "名称，必填"}
-      scac: {type: string, required: false, note: "SCAC，可选"}
-      country: {type: string, required: false, note: "国家/地区，可选"}
-      status: {type: string, required: true, enum: [active, inactive], note: "inactive=软删除"}
-      remark: {type: string, required: false}
-      createdAt: {type: int64, required: true}
-      updatedAt: {type: int64, required: true}
+      id:        {type: string, required: true, note: "主键：CAR-xxx"}
+      code:      {type: string, required: true, note: "Carrier Code，强唯一（建议大写）"}
+      name:      {type: string, required: true, note: "名称（展示名），必填"}
+      scac:      {type: string, required: false, note: "SCAC，可选"}
+      country:   {type: string, required: false, note: "国家/地区，可选"}
+      status:    {type: string, required: true, enum: [active, inactive], note: "inactive=软删除"}
+      remark:    {type: string, required: false}
+      createdAt: {type: int64, required: true, note: "毫秒时间戳（演示）"}
+      updatedAt: {type: int64, required: true, note: "毫秒时间戳（演示）"}
     uniques:
       - name: uq_slms_carriers_code
         columns: [code]
@@ -241,25 +243,31 @@ tables:
         <h4>slms-data-dict.md（字段/口径说明）</h4>
         <pre><code># Carrier Master 字段口径（slms_carriers）
 
-- id：主键（演示 CAR-时间戳；正式可用UUID/雪花ID）
-- code：船公司代码，必填，全局唯一（建议保存时转大写）
-- name：名称，必填
-- scac/country/remark：可选
+- id：主键（演示：CAR-时间戳；正式：UUID/雪花ID）
+- code：Carrier Code
+  - 必填
+  - 保存时建议统一大写（避免同义重复）
+  - 全局强唯一（不区分 active/inactive）
+- name：名称（展示名）
+  - 必填
+- scac：SCAC（可选，4位字母常见）
+- country：国家/地区（可选）
 - status：
-  - active：启用（可被航次引用、下拉显示）
+  - active：启用（可被航次引用；下拉可选）
   - inactive：停用=软删除（禁止新引用；历史引用保留）
-- createdAt/updatedAt：毫秒时间戳（演示版）；正式可用datetime
+- remark：备注（可选）
+- createdAt/updatedAt：毫秒时间戳（演示）
 
-校验口径：
-- code 强唯一：同一 code 只能存在一条记录（不区分状态）
+唯一性口径：
+- code 全局唯一（不区分 status）
 </code></pre>
       </div>
 
       <div id="kit_ui" style="display:none">
         <h4>slms-ui-spec.md（页面交互/导出/入口）</h4>
-        <pre><code># carrier-manage.html 交互规范（carrier-manage-v2）
+        <pre><code># carrier-manage.html（carrier-manage-v2）
 
-入口/导航：
+入口：
 - Index -> Master -> Carrier Master（船公司管理）
 
 查询：
@@ -269,20 +277,27 @@ tables:
 新增/编辑：
 - 必填：code、name
 - 保存校验：
-  - code 格式建议：大写字母/数字（可含 . _ - /）
-  - code 全局唯一（排除当前编辑记录）
+  - code：强唯一（排除当前编辑记录）
+  - 建议：保存时将 code 转大写
+- 编辑时允许修改 code（仍需满足唯一性）
+
+复制（新增增强）：
+- 先点击列表行选中一条，再点击“复制船公司”
+- 弹出新增窗口，默认带入：name/scac/country/status/remark
+- code 默认清空（必须填写新 code）
+- 保存时仍按 code 强唯一校验
 
 停用/启用（软删除）：
 - 切换状态需二次确认
-- 停用后：不删除记录；仅状态变更 & updatedAt 更新
+- 停用后不删除记录，仅更新 status/updatedAt
+- 口径：停用=软删除（保留历史引用）
 
-导出：
-- 导出当前筛选结果 CSV
-- 字段：code, name, scac, country, status, updatedAt
+导出 CSV：
+- 导出“当前筛选结果”
+- 字段：code,name,scac,country,status,updatedAt
 
-存储：
-- localStorage: slms_carriers_v1（演示）
-- 正式：slms_carriers 表（以 schema 为准）
+数据存储：
+- localStorage key = slms_carriers_v1（演示；供 voyage-manage.html 下拉引用）
 </code></pre>
       </div>
     </div>
@@ -298,18 +313,22 @@ const VERSION = "carrier-manage-v2";
 
 /* requirements */
 const reqMask = document.getElementById("reqMask");
-document.getElementById("verBtn").onclick = ()=> reqMask.style.display="flex";
+document.getElementById("verBtn").onclick = ()=> {
+  reqMask.style.display="flex";
+  showKit("schema"); // 默认 schema
+};
 function closeReq(){ reqMask.style.display="none"; }
 reqMask.onclick = e=>{ if(e.target===reqMask) closeReq(); };
 
-/* 三件套 tabs */
-function setKitTab(active){
+/* 三件套 Tab 切换 */
+function showKit(which){
   ["schema","dict","ui"].forEach(k=>{
-    document.getElementById("t_"+k).classList.toggle("active", k===active);
-    document.getElementById("kit_"+k).style.display = (k===active) ? "block" : "none";
+    const t = document.getElementById("t_"+k);
+    const panel = document.getElementById("kit_"+k);
+    if(t) t.classList.toggle("active", k===which);
+    if(panel) panel.style.display = (k===which) ? "block" : "none";
   });
 }
-function showKit(k){ setKitTab(k); }
 
 function pad2(n){ return String(n).padStart(2,'0'); }
 function fmt(ts){
@@ -329,9 +348,11 @@ const q = document.getElementById("q");
 const q_status = document.getElementById("q_status");
 
 let editId = null;
+let selectedId = null;
 
 function resetFilters(){
   q.value=""; q_status.value="";
+  selectedId = null;
   render();
 }
 
@@ -429,6 +450,7 @@ function render(){
 
   list.forEach(x=>{
     const tr=document.createElement("tr");
+    if(x.id===selectedId) tr.classList.add("selected");
     const st = x.status==="active"
       ? `<span class="badge ok">启用</span>`
       : `<span class="badge off">停用</span>`;
@@ -446,10 +468,25 @@ function render(){
         </div>
       </td>
     `;
+    tr.onclick = ()=>{ selectedId = x.id; render(); };
     tbody.appendChild(tr);
   });
 
-  foot.textContent = `${list.length} 条`;
+  foot.textContent = `${list.length} 条（点击行可选中，用于复制）`;
+}
+
+/* ✅ 复制：基于选中行快速新建（code 清空强制改） */
+function copySelected(){
+  if(!selectedId) return alert("请先点击列表行选中一条船公司，再点“复制船公司”");
+  const arr = loadArr();
+  const src = arr.find(x=>x.id===selectedId);
+  if(!src) return alert("选中记录不存在");
+
+  const copy = Object.assign({}, src, { id:null, code:"" });
+  openEdit(copy);
+  editId = null;
+  document.getElementById("editTitle").textContent = "复制船公司（请填写新 Code）";
+  document.getElementById("f_code").focus();
 }
 
 function csvEscape(v){
@@ -481,11 +518,11 @@ function seedDemo(){
   const arr = loadArr();
 
   const demo = [
-    {code:"MAERSK", name:"MAERSK", scac:"MAEU", country:"DENMARK", status:"active"},
-    {code:"MSC", name:"MSC", scac:"MSCU", country:"SWITZERLAND", status:"active"},
-    {code:"OOCL", name:"OOCL", scac:"OOLU", country:"HONG KONG", status:"active"},
-    {code:"COSCO", name:"COSCO", scac:"COSU", country:"CHINA", status:"active"},
-    {code:"HPL", name:"HAPAG-LLOYD", scac:"HLCU", country:"GERMANY", status:"inactive"}
+    {code:"MAERSK", name:"马士基", scac:"MAEU", country:"DENMARK", status:"active"},
+    {code:"MSC", name:"地中海航运", scac:"MSCU", country:"SWITZERLAND", status:"active"},
+    {code:"OOCL", name:"东方海外", scac:"OOLU", country:"HONG KONG", status:"active"},
+    {code:"COSCO", name:"中远海运", scac:"COSU", country:"CHINA", status:"active"},
+    {code:"HPL", name:"赫伯罗特", scac:"HLCU", country:"GERMANY", status:"inactive"}
   ];
 
   demo.forEach(d=>{
