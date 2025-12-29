@@ -1,47 +1,14 @@
 <!--
 File: master/equipment-manage.html
-Version: equipment-manage-v1
+Version: equipment-manage-v2
 Date: 2025-12-29
 
-更新点（v1，新建页面）：
-1) 新增【作业设备管理】页面：维护装箱/堆场/仓库作业设备台账（演示内置测试数据 + LocalStorage）。
-2) 设备类型（枚举）：
-   - 叉车（Forklift）
-   - 抱夹（ClampForklift / Clamper）
-   - 移库车（PalletMover / StackTruck）
-   - 集装箱牵引车（YardTractor / 拖头）
-   - Reach Stacker（靠背）
-   - 集装托盘（ContainerPallet）
-3) 字段（v1 全量，参考行业台账）：
-   - 设备ID（equipmentId）
-   - 物流编号（logisticsNo）
-   - 设备名称/简称（name）
-   - 设备类型（equipmentType）
-   - 吨位/承载能力（capacityTon，数字；托盘可为 0）
-   - 动力类型（powerType：电动/柴油/LPG/无）
-   - 厂牌（brand）、型号（model）
-   - 出厂编号/车架号（serialNo）
-   - 所属作业地（placeId：可输入文本，后续可关联作业地管理）
-   - 责任部门/班组（ownerDept）
-   - 负责人/驾驶员（responsiblePerson，可空）
-   - 使用状态（status：在用/维修中/停用/报废）
-   - 购置/启用日期（commissionDate）
-   - 维保周期（maintIntervalDays / maintIntervalHours）
-   - 累计工时（hourMeter）
-   - 下次保养日期/工时（nextMaintDate / nextMaintHours）
-   - 年检/检验到期日（inspectionDueDate）
-   - 电池编号/规格（batteryId / batterySpec，电动设备适用）
-   - 供应商/维保单位（vendor / maintVendor）
-   - 所属公司/成本中心（company / costCenter）
-   - 资产原值（purchasePrice，可空）
-   - 备注（remark）
-4) 内置测试数据数量（按你的要求）：
-   - 叉车 40、抱夹 20、移库车 5、靠背 2、集装箱牵引车(拖头) 5、集装托盘 30
-5) 列表自适应滚动条默认规则：
-   - 内容溢出自动滚动（优先纵向；宽表支持横向）
-6) 右上角版本号显示 + 点击版本号弹窗内容同步维护：
-   - requirements
-   - 三件套（schema/dict/ui-spec）固定样式 SLMS-ThreeKitStyle（左侧导航 + 右侧单文档内容区，超出自动滚动）
+v2 变更点（基于 v1 最新主线）：
+1) 列表操作列：仅保留【编辑】按钮（移除其它操作按钮）
+2) 点击【编辑】：弹出 Modal 窗口进行编辑并保存（不跳转页面）
+3) 编辑弹窗：字段按类型分区展示（基础信息 / 规格能力 / 归属与位置 / 使用与维护）
+4) 页面顶部新增查询条件：设备编号 / 所属公司 / 设备类型（支持筛选与重置）
+5) 默认列表/弹窗区域：自适应尺寸，内容溢出自动滚动（优先纵向，宽表支持横向）
 -->
 
 <!doctype html>
@@ -49,1386 +16,597 @@ Date: 2025-12-29
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>作业设备管理</title>
+<title>设备管理</title>
 <style>
-  :root{
-    --brand:#e0205c; --bg:#f1f2f5; --card:#fff; --text:#222; --muted:#6b7280;
-    --line:#e5e7eb; --shadow:0 10px 30px rgba(0,0,0,.10);
-    --ok:#16a34a; --bad:#ef4444; --warn:#f59e0b; --info:#2563eb;
-  }
-  *{box-sizing:border-box}
-  body{margin:0;font-family:Arial,"Microsoft YaHei";background:var(--bg);color:var(--text)}
-  .topbar{
-    height:56px;background:#fff;border-bottom:1px solid var(--line);
-    display:flex;align-items:center;justify-content:space-between;padding:0 14px;gap:10px;
-    position:sticky;top:0;z-index:50;
-  }
-  .title{display:flex;align-items:center;gap:10px;font-weight:1000;flex-wrap:wrap}
-  .badge{font-size:12px;color:#fff;background:var(--brand);border-radius:999px;padding:3px 10px}
-  .hint{color:var(--muted);font-size:12px;font-weight:800}
-  .actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap;justify-content:flex-end}
-  .ver{
-    cursor:pointer;background:#f6f6f6;border:1px solid #eee;border-radius:999px;
-    padding:6px 10px;font-size:12px;
-    font-family:ui-monospace,Menlo,Consolas,monospace;
-    display:flex;align-items:center;gap:6px;
-  }
-  .ver .dot{width:8px;height:8px;border-radius:99px;background:var(--brand)}
-  .btn{
-    cursor:pointer;border:1px solid var(--line);background:#fff;border-radius:10px;
-    padding:9px 12px;font-weight:1000;font-size:13px;
-  }
-  .btn.primary{background:var(--brand);border-color:var(--brand);color:#fff}
-  .btn:active{transform:translateY(1px)}
-  .wrap{max-width:1400px;margin:14px auto;padding:0 14px;display:flex;flex-direction:column;gap:12px}
-  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow)}
-  .cardHd{
-    padding:12px 14px;border-bottom:1px solid var(--line);
-    display:flex;align-items:flex-start;justify-content:space-between;gap:10px;flex-wrap:wrap;
-  }
-  .left{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
-  .filters{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
-  .inp,.sel{
-    border:1px solid var(--line);border-radius:10px;padding:9px 10px;font-weight:800;
-    background:#fff;outline:none;font-size:13px;min-width:160px;
-  }
-  .inp.small,.sel.small{min-width:130px}
-  .kpi{display:flex;gap:10px;flex-wrap:wrap;align-items:center;color:var(--muted);font-size:12px;font-weight:900}
-  .pill{background:#f7f7f8;border:1px solid var(--line);border-radius:999px;padding:6px 10px;display:flex;align-items:center;gap:8px}
-  .dotOk,.dotBad,.dotWarn,.dotInfo{width:8px;height:8px;border-radius:99px}
-  .dotOk{background:var(--ok)} .dotBad{background:var(--bad)} .dotWarn{background:var(--warn)} .dotInfo{background:var(--info)}
-  .tableWrap{
-    padding:10px 12px;
-    overflow:auto;
-    max-height:calc(100vh - 56px - 14px - 14px - 130px);
-  }
-  table{border-collapse:separate;border-spacing:0;min-width:1700px;width:100%}
-  th,td{
-    border-bottom:1px solid var(--line);
-    padding:10px 10px;text-align:left;font-size:13px;vertical-align:middle;white-space:nowrap;
-  }
-  th{
-    position:sticky;top:0;background:#fafafa;z-index:2;
-    font-weight:1000;color:#374151;border-bottom:1px solid var(--line);
-  }
-  tr:hover td{background:#fcfcfd}
-  .mono{font-family:ui-monospace,Menlo,Consolas,monospace}
-  .muted{color:var(--muted)}
-  .tag{
-    display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);
-    background:#fff;border-radius:999px;padding:4px 10px;font-size:12px;font-weight:1000;
-  }
-  .tag.svc{border-color:rgba(22,163,74,.35);background:rgba(22,163,74,.06);color:#14532d}
-  .tag.mtn{border-color:rgba(245,158,11,.45);background:rgba(245,158,11,.10);color:#7c2d12}
-  .tag.inact{border-color:rgba(107,114,128,.35);background:rgba(107,114,128,.08);color:#374151}
-  .tag.scrap{border-color:rgba(239,68,68,.35);background:rgba(239,68,68,.08);color:#7f1d1d}
+:root{
+  --brand:#e0205c;--bg:#f1f2f5;--card:#fff;--text:#222;--muted:#6b6b6b;--line:#e9e9e9;
+  --ok:#17a34a;--warn:#f59e0b;--bad:#ef4444;
+}
+*{box-sizing:border-box}
+body{margin:0;font-family:Arial,"Microsoft YaHei";background:var(--bg);color:var(--text)}
+a{color:inherit}
 
-  .rowBtns{display:flex;gap:8px;flex-wrap:wrap}
-  .miniBtn{
-    cursor:pointer;border:1px solid var(--line);background:#fff;border-radius:10px;
-    padding:6px 10px;font-size:12px;font-weight:1000;
-  }
-  .miniBtn.danger{border-color:rgba(239,68,68,.35);color:#7f1d1d;background:rgba(239,68,68,.06)}
-  .miniBtn.ok{border-color:rgba(22,163,74,.35);color:#14532d;background:rgba(22,163,74,.06)}
-  .miniBtn.warn{border-color:rgba(245,158,11,.45);color:#7c2d12;background:rgba(245,158,11,.10)}
-  .miniBtn.gray{border-color:rgba(107,114,128,.35);color:#374151;background:rgba(107,114,128,.08)}
+/* 顶部条 */
+.topbar{
+  background:#fff;border-bottom:1px solid var(--line);
+  padding:10px 14px;display:flex;align-items:center;justify-content:space-between;gap:10px;
+}
+.title{font-weight:900}
+.ver{
+  cursor:pointer;background:#f6f6f6;border:1px solid #eee;border-radius:999px;
+  padding:6px 10px;font-size:12px;font-family:ui-monospace,Menlo,Consolas,monospace;
+  display:flex;align-items:center;gap:6px;
+}
+.ver .dot{width:8px;height:8px;border-radius:99px;background:var(--brand)}
 
-  /* 弹窗 */
-  .mask{position:fixed;inset:0;background:rgba(0,0,0,.35);display:none;align-items:center;justify-content:center;z-index:9999}
-  .modal{
-    width:1100px;max-width:96vw;background:#fff;border-radius:14px;box-shadow:0 20px 60px rgba(0,0,0,.32);
-    display:flex;flex-direction:column;overflow:hidden;
-  }
-  .modalHd{padding:12px 14px;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;gap:10px}
-  .modalTitle{font-weight:1100}
-  .closeX{cursor:pointer;font-weight:1100;color:#666}
-  .modalBd{padding:0}
+/* 主体 */
+.wrap{padding:12px;max-width:1400px;margin:0 auto;display:flex;flex-direction:column;gap:12px}
+.card{
+  background:var(--card);border:1px solid var(--line);border-radius:14px;
+  box-shadow:0 10px 24px rgba(0,0,0,.05);
+}
+.cardHd{
+  padding:10px 12px;border-bottom:1px solid var(--line);
+  display:flex;align-items:center;justify-content:space-between;gap:10px
+}
+.cardHd b{font-size:13px}
+.cardBd{padding:12px}
 
-  /* 版本弹窗 Tabs */
-  .vTabs{display:flex;gap:8px;padding:10px 12px;border-bottom:1px solid var(--line);background:#fafafa;flex-wrap:wrap}
-  .vTab{cursor:pointer;border:1px solid var(--line);background:#fff;border-radius:999px;padding:7px 12px;font-weight:1100;font-size:12px;color:#374151}
-  .vTab.active{border-color:var(--brand);color:var(--brand)}
-  .vPanel{display:none}
-  .vPanel.active{display:block}
+/* 筛选区 */
+.filters{
+  display:grid;grid-template-columns: 1.1fr 1.1fr 1.1fr auto auto;
+  gap:10px;align-items:end
+}
+@media (max-width:980px){
+  .filters{grid-template-columns:1fr 1fr; }
+}
+.fg{display:flex;flex-direction:column;gap:6px}
+label{font-size:12px;color:var(--muted);font-weight:800}
+input,select,textarea{
+  width:100%;border:1px solid #ddd;border-radius:10px;padding:9px 10px;
+  font-size:13px;background:#fff;outline:none
+}
+input:focus,select:focus,textarea:focus{border-color:#c7c7c7;box-shadow:0 0 0 3px rgba(224,32,92,.10)}
+.btn{
+  border:1px solid #ddd;background:#fff;border-radius:12px;padding:9px 12px;
+  font-size:13px;font-weight:900;cursor:pointer;white-space:nowrap
+}
+.btn.primary{background:var(--brand);border-color:var(--brand);color:#fff}
+.btn:active{transform:translateY(1px)}
+.muted{color:var(--muted);font-size:12px}
 
-  /* requirements 面板 */
-  .reqBody{padding:14px 16px;max-height:72vh;overflow:auto;font-size:13px;line-height:1.65}
-  .reqBody h4{margin:14px 0 6px}
-  .reqBody ol{margin:6px 0 0 18px}
-  .reqBody code{background:#f6f6f6;border:1px solid #eee;border-radius:6px;padding:1px 6px}
+/* 表格容器：默认滚动规则 */
+.tableWrap{
+  border:1px solid var(--line);border-radius:12px;overflow:auto;
+  max-height: calc(100vh - 320px);
+  background:#fff;
+}
+table{border-collapse:separate;border-spacing:0;width:100%;min-width:1120px}
+thead th{
+  position:sticky;top:0;z-index:2;
+  background:#fafafa;border-bottom:1px solid var(--line);
+  text-align:left;font-size:12px;color:var(--muted);padding:10px 10px;font-weight:900;
+}
+tbody td{
+  border-bottom:1px solid #f0f0f0;padding:10px 10px;font-size:13px;vertical-align:top
+}
+tbody tr:hover{background:#fcfcfc}
+.badge{
+  display:inline-flex;align-items:center;gap:6px;
+  padding:3px 8px;border-radius:999px;font-size:12px;font-weight:900;border:1px solid #eee;background:#f7f7f7
+}
+.dot{width:8px;height:8px;border-radius:99px;background:#aaa}
+.dot.ok{background:var(--ok)}
+.dot.warn{background:var(--warn)}
+.dot.bad{background:var(--bad)}
+.actions{display:flex;gap:8px;flex-wrap:wrap}
+.small{font-size:12px;padding:7px 10px;border-radius:10px}
 
-  /* SLMS-ThreeKitStyle */
-  .threeKit{display:flex;gap:0;min-height:72vh;max-height:72vh}
-  .tkNav{
-    width:220px;min-width:220px;border-right:1px solid var(--line);background:#fafafa;
-    padding:10px;display:flex;flex-direction:column;gap:8px;overflow:auto;
-  }
-  .tkBtn{
-    cursor:pointer;border:1px solid var(--line);background:#fff;border-radius:12px;
-    padding:10px 10px;font-weight:1100;font-size:12px;color:#374151;text-align:left;
-  }
-  .tkBtn.active{border-color:var(--brand);color:var(--brand)}
-  .tkMain{flex:1;min-width:0;padding:12px;overflow:auto;background:#fff}
-  .docCard{border:1px solid var(--line);border-radius:14px;background:#fff;box-shadow:var(--shadow);overflow:hidden}
-  .docHd{
-    padding:10px 12px;border-bottom:1px solid var(--line);
-    display:flex;align-items:center;justify-content:space-between;gap:10px;background:#fafafa;
-  }
-  .docTitle{font-weight:1100;font-size:13px}
-  .copyBtn{cursor:pointer;border:1px solid var(--line);background:#fff;border-radius:10px;padding:7px 10px;font-weight:1100;font-size:12px}
-  pre{
-    margin:0;padding:12px;max-width:100%;
-    overflow:auto;font-size:12px;line-height:1.55;background:#fff;
-    font-family:ui-monospace,Menlo,Consolas,monospace;
-  }
+/* Modal */
+.mask{position:fixed;inset:0;background:rgba(0,0,0,.38);display:none;align-items:center;justify-content:center;z-index:9999}
+.modal{
+  width:980px;max-width:96vw;background:#fff;border-radius:16px;
+  box-shadow:0 24px 80px rgba(0,0,0,.35);
+  display:flex;flex-direction:column;overflow:hidden
+}
+.mHd{padding:12px 14px;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;gap:10px}
+.mHd b{font-size:14px}
+.mBd{padding:14px;max-height:70vh;overflow:auto}
+.mFt{padding:12px 14px;border-top:1px solid var(--line);display:flex;justify-content:flex-end;gap:10px}
 
-  /* 编辑弹窗表单 */
-  .form{padding:14px 16px;display:grid;grid-template-columns:repeat(3, minmax(0, 1fr));gap:12px}
-  .field{display:flex;flex-direction:column;gap:6px}
-  .lab{font-size:12px;color:#374151;font-weight:1100}
-  .help{font-size:12px;color:var(--muted)}
-  .err{color:var(--bad);font-size:12px;font-weight:1000;display:none}
-  .form .inp,.form .sel{min-width:0}
-  .full{grid-column:1 / -1}
-  .span2{grid-column:span 2}
-  .modalFt{
-    padding:12px 16px;border-top:1px solid var(--line);
-    display:flex;justify-content:flex-end;gap:10px;flex-wrap:wrap;background:#fafafa;
-  }
-  @media (max-width:980px){
-    .form{grid-template-columns:1fr}
-    table{min-width:1400px}
-  }
+/* 分区 */
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@media (max-width:900px){ .grid2{grid-template-columns:1fr} }
+.section{
+  border:1px solid var(--line);border-radius:14px;overflow:hidden;background:#fff
+}
+.sectionHd{padding:10px 12px;border-bottom:1px solid var(--line);font-weight:900;font-size:13px;background:#fafafa}
+.sectionBd{padding:12px;display:grid;grid-template-columns:1fr 1fr;gap:10px}
+@media (max-width:900px){ .sectionBd{grid-template-columns:1fr} }
+textarea{min-height:72px;resize:vertical}
+.helper{font-size:12px;color:var(--muted);margin-top:6px}
 </style>
 </head>
 
 <body>
   <div class="topbar">
-    <div class="title">
-      <span class="badge">Master</span>
-      <span>作业设备管理</span>
-      <span class="hint">Equipment Manage（叉车 / 抱夹 / 移库车 / 靠背 / 拖头 / 集装托盘）</span>
-    </div>
-    <div class="actions">
-      <button class="btn" id="btnReset">恢复默认测试数据</button>
-      <button class="btn primary" id="btnAdd">新增设备</button>
-      <div class="ver" id="verBtn" title="点击查看页面功能要求 / 三件套">
-        <span class="dot"></span>
-        <span>equipment-manage-v1</span>
-      </div>
+    <div class="title">设备管理</div>
+    <div class="ver" id="verBtn" title="点击查看页面功能要求">
+      <span class="dot"></span>
+      <span>equipment-manage-v2</span>
     </div>
   </div>
 
   <div class="wrap">
+
+    <!-- 查询 -->
     <div class="card">
       <div class="cardHd">
-        <div class="left">
-          <div class="filters">
-            <input class="inp" id="qText" placeholder="搜索：设备ID/物流编号/名称/出厂号/负责人" />
-            <select class="sel small" id="qType">
-              <option value="">类型：全部</option>
-            </select>
-            <select class="sel small" id="qStatus">
-              <option value="">状态：全部</option>
-              <option value="IN_SERVICE">在用</option>
-              <option value="MAINTENANCE">维修中</option>
-              <option value="INACTIVE">停用</option>
-              <option value="SCRAPPED">报废</option>
-            </select>
-            <input class="inp small" id="qPlace" placeholder="作业地/区域：如 A3 / B1 / 外部" />
-            <button class="btn" id="btnClear">清空筛选</button>
-          </div>
-
-          <div class="kpi">
-            <span class="pill"><span class="dotInfo"></span><span>总计：<b id="kAll">0</b></span></span>
-            <span class="pill"><span class="dotOk"></span><span>在用：<b id="kSvc">0</b></span></span>
-            <span class="pill"><span class="dotWarn"></span><span>维修：<b id="kMtn">0</b></span></span>
-            <span class="pill"><span class="dotBad"></span><span>停用+报废：<b id="kOff">0</b></span></span>
-          </div>
-        </div>
-
-        <div class="hint">
-          默认规则：列表溢出自动滚动（纵向优先；宽表支持横向）。数据演示存储于 LocalStorage。
-        </div>
+        <b>查询条件</b>
+        <span class="muted">支持按设备编号 / 所属公司 / 设备类型筛选</span>
       </div>
+      <div class="cardBd">
+        <div class="filters">
+          <div class="fg">
+            <label>设备编号</label>
+            <input id="qEquipId" placeholder="如 EQ-0001 / FK-1001 / CL-2003"/>
+          </div>
 
-      <div class="tableWrap">
-        <table>
-          <thead>
-            <tr>
-              <th style="width:140px">设备ID</th>
-              <th style="width:130px">物流编号</th>
-              <th style="width:200px">名称</th>
-              <th style="width:140px">类型</th>
-              <th style="width:90px">吨位</th>
-              <th style="width:100px">动力</th>
-              <th style="width:120px">厂牌</th>
-              <th style="width:160px">型号</th>
-              <th style="width:180px">出厂号/车架号</th>
-              <th style="width:160px">作业地/区域</th>
-              <th style="width:140px">部门/班组</th>
-              <th style="width:140px">负责人</th>
-              <th style="width:120px">状态</th>
-              <th style="width:120px">启用日期</th>
-              <th style="width:120px">累计工时</th>
-              <th style="width:140px">下次保养</th>
-              <th style="width:140px">年检到期</th>
-              <th style="width:180px">电池(编号/规格)</th>
-              <th style="width:160px">维保单位</th>
-              <th style="width:160px">成本中心</th>
-              <th style="width:120px">原值</th>
-              <th style="width:220px">操作</th>
-            </tr>
-          </thead>
-          <tbody id="tbody"></tbody>
-        </table>
+          <div class="fg">
+            <label>所属公司</label>
+            <select id="qCompany">
+              <option value="">全部</option>
+            </select>
+          </div>
+
+          <div class="fg">
+            <label>设备类型</label>
+            <select id="qType">
+              <option value="">全部</option>
+            </select>
+          </div>
+
+          <button class="btn primary" onclick="applyFilter()">查询</button>
+          <button class="btn" onclick="resetFilter()">重置</button>
+        </div>
       </div>
     </div>
+
+    <!-- 列表 -->
+    <div class="card">
+      <div class="cardHd">
+        <b>设备列表</b>
+        <span class="muted" id="countTip">共 0 条</span>
+      </div>
+      <div class="cardBd">
+        <div class="tableWrap">
+          <table>
+            <thead>
+              <tr>
+                <th style="width:120px">设备编号</th>
+                <th style="width:130px">物流编号</th>
+                <th style="width:150px">设备类型</th>
+                <th style="width:110px">吨位/能力</th>
+                <th style="width:140px">所属公司</th>
+                <th style="width:160px">当前位置</th>
+                <th style="width:140px">使用状态</th>
+                <th style="width:120px">操作</th>
+              </tr>
+            </thead>
+            <tbody id="tbody"></tbody>
+          </table>
+        </div>
+        <div class="helper">说明：列表默认自适应；内容溢出自动出现滚动条（优先纵向，宽表支持横向）。</div>
+      </div>
+    </div>
+
   </div>
 
-  <!-- 版本弹窗（requirements + 三件套） -->
-  <div class="mask" id="verMask">
-    <div class="modal">
-      <div class="modalHd">
-        <div class="modalTitle">版本信息（equipment-manage-v1）</div>
-        <div class="closeX" onclick="closeVer()">关闭</div>
+  <!-- 编辑弹窗 -->
+  <div class="mask" id="editMask">
+    <div class="modal" role="dialog" aria-modal="true">
+      <div class="mHd">
+        <b id="mTitle">编辑设备</b>
+        <span class="btn small" onclick="closeEdit()">关闭</span>
       </div>
 
-      <div class="vTabs">
-        <div class="vTab active" data-tab="req">功能要求（requirements）</div>
-        <div class="vTab" data-tab="kit">三件套（schema/dict/ui-spec）</div>
-      </div>
+      <div class="mBd">
+        <div class="grid2">
 
-      <div class="modalBd">
-        <div class="vPanel active" id="panel-req">
-          <div class="reqBody">
-            <h4>一、页面定位（equipment-manage-v1）</h4>
-            <ol>
-              <li>本页面用于维护【作业设备（叉车/抱夹/移库车/靠背/拖头/集装托盘）】台账，供装箱/计划/现场管理引用。</li>
-              <li>页面路径：<code>master/equipment-manage.html</code></li>
-              <li>演示阶段数据保存于 LocalStorage，支持一键恢复默认测试数据。</li>
-            </ol>
-
-            <h4>二、设备类型（枚举）</h4>
-            <ol>
-              <li>Forklift（叉车）</li>
-              <li>ClampForklift（抱夹 / Clamper）</li>
-              <li>PalletMover（移库车）</li>
-              <li>YardTractor（集装箱牵引车 / 拖头）</li>
-              <li>ReachStacker（靠背）</li>
-              <li>ContainerPallet（集装托盘）</li>
-            </ol>
-
-            <h4>三、字段口径（v1 全量）</h4>
-            <ol>
-              <li><b>equipmentId</b>：设备ID（建议唯一；可含类型前缀）。</li>
-              <li><b>logisticsNo</b>：物流编号（内部资产/贴标编号）。</li>
-              <li><b>name</b>：名称/简称（便于现场口头沟通）。</li>
-              <li><b>capacityTon</b>：吨位（数字，展示为 xT；托盘可为 0）。</li>
-              <li><b>powerType</b>：动力类型（电动/柴油/LPG/无）。</li>
-              <li><b>brand/model/serialNo</b>：厂牌/型号/出厂号（便于维保与盘点）。</li>
-              <li><b>placeId</b>：所属作业地/区域（演示为文本，后续可关联作业地主档）。</li>
-              <li><b>ownerDept</b>：责任部门/班组；<b>responsiblePerson</b>：负责人/驾驶员（可空）。</li>
-              <li><b>status</b>：在用/维修中/停用/报废（枚举）。</li>
-              <li><b>commissionDate</b>：启用日期。</li>
-              <li><b>maintIntervalDays / maintIntervalHours</b>：维保周期（按天/工时）。</li>
-              <li><b>hourMeter</b>：累计工时；<b>nextMaintDate / nextMaintHours</b>：下次保养阈值。</li>
-              <li><b>inspectionDueDate</b>：年检/检验到期。</li>
-              <li><b>batteryId / batterySpec</b>：电池编号/规格（电动设备适用）。</li>
-              <li><b>vendor / maintVendor</b>：供应商/维保单位。</li>
-              <li><b>company / costCenter</b>：所属公司/成本中心。</li>
-              <li><b>purchasePrice</b>：资产原值（可空）；<b>remark</b>：备注。</li>
-            </ol>
-
-            <h4>四、列表与滚动条规范（默认规则）</h4>
-            <ol>
-              <li>列表区域自适应：内容溢出自动滚动（优先纵向；宽表支持横向）。</li>
-              <li>表头固定（sticky header）。</li>
-              <li>支持搜索：设备ID/物流编号/名称/出厂号/负责人；支持筛选：类型/状态/作业地。</li>
-            </ol>
-
-            <h4>五、操作规范</h4>
-            <ol>
-              <li>支持新增/编辑/删除（演示：删除为软删除，从列表移除；可通过“恢复默认测试数据”恢复）。</li>
-              <li>支持状态快速切换（在用/维修/停用/报废）。</li>
-            </ol>
-
-            <h4>六、版本维护规则（重要）</h4>
-            <ol>
-              <li>右上角版本号与本弹窗内容同步维护。</li>
-              <li>三件套区域固定样式 <b>SLMS-ThreeKitStyle</b>（左侧导航 + 右侧单文档内容区；超出自动滚动；代码块支持横向滚动）。</li>
-            </ol>
-          </div>
-        </div>
-
-        <div class="vPanel" id="panel-kit">
-          <div class="threeKit">
-            <div class="tkNav">
-              <button class="tkBtn active" data-doc="schema">slms-schema.yaml</button>
-              <button class="tkBtn" data-doc="dict">slms-data-dict.md</button>
-              <button class="tkBtn" data-doc="ui">slms-ui-spec.md</button>
-            </div>
-            <div class="tkMain">
-              <div class="docCard">
-                <div class="docHd">
-                  <div class="docTitle" id="docTitle">slms-schema.yaml</div>
-                  <button class="copyBtn" id="btnCopyDoc">复制</button>
-                </div>
-                <pre id="docPre"></pre>
+          <!-- 基础信息 -->
+          <div class="section">
+            <div class="sectionHd">基础信息</div>
+            <div class="sectionBd">
+              <div class="fg">
+                <label>设备编号（只读）</label>
+                <input id="f_id" disabled/>
+              </div>
+              <div class="fg">
+                <label>物流编号</label>
+                <input id="f_logNo" placeholder="如 LOG-FT-0102"/>
+              </div>
+              <div class="fg">
+                <label>设备类型</label>
+                <select id="f_type"></select>
+              </div>
+              <div class="fg">
+                <label>使用状态</label>
+                <select id="f_status">
+                  <option value="可用">可用</option>
+                  <option value="忙碌">忙碌</option>
+                  <option value="维修">维修</option>
+                  <option value="停用">停用</option>
+                </select>
               </div>
             </div>
           </div>
-        </div>
 
+          <!-- 规格能力 -->
+          <div class="section">
+            <div class="sectionHd">规格能力</div>
+            <div class="sectionBd">
+              <div class="fg">
+                <label>吨位/能力</label>
+                <input id="f_capacity" placeholder="如 3.0T / 45T / 2.5T / 20FT"/>
+              </div>
+              <div class="fg">
+                <label>燃料/动力</label>
+                <select id="f_power">
+                  <option value="">（空）</option>
+                  <option value="柴油">柴油</option>
+                  <option value="电动">电动</option>
+                  <option value="汽油">汽油</option>
+                  <option value="液化气">液化气</option>
+                </select>
+              </div>
+              <div class="fg">
+                <label>品牌</label>
+                <input id="f_brand" placeholder="如 Toyota / Hyster / Kalmar"/>
+              </div>
+              <div class="fg">
+                <label>型号</label>
+                <input id="f_model" placeholder="如 8FD30 / RS45"/>
+              </div>
+            </div>
+          </div>
+
+          <!-- 归属与位置 -->
+          <div class="section">
+            <div class="sectionHd">归属与位置</div>
+            <div class="sectionBd">
+              <div class="fg">
+                <label>所属公司</label>
+                <select id="f_company"></select>
+              </div>
+              <div class="fg">
+                <label>所属班组/队</label>
+                <input id="f_team" placeholder="如 A班 / 外协1队"/>
+              </div>
+              <div class="fg">
+                <label>当前区域</label>
+                <input id="f_area" placeholder="如 A3平台 / B1西侧"/>
+              </div>
+              <div class="fg">
+                <label>责任人/司机</label>
+                <input id="f_owner" placeholder="可空"/>
+              </div>
+            </div>
+          </div>
+
+          <!-- 使用与维护 -->
+          <div class="section">
+            <div class="sectionHd">使用与维护</div>
+            <div class="sectionBd">
+              <div class="fg">
+                <label>购置年份</label>
+                <input id="f_year" type="number" min="1990" max="2100" placeholder="如 2021"/>
+              </div>
+              <div class="fg">
+                <label>保养到期日</label>
+                <input id="f_maintDue" type="date"/>
+              </div>
+              <div class="fg" style="grid-column:1 / -1">
+                <label>备注</label>
+                <textarea id="f_note" placeholder="如：近期更换轮胎/液压管，注意事项..."></textarea>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <div class="mFt">
+        <button class="btn" onclick="closeEdit()">取消</button>
+        <button class="btn primary" onclick="saveEdit()">保存</button>
       </div>
     </div>
   </div>
 
-  <!-- 新增/编辑弹窗 -->
-  <div class="mask" id="editMask">
-    <div class="modal" style="width:1200px">
-      <div class="modalHd">
-        <div class="modalTitle" id="editTitle">新增设备</div>
-        <div class="closeX" onclick="closeEdit()">关闭</div>
+  <!-- 功能要求弹窗 -->
+  <div class="mask" id="reqMask">
+    <div class="modal">
+      <div class="mHd">
+        <b>页面功能要求（设备管理 / equipment-manage-v2）</b>
+        <span class="btn small" onclick="closeReq()">关闭</span>
       </div>
+      <div class="mBd">
+        <h4 style="margin:0 0 8px">一、页面定位</h4>
+        <ol style="margin:0 0 14px 18px;line-height:1.7">
+          <li>用于维护作业设备主数据（叉车/抱夹/移库车/靠背 Reach Stacker/集装箱牵引车/集装托盘等）。</li>
+          <li>页面顶部提供筛选：设备编号 / 所属公司 / 设备类型。</li>
+          <li>列表仅保留【编辑】操作；点击后使用 Modal 弹窗进行编辑与保存。</li>
+        </ol>
 
-      <div class="modalBd">
-        <div class="form">
-          <div class="field">
-            <div class="lab">设备ID *</div>
-            <input class="inp mono" id="fEquipmentId" placeholder="如 FL-001 / CL-001 / YT-001" />
-            <div class="err" id="eEquipmentId">设备ID 必填且需唯一。</div>
-          </div>
+        <h4 style="margin:0 0 8px">二、列表与滚动默认规则</h4>
+        <ol style="margin:0 0 14px 18px;line-height:1.7">
+          <li>表格/列表自适应屏幕；内容溢出自动滚动（优先纵向，宽表支持横向）。</li>
+          <li>弹窗内容超出屏幕自动滚动（优先纵向；长行支持横向）。</li>
+        </ol>
 
-          <div class="field">
-            <div class="lab">物流编号 *</div>
-            <input class="inp mono" id="fLogisticsNo" placeholder="如 LG-2025-0001" />
-            <div class="err" id="eLogisticsNo">物流编号 必填。</div>
-          </div>
-
-          <div class="field">
-            <div class="lab">名称/简称 *</div>
-            <input class="inp" id="fName" placeholder="如 3T叉车-01 / A3抱夹-02" />
-            <div class="err" id="eName">名称 必填。</div>
-          </div>
-
-          <div class="field">
-            <div class="lab">设备类型 *</div>
-            <select class="sel" id="fType"></select>
-          </div>
-
-          <div class="field">
-            <div class="lab">吨位/承载（T）</div>
-            <input class="inp mono" id="fCapTon" type="number" step="0.1" min="0" placeholder="如 3.0" />
-            <div class="help">数字，展示为 xT；托盘可为 0。</div>
-            <div class="err" id="eCapTon">吨位需为 >=0 的数字。</div>
-          </div>
-
-          <div class="field">
-            <div class="lab">动力类型 *</div>
-            <select class="sel" id="fPower">
-              <option value="ELECTRIC">电动</option>
-              <option value="DIESEL">柴油</option>
-              <option value="LPG">LPG</option>
-              <option value="NONE">无（托盘/非动力）</option>
-            </select>
-          </div>
-
-          <div class="field">
-            <div class="lab">厂牌</div>
-            <input class="inp" id="fBrand" placeholder="如 Toyota / Hyster / Linde" />
-          </div>
-
-          <div class="field">
-            <div class="lab">型号</div>
-            <input class="inp" id="fModel" placeholder="如 8FBE15 / H3.0FT" />
-          </div>
-
-          <div class="field">
-            <div class="lab">出厂号/车架号</div>
-            <input class="inp mono" id="fSerial" placeholder="如 SN-XXXXXX" />
-          </div>
-
-          <div class="field">
-            <div class="lab">作业地/区域</div>
-            <input class="inp" id="fPlace" placeholder="如 A3仓库 / B1东侧 / 外部" />
-            <div class="help">演示为文本；后续可与作业地主档关联。</div>
-          </div>
-
-          <div class="field">
-            <div class="lab">责任部门/班组</div>
-            <input class="inp" id="fDept" placeholder="如 装箱班组 / 堆场班组" />
-          </div>
-
-          <div class="field">
-            <div class="lab">负责人/驾驶员</div>
-            <input class="inp" id="fPerson" placeholder="可空，如 张三" />
-          </div>
-
-          <div class="field">
-            <div class="lab">使用状态 *</div>
-            <select class="sel" id="fStatus">
-              <option value="IN_SERVICE">在用</option>
-              <option value="MAINTENANCE">维修中</option>
-              <option value="INACTIVE">停用</option>
-              <option value="SCRAPPED">报废</option>
-            </select>
-          </div>
-
-          <div class="field">
-            <div class="lab">启用日期</div>
-            <input class="inp mono" id="fCommission" type="date" />
-          </div>
-
-          <div class="field">
-            <div class="lab">累计工时（h）</div>
-            <input class="inp mono" id="fHourMeter" type="number" step="1" min="0" placeholder="如 1250" />
-            <div class="err" id="eHourMeter">累计工时需为整数且 >=0。</div>
-          </div>
-
-          <div class="field">
-            <div class="lab">维保周期（天）</div>
-            <input class="inp mono" id="fMaintDays" type="number" step="1" min="0" placeholder="如 90" />
-            <div class="help">按天，>=0（不需要可填 0）。</div>
-          </div>
-
-          <div class="field">
-            <div class="lab">维保周期（工时）</div>
-            <input class="inp mono" id="fMaintHours" type="number" step="1" min="0" placeholder="如 250" />
-            <div class="help">按工时，>=0（不需要可填 0）。</div>
-          </div>
-
-          <div class="field">
-            <div class="lab">下次保养日期</div>
-            <input class="inp mono" id="fNextMaintDate" type="date" />
-          </div>
-
-          <div class="field">
-            <div class="lab">下次保养工时阈值</div>
-            <input class="inp mono" id="fNextMaintHours" type="number" step="1" min="0" placeholder="如 1500" />
-          </div>
-
-          <div class="field">
-            <div class="lab">年检/检验到期日</div>
-            <input class="inp mono" id="fInspectDue" type="date" />
-          </div>
-
-          <div class="field">
-            <div class="lab">电池编号</div>
-            <input class="inp mono" id="fBatteryId" placeholder="如 BAT-A3-001" />
-          </div>
-
-          <div class="field">
-            <div class="lab">电池规格</div>
-            <input class="inp" id="fBatterySpec" placeholder="如 48V 500Ah" />
-          </div>
-
-          <div class="field">
-            <div class="lab">供应商</div>
-            <input class="inp" id="fVendor" placeholder="如 XX设备公司" />
-          </div>
-
-          <div class="field">
-            <div class="lab">维保单位</div>
-            <input class="inp" id="fMaintVendor" placeholder="如 XX维保服务" />
-          </div>
-
-          <div class="field">
-            <div class="lab">所属公司</div>
-            <input class="inp" id="fCompany" placeholder="如 SLMS-天津" />
-          </div>
-
-          <div class="field">
-            <div class="lab">成本中心</div>
-            <input class="inp mono" id="fCostCenter" placeholder="如 CC-CDC-001" />
-          </div>
-
-          <div class="field">
-            <div class="lab">资产原值</div>
-            <input class="inp mono" id="fPrice" type="number" step="1" min="0" placeholder="如 180000" />
-            <div class="help">可空；单位按你们内部口径。</div>
-          </div>
-
-          <div class="field full">
-            <div class="lab">备注</div>
-            <input class="inp" id="fRemark" placeholder="可空：例如 仅限A3使用 / 高位作业 / 托盘规格说明" />
-          </div>
-
-          <div class="field full">
-            <div class="hint">提示：后续新增字段/规则时，将以本版本（v1）为主线升级，并同步更新右上角版本号与本弹窗内容。</div>
-          </div>
-        </div>
+        <h4 style="margin:0 0 8px">三、字段分区（编辑弹窗）</h4>
+        <ol style="margin:0 0 0 18px;line-height:1.7">
+          <li>基础信息：设备编号（只读）/物流编号/设备类型/使用状态</li>
+          <li>规格能力：吨位/能力/燃料动力/品牌/型号</li>
+          <li>归属与位置：所属公司/班组队/当前区域/责任人</li>
+          <li>使用与维护：购置年份/保养到期日/备注</li>
+        </ol>
       </div>
-
-      <div class="modalFt">
-        <button class="btn" onclick="closeEdit()">取消</button>
-        <button class="btn primary" id="btnSave">保存</button>
+      <div class="mFt">
+        <button class="btn primary" onclick="closeReq()">知道了</button>
       </div>
     </div>
   </div>
 
 <script>
-/* =========================
-   常量 & 枚举
-========================= */
-const PAGE_VERSION = 'equipment-manage-v1';
-const LS_KEY = 'slms.master.equipment.v1';
-
-const EQUIP_TYPES = [
-  { key:'FORKLIFT', label:'叉车', short:'FL' },
-  { key:'CLAMP_FORKLIFT', label:'抱夹', short:'CL' },
-  { key:'PALLET_MOVER', label:'移库车', short:'PM' },
-  { key:'YARD_TRACTOR', label:'集装箱牵引车(拖头)', short:'YT' },
-  { key:'REACH_STACKER', label:'Reach Stacker(靠背)', short:'RS' },
-  { key:'CONTAINER_PALLET', label:'集装托盘', short:'PL' }
+/** ====== 测试数据（与之前数量约定一致，可后续替换为接口） ====== */
+const TYPES = [
+  '叉车','抱夹','移库车','Reach Stacker(靠背)','集装箱牵引车(拖头)','集装托盘'
 ];
+const COMPANIES = [
+  '自有-天津物流','外协-XX运输','外协-YY装卸'
+];
+const STATUS = ['可用','忙碌','维修','停用'];
 
-const STATUS = {
-  IN_SERVICE: { label:'在用', cls:'svc' },
-  MAINTENANCE: { label:'维修中', cls:'mtn' },
-  INACTIVE: { label:'停用', cls:'inact' },
-  SCRAPPED: { label:'报废', cls:'scrap' }
-};
+function pad(n,len=4){ return String(n).padStart(len,'0'); }
+function randPick(arr){ return arr[Math.floor(Math.random()*arr.length)]; }
 
-const POWER_LABEL = {
-  ELECTRIC:'电动', DIESEL:'柴油', LPG:'LPG', NONE:'无'
-};
-
-const PLACES = ['A3仓库','A3平台','B1东侧','B1西侧','B2仓库','B3东侧','B3西侧','C2南侧','外部'];
-const DEPTS = ['装箱班组','堆场班组','仓库班组','运输班组','设备管理'];
-const COMPANIES = ['SLMS-天津','SLMS-工厂','SLMS-堆场'];
-const COST_CENTERS = ['CC-CDC-001','CC-OPS-002','CC-YARD-003'];
-
-/* =========================
-   数据生成（按你要求的数量）
-========================= */
-function pad3(n){ return String(n).padStart(3,'0'); }
-function randInt(a,b){ return a + Math.floor(Math.random()*(b-a+1)); }
-function pick(arr){ return arr[randInt(0,arr.length-1)]; }
-
-function dateISO(d){
-  const yyyy=d.getFullYear();
-  const mm=String(d.getMonth()+1).padStart(2,'0');
-  const dd=String(d.getDate()).padStart(2,'0');
-  return `${yyyy}-${mm}-${dd}`;
-}
-function addDays(date, days){
-  const d = new Date(date.getTime());
-  d.setDate(d.getDate()+days);
-  return d;
-}
-
-function makeSerial(prefix){
-  const a = randInt(100000,999999);
-  const b = randInt(1000,9999);
-  return `${prefix}-${a}-${b}`;
-}
-function makeLogNo(idx){
-  return `LG-2025-${String(idx).padStart(4,'0')}`;
-}
-
-function autoStatus(typeKey){
-  // 大多数在用，少量维修/停用，极少报废
-  const r = Math.random();
-  if(typeKey==='CONTAINER_PALLET'){
-    // 托盘：更偏在用/停用
-    if(r<0.78) return 'IN_SERVICE';
-    if(r<0.92) return 'INACTIVE';
-    if(r<0.98) return 'MAINTENANCE';
-    return 'SCRAPPED';
+function genData(){
+  const arr=[];
+  // 叉车 40
+  for(let i=1;i<=40;i++){
+    arr.push(mk('FK', i, '叉车', `${randPick([2.5,3.0,3.5,5.0])}T`));
   }
-  if(r<0.80) return 'IN_SERVICE';
-  if(r<0.92) return 'MAINTENANCE';
-  if(r<0.98) return 'INACTIVE';
-  return 'SCRAPPED';
-}
-
-function autoPower(typeKey){
-  if(typeKey==='CONTAINER_PALLET') return 'NONE';
-  if(typeKey==='YARD_TRACTOR' || typeKey==='REACH_STACKER') return 'DIESEL';
-  // 叉车/抱夹/移库车：电动居多
-  const r = Math.random();
-  if(typeKey==='PALLET_MOVER') return 'ELECTRIC';
-  if(r<0.70) return 'ELECTRIC';
-  if(r<0.92) return 'DIESEL';
-  return 'LPG';
-}
-
-function autoBrand(typeKey, power){
-  if(typeKey==='CONTAINER_PALLET') return '—';
-  const electricBrands = ['Toyota','Linde','Jungheinrich','Crown','Hangcha','Heli'];
-  const dieselBrands = ['Hyster','Toyota','Linde','Hangcha','Heli','SANY'];
-  const rsBrands = ['Kalmar','Konecranes','SANY','CVS Ferrari'];
-  const ytBrands = ['Kalmar','Terberg','Ottawa','TICO','SANY'];
-  if(typeKey==='REACH_STACKER') return pick(rsBrands);
-  if(typeKey==='YARD_TRACTOR') return pick(ytBrands);
-  if(power==='ELECTRIC') return pick(electricBrands);
-  return pick(dieselBrands);
-}
-
-function autoModel(typeKey, cap, power){
-  if(typeKey==='CONTAINER_PALLET') return 'PLT-STD';
-  if(typeKey==='REACH_STACKER') return `RS-${randInt(45,60)}T`;
-  if(typeKey==='YARD_TRACTOR') return `YT-${randInt(30,45)}T`;
-  if(typeKey==='PALLET_MOVER') return `PM-${randInt(16,20)}.0`;
-  // forklift / clamp
-  if(typeKey==='CLAMP_FORKLIFT') return `CL-${cap.toFixed(1)}T`;
-  return `FL-${cap.toFixed(1)}T`;
-}
-
-function autoCap(typeKey){
-  if(typeKey==='CONTAINER_PALLET') return 0;
-  if(typeKey==='REACH_STACKER') return pick([45,50,55,60]);
-  if(typeKey==='YARD_TRACTOR') return pick([30,35,40,45]);
-  if(typeKey==='PALLET_MOVER') return pick([1.6,2.0]);
-  // forklift/clamp
-  return pick([2.5,3.0,3.5,4.0,5.0]);
-}
-
-function autoMaintPlan(typeKey){
-  // 维保周期：叉车/抱夹常见 60~120 天 或 200~300 工时
-  if(typeKey==='CONTAINER_PALLET'){
-    return { days: 180, hours: 0 };
+  // 抱夹 20
+  for(let i=1;i<=20;i++){
+    arr.push(mk('CL', i, '抱夹', `${randPick([2.5,3.0,3.5,4.0])}T`));
   }
-  if(typeKey==='YARD_TRACTOR' || typeKey==='REACH_STACKER'){
-    return { days: 60, hours: 200 };
+  // 移库车 5
+  for(let i=1;i<=5;i++){
+    arr.push(mk('YC', i, '移库车', `${randPick([2.0,2.5,3.0])}T`));
   }
-  if(typeKey==='PALLET_MOVER'){
-    return { days: 90, hours: 0 };
+  // 靠背 2
+  for(let i=1;i<=2;i++){
+    arr.push(mk('RS', i, 'Reach Stacker(靠背)', `${randPick([45,50])}T`));
   }
-  return { days: pick([60,90,120]), hours: pick([200,250,300]) };
+  // 拖头 5
+  for(let i=1;i<=5;i++){
+    arr.push(mk('TT', i, '集装箱牵引车(拖头)', `${randPick([350,420,480])}HP`));
+  }
+  // 托盘 30
+  for(let i=1;i<=30;i++){
+    arr.push(mk('PL', i, '集装托盘', `${randPick(['20FT','40FT','45FT'])}`));
+  }
+  return arr.map((x,idx)=>({
+    ...x,
+    brand: randPick(['Toyota','Hyster','Kalmar','Konecranes','中联重科','三一','合力','杭叉','']),
+    model: randPick(['','8FD30','8FD35','H2.5XT','RS45','DRG420','']),
+    power: x.type==='集装托盘' ? '' : randPick(['柴油','电动','柴油','柴油','']),
+    company: randPick(COMPANIES),
+    team: randPick(['A班','B班','外协1队','外协2队','']),
+    area: randPick(['A3平台','A3仓库','B1东侧','B1西侧','B2仓库','C2南侧','外部','']),
+    owner: randPick(['','张三','李四','王五','赵六']),
+    year: randPick([2017,2018,2019,2020,2021,2022,2023,'']),
+    maintDue: randPick(['2026-01-15','2026-03-10','2025-12-31','', '2026-06-20']),
+    status: randPick(STATUS),
+    note: ''
+  }));
 }
 
-function autoHourMeter(typeKey){
-  if(typeKey==='CONTAINER_PALLET') return 0;
-  if(typeKey==='REACH_STACKER') return randInt(800, 5200);
-  if(typeKey==='YARD_TRACTOR') return randInt(600, 3800);
-  return randInt(200, 4200);
+function mk(prefix, num, type, capacity){
+  return {
+    id: `${prefix}-${pad(num)}`,
+    logNo: `LOG-${prefix}-${pad(100+num)}`,
+    type,
+    capacity
+  };
 }
 
-function autoBattery(power, placeCode){
-  if(power!=='ELECTRIC') return { id:'', spec:'' };
-  const id = `BAT-${placeCode}-${randInt(1,40).toString().padStart(3,'0')}`;
-  const spec = pick(['48V 500Ah','48V 600Ah','80V 400Ah','80V 500Ah']);
-  return { id, spec };
-}
+let DB = genData();
+let VIEW = [...DB];
+let editingId = null;
 
-function autoVendors(typeKey){
-  if(typeKey==='CONTAINER_PALLET'){
-    return { vendor: '托盘供应商', maint: '—' };
-  }
-  const vendor = pick(['华北设备公司','津港装备','环渤海设备','北方物资']);
-  const maint = pick(['同城维保服务','原厂服务站','港区维保队']);
-  return { vendor, maint };
-}
-
-function buildDefaultData(){
-  // 你指定的数量
-  const plan = [
-    { type:'FORKLIFT', count:40 },
-    { type:'CLAMP_FORKLIFT', count:20 },
-    { type:'PALLET_MOVER', count:5 },
-    { type:'REACH_STACKER', count:2 },
-    { type:'YARD_TRACTOR', count:5 },
-    { type:'CONTAINER_PALLET', count:30 }
-  ];
-
-  const rows = [];
-  let idx = 1;
-  const today = new Date();
-
-  for(const p of plan){
-    const typeMeta = EQUIP_TYPES.find(x=>x.key===p.type);
-    for(let i=1;i<=p.count;i++){
-      const cap = autoCap(p.type);
-      const power = autoPower(p.type);
-      const place = pick(PLACES);
-      const placeCode = (place.match(/[A-Z]\d/)||[])[0] || 'OT';
-      const brand = autoBrand(p.type, power);
-      const model = autoModel(p.type, cap, power);
-      const serial = (p.type==='CONTAINER_PALLET') ? `PL-${randInt(100000,999999)}` : makeSerial(typeMeta.short);
-      const st = autoStatus(p.type);
-
-      const comm = addDays(today, -randInt(60, 1500)); // 最近几年启用
-      const maint = autoMaintPlan(p.type);
-      const hour = autoHourMeter(p.type);
-
-      let nextMaintDate = '';
-      let nextMaintHours = 0;
-
-      if(maint.days>0){
-        const d = addDays(comm, maint.days * randInt(6, 18)); // 假装经历多次周期
-        nextMaintDate = dateISO(addDays(today, randInt(5, 120)));
-      }
-      if(maint.hours>0){
-        nextMaintHours = hour + randInt(30, 220);
-      }
-
-      const inspectDue = dateISO(addDays(today, randInt(10, 360)));
-      const bat = autoBattery(power, placeCode);
-      const v = autoVendors(p.type);
-
-      const name = (() => {
-        if(p.type==='CONTAINER_PALLET'){
-          return `集装托盘-${pad3(i)}`;
-        }
-        if(p.type==='REACH_STACKER'){
-          return `靠背-${cap}T-${pad3(i)}`;
-        }
-        if(p.type==='YARD_TRACTOR'){
-          return `拖头-${cap}T-${pad3(i)}`;
-        }
-        if(p.type==='PALLET_MOVER'){
-          return `移库车-${pad3(i)}`;
-        }
-        if(p.type==='CLAMP_FORKLIFT'){
-          return `${cap.toFixed(1)}T抱夹-${pad3(i)}`;
-        }
-        return `${cap.toFixed(1)}T叉车-${pad3(i)}`;
-      })();
-
-      const equipmentId = `${typeMeta.short}-${pad3(i)}`;
-      const logisticsNo = makeLogNo(idx);
-
-      rows.push({
-        uid: cryptoRandomId(),
-        equipmentId,
-        logisticsNo,
-        name,
-        equipmentType: p.type,
-        capacityTon: cap,
-        powerType: power,
-        brand,
-        model,
-        serialNo: serial,
-        placeId: place,
-        ownerDept: pick(DEPTS),
-        responsiblePerson: (Math.random()<0.35 && p.type!=='CONTAINER_PALLET') ? pick(['张三','李四','王五','赵六','孙七','周八']) : '',
-        status: st,
-        commissionDate: dateISO(comm),
-        maintIntervalDays: maint.days,
-        maintIntervalHours: maint.hours,
-        hourMeter: hour,
-        nextMaintDate,
-        nextMaintHours,
-        inspectionDueDate: inspectDue,
-        batteryId: bat.id,
-        batterySpec: bat.spec,
-        vendor: v.vendor,
-        maintVendor: v.maint,
-        company: pick(COMPANIES),
-        costCenter: pick(COST_CENTERS),
-        purchasePrice: (p.type==='CONTAINER_PALLET')
-          ? randInt(200,600)
-          : (p.type==='REACH_STACKER' ? randInt(1200000, 2000000)
-             : p.type==='YARD_TRACTOR' ? randInt(600000, 1200000)
-             : randInt(90000, 260000)),
-        remark: (p.type==='CONTAINER_PALLET')
-          ? pick(['标准托盘','加固型','需点检编号清晰',''])
-          : ''
-      });
-
-      idx++;
-    }
-  }
-
-  // 排序：类型+编号
-  rows.sort((a,b)=>{
-    if(a.equipmentType!==b.equipmentType) return a.equipmentType.localeCompare(b.equipmentType);
-    return a.equipmentId.localeCompare(b.equipmentId);
+/** ====== 初始化下拉 ====== */
+function initFilters(){
+  const qCompany=document.getElementById('qCompany');
+  const qType=document.getElementById('qType');
+  // company options
+  COMPANIES.forEach(c=>{
+    const o=document.createElement('option');
+    o.value=c;o.textContent=c;
+    qCompany.appendChild(o);
   });
-  return rows;
+  // type options
+  TYPES.forEach(t=>{
+    const o=document.createElement('option');
+    o.value=t;o.textContent=t;
+    qType.appendChild(o);
+  });
+
+  // modal type/company
+  const fType=document.getElementById('f_type');
+  TYPES.forEach(t=>{
+    const o=document.createElement('option');
+    o.value=t;o.textContent=t;
+    fType.appendChild(o);
+  });
+  const fCompany=document.getElementById('f_company');
+  COMPANIES.forEach(c=>{
+    const o=document.createElement('option');
+    o.value=c;o.textContent=c;
+    fCompany.appendChild(o);
+  });
 }
 
-/* =========================
-   存储
-========================= */
-function loadData(){
-  try{
-    const s = localStorage.getItem(LS_KEY);
-    if(!s) return buildDefaultData();
-    const arr = JSON.parse(s);
-    if(!Array.isArray(arr) || !arr.length) return buildDefaultData();
-    return arr;
-  }catch(e){
-    return buildDefaultData();
-  }
+/** ====== 渲染列表 ====== */
+function badgeFor(status){
+  let cls='warn';
+  if(status==='可用') cls='ok';
+  else if(status==='维修' || status==='停用') cls='bad';
+  return `<span class="badge"><span class="dot ${cls}"></span>${status}</span>`;
 }
-function saveData(){ localStorage.setItem(LS_KEY, JSON.stringify(DATA)); }
-
-function cryptoRandomId(){
-  try{
-    const a = new Uint32Array(2);
-    crypto.getRandomValues(a);
-    return 'E' + a[0].toString(16) + a[1].toString(16);
-  }catch(e){
-    return 'E' + Math.random().toString(16).slice(2) + Date.now().toString(16);
-  }
+function render(){
+  const tbody=document.getElementById('tbody');
+  tbody.innerHTML = VIEW.map(r=>`
+    <tr>
+      <td><b>${escapeHtml(r.id)}</b></td>
+      <td>${escapeHtml(r.logNo||'')}</td>
+      <td>${escapeHtml(r.type||'')}</td>
+      <td>${escapeHtml(r.capacity||'')}</td>
+      <td>${escapeHtml(r.company||'')}</td>
+      <td>${escapeHtml(r.area||'')}</td>
+      <td>${badgeFor(r.status||'')}</td>
+      <td>
+        <div class="actions">
+          <button class="btn small" onclick="openEdit('${escapeAttr(r.id)}')">编辑</button>
+        </div>
+      </td>
+    </tr>
+  `).join('');
+  document.getElementById('countTip').textContent = `共 ${VIEW.length} 条`;
 }
-let DATA = loadData();
 
-/* =========================
-   绑定筛选控件
-========================= */
-const tbody = document.getElementById('tbody');
-const qText = document.getElementById('qText');
-const qType = document.getElementById('qType');
-const qStatus = document.getElementById('qStatus');
-const qPlace = document.getElementById('qPlace');
+/** ====== 过滤 ====== */
+function applyFilter(){
+  const qId = document.getElementById('qEquipId').value.trim().toUpperCase();
+  const qCompany = document.getElementById('qCompany').value;
+  const qType = document.getElementById('qType').value;
 
-const kAll = document.getElementById('kAll');
-const kSvc = document.getElementById('kSvc');
-const kMtn = document.getElementById('kMtn');
-const kOff = document.getElementById('kOff');
-
-function norm(s){ return String(s||'').toLowerCase().trim(); }
-
-function fillTypeOptions(sel){
-  sel.innerHTML = `<option value="">类型：全部</option>` +
-    EQUIP_TYPES.map(t=>`<option value="${t.key}">${t.label}</option>`).join('');
-}
-fillTypeOptions(qType);
-
-[qText,qType,qStatus,qPlace].forEach(el=>el.addEventListener('input', render));
-qType.addEventListener('change', render);
-qStatus.addEventListener('change', render);
-
-document.getElementById('btnClear').onclick=()=>{
-  qText.value=''; qType.value=''; qStatus.value=''; qPlace.value='';
-  render();
-};
-
-document.getElementById('btnReset').onclick=()=>{
-  DATA = buildDefaultData();
-  saveData();
-  render();
-  toast('已恢复默认测试数据');
-};
-document.getElementById('btnReset').title = `LocalStorage Key: ${LS_KEY}`;
-
-/* =========================
-   渲染
-========================= */
-function filtered(){
-  const t = norm(qText.value);
-  const ty = qType.value;
-  const st = qStatus.value;
-  const pl = norm(qPlace.value);
-
-  return DATA.filter(r=>{
-    if(t){
-      const hay = norm([r.equipmentId,r.logisticsNo,r.name,r.serialNo,r.responsiblePerson].join(' '));
-      if(!hay.includes(t)) return false;
-    }
-    if(ty && r.equipmentType!==ty) return false;
-    if(st && r.status!==st) return false;
-    if(pl){
-      const hay2 = norm([r.placeId].join(' '));
-      if(!hay2.includes(pl)) return false;
-    }
+  VIEW = DB.filter(r=>{
+    if(qId && !(String(r.id||'').toUpperCase().includes(qId) || String(r.logNo||'').toUpperCase().includes(qId))) return false;
+    if(qCompany && r.company!==qCompany) return false;
+    if(qType && r.type!==qType) return false;
     return true;
   });
+  render();
+}
+function resetFilter(){
+  document.getElementById('qEquipId').value='';
+  document.getElementById('qCompany').value='';
+  document.getElementById('qType').value='';
+  VIEW=[...DB];
+  render();
 }
 
-function statusTag(s){
-  const m = STATUS[s] || {label:s||'-', cls:'inact'};
-  return `<span class="tag ${m.cls}">${m.label}</span>`;
-}
-function typeLabel(key){
-  const t = EQUIP_TYPES.find(x=>x.key===key);
-  return t ? t.label : key;
-}
-function capLabel(row){
-  if(row.equipmentType==='CONTAINER_PALLET') return '-';
-  const n = Number(row.capacityTon);
-  if(!Number.isFinite(n)) return '-';
-  return `${n.toFixed(n%1===0?0:1)}T`;
-}
-function powerLabel(p){ return POWER_LABEL[p] || p || '-'; }
+/** ====== 编辑 Modal ====== */
+const editMask=document.getElementById('editMask');
 
+function openEdit(id){
+  const r = DB.find(x=>x.id===id);
+  if(!r) return;
+
+  editingId = id;
+  document.getElementById('mTitle').textContent = `编辑设备：${id}`;
+
+  // 基础
+  document.getElementById('f_id').value = r.id||'';
+  document.getElementById('f_logNo').value = r.logNo||'';
+  document.getElementById('f_type').value = r.type||'';
+  document.getElementById('f_status').value = r.status||'可用';
+
+  // 规格
+  document.getElementById('f_capacity').value = r.capacity||'';
+  document.getElementById('f_power').value = r.power||'';
+  document.getElementById('f_brand').value = r.brand||'';
+  document.getElementById('f_model').value = r.model||'';
+
+  // 归属
+  document.getElementById('f_company').value = r.company||'';
+  document.getElementById('f_team').value = r.team||'';
+  document.getElementById('f_area').value = r.area||'';
+  document.getElementById('f_owner').value = r.owner||'';
+
+  // 维护
+  document.getElementById('f_year').value = r.year||'';
+  document.getElementById('f_maintDue').value = r.maintDue||'';
+  document.getElementById('f_note').value = r.note||'';
+
+  editMask.style.display='flex';
+}
+
+function closeEdit(){
+  editMask.style.display='none';
+  editingId = null;
+}
+
+function saveEdit(){
+  if(!editingId) return;
+  const idx = DB.findIndex(x=>x.id===editingId);
+  if(idx<0) return;
+
+  // 简单校验：类型/公司必选（你后续可按业务强化）
+  const newType = document.getElementById('f_type').value;
+  const newCompany = document.getElementById('f_company').value;
+  if(!newType){ alert('设备类型不能为空'); return; }
+  if(!newCompany){ alert('所属公司不能为空'); return; }
+
+  const updated = {
+    ...DB[idx],
+    logNo: document.getElementById('f_logNo').value.trim(),
+    type: newType,
+    status: document.getElementById('f_status').value,
+    capacity: document.getElementById('f_capacity').value.trim(),
+    power: document.getElementById('f_power').value,
+    brand: document.getElementById('f_brand').value.trim(),
+    model: document.getElementById('f_model').value.trim(),
+    company: newCompany,
+    team: document.getElementById('f_team').value.trim(),
+    area: document.getElementById('f_area').value.trim(),
+    owner: document.getElementById('f_owner').value.trim(),
+    year: document.getElementById('f_year').value ? Number(document.getElementById('f_year').value) : '',
+    maintDue: document.getElementById('f_maintDue').value,
+    note: document.getElementById('f_note').value.trim()
+  };
+
+  DB[idx]=updated;
+
+  // 重新应用当前筛选（保持用户视角一致）
+  applyFilter();
+  closeEdit();
+}
+
+/** ====== 页面功能要求弹窗 ====== */
+const reqMask=document.getElementById('reqMask');
+document.getElementById('verBtn').onclick=()=>reqMask.style.display='flex';
+function closeReq(){ reqMask.style.display='none'; }
+
+/** ====== 通用：点击遮罩关闭（避免误关：仅点遮罩关闭） ====== */
+editMask.addEventListener('click', (e)=>{ if(e.target===editMask) closeEdit(); });
+reqMask.addEventListener('click', (e)=>{ if(e.target===reqMask) closeReq(); });
+
+/** ====== XSS 保护（演示数据也保持好习惯） ====== */
 function escapeHtml(s){
   return String(s??'')
     .replaceAll('&','&amp;')
     .replaceAll('<','&lt;')
     .replaceAll('>','&gt;')
     .replaceAll('"','&quot;')
-    .replaceAll("'","&#039;");
+    .replaceAll("'","&#39;");
 }
+function escapeAttr(s){ return escapeHtml(s).replaceAll('`','&#96;'); }
 
-function render(){
-  // KPI：基于全量
-  const all = DATA.length;
-  const svc = DATA.filter(x=>x.status==='IN_SERVICE').length;
-  const mtn = DATA.filter(x=>x.status==='MAINTENANCE').length;
-  const off = DATA.filter(x=>x.status==='INACTIVE' || x.status==='SCRAPPED').length;
-
-  kAll.textContent = all;
-  kSvc.textContent = svc;
-  kMtn.textContent = mtn;
-  kOff.textContent = off;
-
-  const rows = filtered();
-  tbody.innerHTML = rows.map(r=>{
-    const bat = (r.batteryId || r.batterySpec) ? `${escapeHtml(r.batteryId||'-')} / ${escapeHtml(r.batterySpec||'-')}` : '-';
-    const nextMaint = (r.nextMaintDate || r.nextMaintHours)
-      ? `${escapeHtml(r.nextMaintDate||'-')} / ${r.nextMaintHours? (r.nextMaintHours+'h'):'-'}` : '-';
-
-    const price = (r.purchasePrice===null || r.purchasePrice===undefined || r.purchasePrice==='') ? '-' : Number(r.purchasePrice).toLocaleString();
-
-    return `
-      <tr>
-        <td class="mono"><b>${escapeHtml(r.equipmentId)}</b></td>
-        <td class="mono">${escapeHtml(r.logisticsNo)}</td>
-        <td>${escapeHtml(r.name)}</td>
-        <td>${escapeHtml(typeLabel(r.equipmentType))}</td>
-        <td class="mono">${escapeHtml(capLabel(r))}</td>
-        <td>${escapeHtml(powerLabel(r.powerType))}</td>
-        <td>${escapeHtml(r.brand||'-')}</td>
-        <td>${escapeHtml(r.model||'-')}</td>
-        <td class="mono">${escapeHtml(r.serialNo||'-')}</td>
-        <td>${escapeHtml(r.placeId||'-')}</td>
-        <td>${escapeHtml(r.ownerDept||'-')}</td>
-        <td>${escapeHtml(r.responsiblePerson||'-')}</td>
-        <td>${statusTag(r.status)}</td>
-        <td class="mono">${escapeHtml(r.commissionDate||'-')}</td>
-        <td class="mono">${Number.isFinite(r.hourMeter)? r.hourMeter : '-'}</td>
-        <td class="mono">${nextMaint}</td>
-        <td class="mono">${escapeHtml(r.inspectionDueDate||'-')}</td>
-        <td class="mono">${bat}</td>
-        <td>${escapeHtml(r.maintVendor||'-')}</td>
-        <td class="mono">${escapeHtml(r.costCenter||'-')}</td>
-        <td class="mono">${escapeHtml(price)}</td>
-        <td>
-          <div class="rowBtns">
-            <button class="miniBtn" onclick="editRow('${r.uid}')">编辑</button>
-            <button class="miniBtn ok" onclick="setStatus('${r.uid}','IN_SERVICE')">在用</button>
-            <button class="miniBtn warn" onclick="setStatus('${r.uid}','MAINTENANCE')">维修</button>
-            <button class="miniBtn gray" onclick="setStatus('${r.uid}','INACTIVE')">停用</button>
-            <button class="miniBtn danger" onclick="setStatus('${r.uid}','SCRAPPED')">报废</button>
-            <button class="miniBtn danger" onclick="removeRow('${r.uid}')">删除</button>
-          </div>
-        </td>
-      </tr>
-    `;
-  }).join('') || `<tr><td colspan="22" class="muted" style="padding:16px 10px">无匹配记录</td></tr>`;
-}
+/** ====== init ====== */
+initFilters();
 render();
-
-/* =========================
-   状态切换 & 删除
-========================= */
-function setStatus(uid, st){
-  const idx = DATA.findIndex(x=>x.uid===uid);
-  if(idx<0) return;
-  DATA[idx].status = st;
-  saveData();
-  render();
-}
-function removeRow(uid){
-  const row = DATA.find(x=>x.uid===uid);
-  if(!row) return;
-  const ok = confirm(`确认删除设备？\n\n${row.equipmentId}\n${row.name}`);
-  if(!ok) return;
-  DATA = DATA.filter(x=>x.uid!==uid);
-  saveData();
-  render();
-}
-
-/* =========================
-   版本弹窗 + 三件套（SLMS-ThreeKitStyle）
-========================= */
-const verBtn = document.getElementById('verBtn');
-const verMask = document.getElementById('verMask');
-verBtn.onclick = ()=> verMask.style.display='flex';
-function closeVer(){ verMask.style.display='none'; }
-verMask.onclick = (e)=>{ if(e.target===verMask) closeVer(); };
-
-document.querySelectorAll('.vTab').forEach(t=>{
-  t.onclick=()=>{
-    document.querySelectorAll('.vTab').forEach(x=>x.classList.remove('active'));
-    t.classList.add('active');
-    const tab = t.getAttribute('data-tab');
-    document.getElementById('panel-req').classList.toggle('active', tab==='req');
-    document.getElementById('panel-kit').classList.toggle('active', tab==='kit');
-  };
-});
-
-const docTitle = document.getElementById('docTitle');
-const docPre = document.getElementById('docPre');
-const btnCopyDoc = document.getElementById('btnCopyDoc');
-
-const DOCS = {
-  schema:
-`# slms-schema.yaml (示意)
-version: ${PAGE_VERSION}
-module: master
-entity: equipment
-primary_key: uid
-
-tables:
-  equipment:
-    columns:
-      uid: { type: string, desc: "内部唯一ID" }
-      equipmentId: { type: string, desc: "设备ID", unique: true }
-      logisticsNo: { type: string, desc: "物流编号" }
-      name: { type: string, desc: "设备名称/简称" }
-      equipmentType: { type: string, desc: "设备类型枚举" }
-      capacityTon: { type: number, desc: "吨位/承载能力（T）" }
-      powerType: { type: string, desc: "动力类型：ELECTRIC/DIESEL/LPG/NONE" }
-      brand: { type: string, desc: "厂牌" }
-      model: { type: string, desc: "型号" }
-      serialNo: { type: string, desc: "出厂号/车架号" }
-      placeId: { type: string, desc: "所属作业地/区域（后续可关联作业地主档）" }
-      ownerDept: { type: string, desc: "责任部门/班组" }
-      responsiblePerson: { type: string, desc: "负责人/驾驶员，可空" }
-      status: { type: string, desc: "状态：IN_SERVICE/MAINTENANCE/INACTIVE/SCRAPPED" }
-      commissionDate: { type: date, desc: "启用日期" }
-      maintIntervalDays: { type: int, desc: "维保周期（天）" }
-      maintIntervalHours: { type: int, desc: "维保周期（工时）" }
-      hourMeter: { type: int, desc: "累计工时" }
-      nextMaintDate: { type: date, desc: "下次保养日期" }
-      nextMaintHours: { type: int, desc: "下次保养工时阈值" }
-      inspectionDueDate: { type: date, desc: "年检/检验到期" }
-      batteryId: { type: string, desc: "电池编号（电动设备）" }
-      batterySpec: { type: string, desc: "电池规格（电动设备）" }
-      vendor: { type: string, desc: "供应商" }
-      maintVendor: { type: string, desc: "维保单位" }
-      company: { type: string, desc: "所属公司" }
-      costCenter: { type: string, desc: "成本中心" }
-      purchasePrice: { type: number, desc: "资产原值，可空" }
-      remark: { type: string, desc: "备注，可空" }
-    indexes:
-      - [equipmentId]
-      - [logisticsNo]
-      - [equipmentType, status]
-      - [placeId]
-`,
-
-  dict:
-`# slms-data-dict.md（字段口径说明）
-- equipmentId：设备ID（建议唯一；可用类型前缀+序号）
-- logisticsNo：内部资产/物流编号（贴标/盘点）
-- name：名称/简称（现场口头沟通）
-- equipmentType：设备类型枚举
-  - FORKLIFT：叉车
-  - CLAMP_FORKLIFT：抱夹
-  - PALLET_MOVER：移库车
-  - YARD_TRACTOR：集装箱牵引车(拖头)
-  - REACH_STACKER：Reach Stacker(靠背)
-  - CONTAINER_PALLET：集装托盘
-- capacityTon：吨位/承载（数字），展示为 xT；托盘可为 0
-- powerType：动力类型（电动/柴油/LPG/无）
-- brand/model/serialNo：厂牌/型号/出厂号
-- placeId：所属作业地/区域（演示为文本；后续可关联作业地主档）
-- ownerDept/responsiblePerson：责任部门/负责人（负责人可空）
-- status：在用/维修/停用/报废（枚举）
-- commissionDate：启用日期
-- maintIntervalDays/maintIntervalHours：维保周期（天/工时）
-- hourMeter：累计工时
-- nextMaintDate/nextMaintHours：下次保养阈值
-- inspectionDueDate：年检/检验到期
-- batteryId/batterySpec：电池信息（电动设备）
-- vendor/maintVendor：供应商/维保单位
-- company/costCenter：公司/成本中心
-- purchasePrice：资产原值（可空）
-- remark：备注（可空）
-`,
-
-  ui:
-`# slms-ui-spec.md（页面交互/运算/入口）
-页面：master/equipment-manage.html
-版本：${PAGE_VERSION}
-
-1) 列表
-- 支持搜索：设备ID/物流编号/名称/出厂号/负责人
-- 支持筛选：类型、状态、作业地/区域
-- 表头固定；内容溢出自动滚动（纵向优先；宽表支持横向）
-
-2) 新增/编辑
-- 设备ID、物流编号、名称、类型、动力、状态为核心字段
-- 设备类型为枚举；托盘类型可设置动力=无、吨位=0
-- 启用日期/维保/年检/电池/供应商/成本中心等按行业台账可选补充
-
-3) 操作
-- 新增/编辑/删除（演示：删除为软删除，从列表移除；可通过“恢复默认测试数据”恢复）
-- 行内快捷切换状态（在用/维修/停用/报废）
-
-4) 数据
-- 演示：LocalStorage 保存
-- 默认测试数据：叉车40、抱夹20、移库车5、靠背2、拖头5、托盘30
-`
-};
-
-let currentDocKey = 'schema';
-function renderDoc(key){
-  currentDocKey = key;
-  const map = {schema:'slms-schema.yaml', dict:'slms-data-dict.md', ui:'slms-ui-spec.md'};
-  docTitle.textContent = map[key] || 'document';
-  docPre.textContent = DOCS[key] || '';
-}
-renderDoc('schema');
-
-document.querySelectorAll('.tkBtn').forEach(btn=>{
-  btn.onclick=()=>{
-    document.querySelectorAll('.tkBtn').forEach(x=>x.classList.remove('active'));
-    btn.classList.add('active');
-    renderDoc(btn.getAttribute('data-doc'));
-  };
-});
-
-btnCopyDoc.onclick = async ()=>{
-  try{
-    await navigator.clipboard.writeText(DOCS[currentDocKey] || '');
-    toast('已复制');
-  }catch(e){
-    toast('复制失败（浏览器限制）');
-  }
-};
-
-/* =========================
-   新增/编辑
-========================= */
-const editMask = document.getElementById('editMask');
-const editTitle = document.getElementById('editTitle');
-const btnAdd = document.getElementById('btnAdd');
-const btnSave = document.getElementById('btnSave');
-
-const fEquipmentId = document.getElementById('fEquipmentId');
-const fLogisticsNo = document.getElementById('fLogisticsNo');
-const fName = document.getElementById('fName');
-const fType = document.getElementById('fType');
-const fCapTon = document.getElementById('fCapTon');
-const fPower = document.getElementById('fPower');
-const fBrand = document.getElementById('fBrand');
-const fModel = document.getElementById('fModel');
-const fSerial = document.getElementById('fSerial');
-const fPlace = document.getElementById('fPlace');
-const fDept = document.getElementById('fDept');
-const fPerson = document.getElementById('fPerson');
-const fStatus = document.getElementById('fStatus');
-const fCommission = document.getElementById('fCommission');
-const fHourMeter = document.getElementById('fHourMeter');
-const fMaintDays = document.getElementById('fMaintDays');
-const fMaintHours = document.getElementById('fMaintHours');
-const fNextMaintDate = document.getElementById('fNextMaintDate');
-const fNextMaintHours = document.getElementById('fNextMaintHours');
-const fInspectDue = document.getElementById('fInspectDue');
-const fBatteryId = document.getElementById('fBatteryId');
-const fBatterySpec = document.getElementById('fBatterySpec');
-const fVendor = document.getElementById('fVendor');
-const fMaintVendor = document.getElementById('fMaintVendor');
-const fCompany = document.getElementById('fCompany');
-const fCostCenter = document.getElementById('fCostCenter');
-const fPrice = document.getElementById('fPrice');
-const fRemark = document.getElementById('fRemark');
-
-const eEquipmentId = document.getElementById('eEquipmentId');
-const eLogisticsNo = document.getElementById('eLogisticsNo');
-const eName = document.getElementById('eName');
-const eCapTon = document.getElementById('eCapTon');
-const eHourMeter = document.getElementById('eHourMeter');
-
-fillTypeOptions(fType);
-
-let editingUid = null;
-
-btnAdd.onclick=()=>openEdit('add', null);
-
-function openEdit(mode, row){
-  editingUid = row ? row.uid : null;
-  editTitle.textContent = mode==='add' ? '新增设备' : '编辑设备';
-
-  // clear errs
-  [eEquipmentId,eLogisticsNo,eName,eCapTon,eHourMeter].forEach(el=>el.style.display='none');
-
-  fEquipmentId.value = row ? row.equipmentId : '';
-  fLogisticsNo.value = row ? row.logisticsNo : '';
-  fName.value = row ? row.name : '';
-  fType.value = row ? row.equipmentType : 'FORKLIFT';
-  fCapTon.value = row ? String(row.capacityTon ?? '') : '';
-  fPower.value = row ? row.powerType : 'ELECTRIC';
-  fBrand.value = row ? (row.brand||'') : '';
-  fModel.value = row ? (row.model||'') : '';
-  fSerial.value = row ? (row.serialNo||'') : '';
-  fPlace.value = row ? (row.placeId||'') : '';
-  fDept.value = row ? (row.ownerDept||'') : '';
-  fPerson.value = row ? (row.responsiblePerson||'') : '';
-  fStatus.value = row ? row.status : 'IN_SERVICE';
-  fCommission.value = row ? (row.commissionDate||'') : '';
-  fHourMeter.value = row ? String(row.hourMeter ?? '') : '';
-  fMaintDays.value = row ? String(row.maintIntervalDays ?? '') : '';
-  fMaintHours.value = row ? String(row.maintIntervalHours ?? '') : '';
-  fNextMaintDate.value = row ? (row.nextMaintDate||'') : '';
-  fNextMaintHours.value = row ? String(row.nextMaintHours ?? '') : '';
-  fInspectDue.value = row ? (row.inspectionDueDate||'') : '';
-  fBatteryId.value = row ? (row.batteryId||'') : '';
-  fBatterySpec.value = row ? (row.batterySpec||'') : '';
-  fVendor.value = row ? (row.vendor||'') : '';
-  fMaintVendor.value = row ? (row.maintVendor||'') : '';
-  fCompany.value = row ? (row.company||'') : '';
-  fCostCenter.value = row ? (row.costCenter||'') : '';
-  fPrice.value = row ? String(row.purchasePrice ?? '') : '';
-  fRemark.value = row ? (row.remark||'') : '';
-
-  applyTypeHints();
-  editMask.style.display='flex';
-  setTimeout(()=>fEquipmentId.focus(), 10);
-}
-function closeEdit(){ editMask.style.display='none'; }
-editMask.onclick=(e)=>{ if(e.target===editMask) closeEdit(); };
-
-function isNonEmpty(s){ return String(s||'').trim().length>0; }
-function isNumGE0(v){
-  if(v===''||v===null||v===undefined) return true; // allow empty
-  const n = Number(v);
-  return Number.isFinite(n) && n>=0;
-}
-function isIntGE0(v){
-  if(v===''||v===null||v===undefined) return true; // allow empty
-  const n = Number(v);
-  return Number.isInteger(n) && n>=0;
-}
-
-function applyTypeHints(){
-  const ty = fType.value;
-  const isPallet = (ty==='CONTAINER_PALLET');
-  // 托盘默认：无动力、吨位0、工时0
-  if(isPallet){
-    if(!fCapTon.value) fCapTon.value = '0';
-    fPower.value = 'NONE';
-    if(!fHourMeter.value) fHourMeter.value = '0';
-  }
-  // 电动才建议填电池
-  const isElec = fPower.value==='ELECTRIC';
-  fBatteryId.disabled = !isElec;
-  fBatterySpec.disabled = !isElec;
-  if(!isElec){
-    fBatteryId.value = '';
-    fBatterySpec.value = '';
-  }
-}
-fType.addEventListener('change', applyTypeHints);
-fPower.addEventListener('change', applyTypeHints);
-
-btnSave.onclick=()=>{
-  const equipmentId = String(fEquipmentId.value||'').trim();
-  const logisticsNo = String(fLogisticsNo.value||'').trim();
-  const name = String(fName.value||'').trim();
-
-  let ok = true;
-
-  if(!equipmentId){
-    eEquipmentId.style.display='block'; ok=false;
-  }else{
-    const dup = DATA.some(x=>x.equipmentId===equipmentId && x.uid!==editingUid);
-    if(dup){ eEquipmentId.textContent='设备ID 已存在，请换一个。'; eEquipmentId.style.display='block'; ok=false; }
-    else{ eEquipmentId.style.display='none'; eEquipmentId.textContent='设备ID 必填且需唯一。'; }
-  }
-
-  if(!logisticsNo){
-    eLogisticsNo.style.display='block'; ok=false;
-  }else{
-    eLogisticsNo.style.display='none';
-  }
-
-  if(!name){
-    eName.style.display='block'; ok=false;
-  }else{
-    eName.style.display='none';
-  }
-
-  if(!isNumGE0(fCapTon.value)){
-    eCapTon.style.display='block'; ok=false;
-  }else{
-    eCapTon.style.display='none';
-  }
-
-  if(!isIntGE0(fHourMeter.value)){
-    eHourMeter.style.display='block'; ok=false;
-  }else{
-    eHourMeter.style.display='none';
-  }
-
-  if(!ok) return;
-
-  const row = {
-    uid: editingUid || cryptoRandomId(),
-    equipmentId,
-    logisticsNo,
-    name,
-    equipmentType: fType.value,
-    capacityTon: fCapTon.value==='' ? null : Number(fCapTon.value),
-    powerType: fPower.value,
-    brand: String(fBrand.value||'').trim(),
-    model: String(fModel.value||'').trim(),
-    serialNo: String(fSerial.value||'').trim(),
-    placeId: String(fPlace.value||'').trim(),
-    ownerDept: String(fDept.value||'').trim(),
-    responsiblePerson: String(fPerson.value||'').trim(),
-    status: fStatus.value,
-    commissionDate: fCommission.value || '',
-    maintIntervalDays: fMaintDays.value==='' ? 0 : Number(fMaintDays.value),
-    maintIntervalHours: fMaintHours.value==='' ? 0 : Number(fMaintHours.value),
-    hourMeter: fHourMeter.value==='' ? 0 : Number(fHourMeter.value),
-    nextMaintDate: fNextMaintDate.value || '',
-    nextMaintHours: fNextMaintHours.value==='' ? 0 : Number(fNextMaintHours.value),
-    inspectionDueDate: fInspectDue.value || '',
-    batteryId: String(fBatteryId.value||'').trim(),
-    batterySpec: String(fBatterySpec.value||'').trim(),
-    vendor: String(fVendor.value||'').trim(),
-    maintVendor: String(fMaintVendor.value||'').trim(),
-    company: String(fCompany.value||'').trim(),
-    costCenter: String(fCostCenter.value||'').trim(),
-    purchasePrice: fPrice.value==='' ? null : Number(fPrice.value),
-    remark: String(fRemark.value||'').trim()
-  };
-
-  if(editingUid){
-    const idx = DATA.findIndex(x=>x.uid===editingUid);
-    if(idx>=0) DATA[idx]=row;
-  }else{
-    DATA.unshift(row);
-  }
-  saveData();
-  closeEdit();
-  render();
-  toast('已保存');
-};
-
-function editRow(uid){
-  const row = DATA.find(x=>x.uid===uid);
-  if(!row) return;
-  openEdit('edit', row);
-}
-
-/* =========================
-   Toast
-========================= */
-let toastTimer=null;
-function toast(msg){
-  let el = document.getElementById('toast');
-  if(!el){
-    el = document.createElement('div');
-    el.id='toast';
-    el.style.position='fixed';
-    el.style.left='50%';
-    el.style.bottom='18px';
-    el.style.transform='translateX(-50%)';
-    el.style.padding='10px 12px';
-    el.style.background='rgba(17,24,39,.92)';
-    el.style.color='#fff';
-    el.style.borderRadius='12px';
-    el.style.fontWeight='1000';
-    el.style.fontSize='12px';
-    el.style.zIndex='10000';
-    el.style.boxShadow='0 10px 30px rgba(0,0,0,.25)';
-    document.body.appendChild(el);
-  }
-  el.textContent=msg;
-  el.style.display='block';
-  clearTimeout(toastTimer);
-  toastTimer=setTimeout(()=>{ el.style.display='none'; }, 1600);
-}
 </script>
 </body>
 </html>
