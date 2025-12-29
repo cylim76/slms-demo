@@ -1,13 +1,12 @@
 <!-- 
 File: crp/crp-entry.html
-Version: crp-entry-v22
+Version: crp-entry-v23
 Date: 2025-12-29
 
-v22 变更点（基于 v21 最新主线）：
-1) 右侧 CRP 列表：选中记录显示的【修改】按钮调整到【发送/再发送】按钮右侧
-   - 目的：发送/再发送按钮始终在同一列位置，更美观
-2) 三件套（schema/dict/ui-spec）同步更新：UI Spec 增加按钮顺序说明
-3) 三件套弹窗样式继续固定为 SLMS-ThreeKitStyle（左侧导航 + 右侧单文档内容区，超出自动滚动）
+v23 变更点（基于 v22 最新主线）：
+1) 右侧 CRP 列表：修复/加强滚动条（自适应高度链路，溢出自动纵向滚动；宽表自动横向滚动）
+2) 版本号弹窗三件套（SLMS-ThreeKitStyle）：补齐滚动条（右侧内容区优先纵向滚动；代码块/长行横向滚动；左侧导航溢出可滚动），布局不变
+3) 三件套（schema/dict/ui-spec）同步更新：UI Spec 增加“列表/弹窗默认滚动规则”说明（v23）
 -->
 
 <!doctype html>
@@ -104,8 +103,20 @@ body{margin:0;font-family:Arial,"Microsoft YaHei";background:var(--bg);color:var
 .splitter.dragging::before{background:var(--brand);opacity:.35}
 
 .filterBox{padding:14px;border-bottom:1px solid var(--line);flex:0 0 auto}
-.tableOuter{flex:1 1 auto;min-height:0}
-.tableScroll{height:100%;overflow:auto;border-top:1px solid var(--line)}
+
+/* ✅ v23-fix：右侧表格区高度链路改为 flex，滚动条稳定（纵向优先；宽表横向） */
+.tableOuter{
+  flex:1 1 auto;
+  min-height:0;
+  display:flex;
+  flex-direction:column;
+}
+.tableScroll{
+  flex:1 1 auto;
+  min-height:0;
+  overflow:auto;              /* 自动纵向/横向滚动 */
+  border-top:1px solid var(--line);
+}
 
 table{width:100%;border-collapse:collapse;min-width:1900px}
 th,td{border-bottom:1px solid var(--line);padding:8px 10px;font-size:12px;white-space:nowrap}
@@ -156,13 +167,26 @@ tr.selected td{outline:2px solid rgba(224,32,92,.25);background:#fff7fb}
 
 /* ===== 三件套弹窗（SLMS-ThreeKitStyle） ===== */
 .reqModal{width:1180px;max-width:96vw}
-.reqBody{padding:0;max-height:78vh;overflow:hidden}
-.reqWrap{display:flex;min-height:70vh}
+
+/* ✅ v23-fix：三件套弹窗滚动条（布局不变：左nav + 右内容） */
+.reqBody{
+  padding:0;
+  max-height:78vh;
+  overflow:hidden;        /* 外层不滚，交给内部区域滚动 */
+  display:flex;
+  flex-direction:column;
+}
+.reqWrap{
+  display:flex;
+  flex:1 1 auto;
+  min-height:0;           /* 关键：允许子元素滚动 */
+}
 .reqNav{
   width:260px;flex:0 0 auto;
   border-right:1px solid #eee;
   background:#fbfbfd;
   padding:12px;
+  overflow:auto;          /* nav 内容多也可滚，不破坏布局 */
 }
 .reqNav .h{font-size:12px;color:var(--muted);margin:2px 0 10px}
 .reqNavBtn{
@@ -182,13 +206,25 @@ tr.selected td{outline:2px solid rgba(224,32,92,.25);background:#fff7fb}
   background:rgba(224,32,92,.06);
   color:#8a0f33;
 }
-.reqMain{flex:1 1 auto;min-width:0;padding:14px 16px;overflow:auto}
+.reqMain{
+  flex:1 1 auto;
+  min-width:0;
+  min-height:0;          /* 关键：右侧内容区必须允许滚动 */
+  padding:14px 16px;
+  overflow:auto;         /* 右侧内容区纵向滚动 */
+}
 .docCard{border:1px solid var(--line);border-radius:12px;overflow:hidden;background:#fff}
 .docCardHd{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 12px;background:#fafafa;border-bottom:1px solid var(--line)}
 .docCardHd b{font-size:13px}
 .badge{font-size:12px;color:var(--muted);border:1px solid #eee;background:#fff;border-radius:999px;padding:4px 10px}
 .copyBtn{padding:6px 10px;border-radius:999px;border:1px solid #ddd;background:#fff;font-size:12px;font-weight:900;cursor:pointer}
-pre.code{margin:0;padding:12px;font-size:12px;line-height:1.6;font-family: ui-monospace, Menlo, Consolas, monospace;white-space:pre;overflow:auto;background:#fbfbfd}
+pre.code{
+  margin:0;padding:12px;font-size:12px;line-height:1.6;
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+  white-space:pre;
+  overflow:auto;         /* 代码块/长行横向滚动 */
+  background:#fbfbfd
+}
 .hidden{display:none}
 </style>
 </head>
@@ -203,7 +239,7 @@ pre.code{margin:0;padding:12px;font-size:12px;line-height:1.6;font-family: ui-mo
     </label>
     <div class="ver" id="verBtn" title="点击查看三件套（schema / dict / ui spec）">
       <span class="dot"></span>
-      <span>crp-entry-v22</span>
+      <span>crp-entry-v23</span>
     </div>
   </div>
 </div>
@@ -508,7 +544,7 @@ pre.code{margin:0;padding:12px;font-size:12px;line-height:1.6;font-family: ui-mo
 <div class="modalMask" id="reqMask">
   <div class="modal reqModal">
     <div class="modalHd">
-      <span>三件套（CRP 录入 / crp-entry-v22）</span>
+      <span>三件套（CRP 录入 / crp-entry-v23）</span>
       <span style="cursor:pointer;color:var(--muted)" onclick="closeReq()">关闭</span>
     </div>
 
@@ -520,7 +556,7 @@ pre.code{margin:0;padding:12px;font-size:12px;line-height:1.6;font-family: ui-mo
           <button class="reqNavBtn" id="navDict" onclick="showDoc('dict')">slms-data-dict.md</button>
           <button class="reqNavBtn" id="navUi" onclick="showDoc('ui')">slms-ui-spec.md</button>
           <div class="small" style="margin-top:8px">
-            提示：本弹窗内容与版本号同步维护（v22）。
+            提示：本弹窗内容与版本号同步维护（v23）。
           </div>
         </div>
 
@@ -626,7 +662,7 @@ state_rules:
                 <button class="copyBtn" type="button" onclick="copyText('dictText')">复制</button>
               </div>
             </div>
-<pre class="code" id="dictText"># SLMS - CRP 录入（crp-entry）数据字典（v22）
+<pre class="code" id="dictText"># SLMS - CRP 录入（crp-entry）数据字典（v23）
 
 ## 1) crp_booking（按 Booking No 汇总）
 | 字段 | 类型 | 必填 | 口径/说明 |
@@ -660,8 +696,14 @@ state_rules:
   - createdAt：过去7天到今天
   - etd：今天到未来14天
 
-## v22 UI 细节
-- “状态/操作”列内按钮顺序调整：发送/再发送在前，修改在后（仅选中行显示修改）</pre>
+## v22 UI 细节（延续）
+- “状态/操作”列内按钮顺序：发送/再发送在前，修改在后（仅选中行显示修改）
+
+## v23 默认滚动规则（新增）
+- 所有列表/表格/列表视图：根据画面大小自适应；内容溢出时自动出现滚动条
+  - 优先纵向滚动；长行/宽表支持横向滚动
+- 三件套弹窗（SLMS-ThreeKitStyle）：左侧导航 + 右侧内容区布局不变
+  - 右侧内容区优先纵向滚动；代码块/长行支持横向滚动</pre>
           </div>
 
           <!-- ui -->
@@ -673,7 +715,7 @@ state_rules:
                 <button class="copyBtn" type="button" onclick="copyText('uiText')">复制</button>
               </div>
             </div>
-<pre class="code" id="uiText"># SLMS - CRP 录入页（crp-entry）UI Spec（v22）
+<pre class="code" id="uiText"># SLMS - CRP 录入页（crp-entry）UI Spec（v23）
 
 ## 1) 左侧录入区
 ### 1.1 操作按钮
@@ -704,7 +746,14 @@ state_rules:
   - ETD：按 etd 过滤（日期粒度）
     - 默认：今天到未来14天
 - 日期范围为空时：
-  - 仍允许查询（实现中可自动回填默认值）</pre>
+  - 仍允许查询（实现中可自动回填默认值）
+
+## 3) 默认滚动规则（v23 新增）
+- 所有显示列表（表格/列表视图）：根据画面大小自适应
+  - 内容溢出时自动出现滚动条：优先纵向滚动；长行/宽表支持横向滚动
+- 三件套弹窗（SLMS-ThreeKitStyle）：
+  - 固定布局：左侧导航 + 右侧单文档内容区（docCard + copy按钮 + pre代码块）
+  - 超出屏幕时：右侧内容区优先纵向滚动；代码块/长行支持横向滚动；布局不变</pre>
           </div>
 
         </div>
