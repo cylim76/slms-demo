@@ -1,21 +1,12 @@
 <!--
 File: crp/crp-management.html
-Version: crp-management-v15
-Date: 2025-12-24
+Version: crp-management-v16
+Date: 2025-12-29
 
-v15 变更点（在 v14 基础上，确保不丢失任何功能）：
-1) 录入区（Booking No & 箱量表）输入框整体变窄：
-   - Booking 输入框不再撑满单元格，宽度适中（可调）
-   - 20GP/40GP/40HC/40RH 数字框按“两位数空间”设计（更紧凑）
-   - 去掉 .tbl input 的 width:100%（否则永远铺满）
-2) 数字框输入限制：
-   - 只允许输入数字
-   - 最多 2 位（输入 123 会自动变成 12）
-3) 版本号与“页面功能要求（requirements）”同步维护
-4) 仍保持 v14 逻辑不变：
-   - “状态/操作”列：未发送=发送；已发送=再发送
-   - 已发送状态胶囊不显示运输公司名称（运输公司单独列展示）
-   - 发送/再发送打开 send-crp.html 的 embed 模式：仅显示发送面板（不显示发送页列表）
+v16 变更点（在 v15 基础上，确保不丢失任何功能）：
+1) 生成并内嵌“三件套”文本（slms-schema.yaml / slms-data-dict.md / slms-ui-spec.md）
+2) 点击右上角版本号弹窗：用“三件套”内容替换原 requirements 列表展示
+3) 右上角版本号显示与弹窗标题同步更新为 v16
 -->
 
 <!doctype html>
@@ -91,7 +82,6 @@ body{margin:0;font-family:Arial,"Microsoft YaHei";background:var(--bg);color:var
 .tbl th{background:#fafafa;color:var(--muted);text-align:left;font-weight:900}
 .tbl td{background:#fff}
 
-/* ===== v15: 录入区输入框变窄（数字两位宽）===== */
 /* 去掉 width:100% 否则永远铺满单元格 */
 .tbl input{
   border:1px solid #ddd;
@@ -103,13 +93,13 @@ body{margin:0;font-family:Arial,"Microsoft YaHei";background:var(--bg);color:var
 
 /* Booking 输入框：适中，不要撑满（可按需调） */
 .tbl input.booking{
-  width:170px;     /* 想更窄就 150px */
+  width:170px;
   max-width:100%;
 }
 
 /* 数字输入框：两位数空间 */
 .tbl input.qty{
-  width:52px;      /* 想更紧凑就 46px */
+  width:52px;
   text-align:center;
   padding-left:6px;
   padding-right:6px;
@@ -178,6 +168,25 @@ tr.selected td{outline:2px solid rgba(224,32,92,.25);background:#fff7fb}
 .vTbl th{background:#fafafa;color:var(--muted);text-align:left;font-weight:900}
 .vRow:hover td{background:#fff7fb}
 .vRow.selected td{outline:2px solid rgba(224,32,92,.25);background:#fff7fb}
+
+/* ===== v16: 三件套展示样式 ===== */
+.docBlock{border:1px solid var(--line);border-radius:12px;overflow:hidden;margin:12px 0;background:#fff}
+.docHd{padding:10px 12px;background:#fafafa;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;gap:10px}
+.docHd b{font-size:13px}
+.docBd{padding:12px}
+pre.code{
+  margin:0;
+  padding:12px;
+  border-radius:10px;
+  border:1px solid #eee;
+  background:#fbfbfd;
+  overflow:auto;
+  font-size:12px;
+  line-height:1.6;
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+  white-space:pre;
+}
+.badge{font-size:12px;color:var(--muted);border:1px solid #eee;background:#fff;border-radius:999px;padding:4px 10px}
 </style>
 </head>
 
@@ -189,9 +198,9 @@ tr.selected td{outline:2px solid rgba(224,32,92,.25);background:#fff7fb}
       <input type="checkbox" id="permSendChk" onchange="applyPermUI()">
       发送CRP
     </label>
-    <div class="ver" id="verBtn" title="点击查看页面功能要求">
+    <div class="ver" id="verBtn" title="点击查看三件套（schema / dict / ui spec）">
       <span class="dot"></span>
-      <span>crp-management-v15</span>
+      <span>crp-management-v16</span>
     </div>
   </div>
 </div>
@@ -458,23 +467,269 @@ tr.selected td{outline:2px solid rgba(224,32,92,.25);background:#fff7fb}
   </div>
 </div>
 
-<!-- requirements -->
+<!-- 三件套（替换 requirements 弹窗内容） -->
 <div class="modalMask" id="reqMask">
-  <div class="modal">
+  <div class="modal" style="width:1060px;max-width:96vw">
     <div class="modalHd">
-      <span>页面功能要求（CRP 录入 / crp-management-v15）</span>
+      <span>三件套（CRP 录入 / crp-management-v16）</span>
       <span style="cursor:pointer;color:var(--muted)" onclick="closeReq()">关闭</span>
     </div>
     <div class="modalBd">
-      <ol>
-        <li><b>靠左：</b>页面不居中，左侧无额外空白。</li>
-        <li><b>分割条：</b>支持拖拽调整左右宽度，并记忆宽度。</li>
-        <li><b>高度自适应：</b>左右区域随窗口高度自动调整，内部滚动。</li>
-        <li><b>列表字段：</b>四类箱量列；运输公司列；状态=已发送/未发送。</li>
-        <li><b>发送按钮简化：</b>未发送=发送；已发送=再发送（不再出现多余按钮）。</li>
-        <li><b>快捷发送：</b>行内按钮打开 <code>send-crp.html?embed=1</code>，仅展示发送面板；“打开完整页面”才展示列表。</li>
-        <li><b>录入框紧凑：</b>录入区箱量输入框按“两位数空间”设计；只允许数字且最多 2 位。</li>
-      </ol>
+
+      <!-- slms-schema.yaml -->
+      <div class="docBlock">
+        <div class="docHd">
+          <b>slms-schema.yaml</b>
+          <span class="badge">结构唯一真源（Schema）</span>
+        </div>
+        <div class="docBd">
+<pre class="code">version: slms-crp-schema-v1
+domain: slms
+module: crp
+
+entities:
+
+  voyage_master:
+    description: "航次主数据（系统受控）。主页面只读，必须从弹窗选择/新建后回填。"
+    primary_key: id
+    fields:
+      id:        { type: string, required: true, example: "V002" }
+      carrier:   { type: string, required: true, example: "MSC" }
+      vessel:    { type: string, required: true, example: "MSC ARINA" }
+      voyage:    { type: string, required: true, example: "552S" }
+      etd:       { type: date,   required: true, example: "2025-12-29" }
+      createdAt: { type: int64,  required: false, description: "毫秒时间戳（演示可无）" }
+
+    constraints:
+      - name: uq_voyage_master_exact
+        type: unique
+        fields: [carrier, vessel, voyage, etd]
+        note: "完全相同的航次不得重复"
+
+  crp_booking:
+    description: "CRP 录入记录（按 Booking No 汇总）。本页一次仅录入 1 个 Booking No。"
+    primary_key: bookingNo
+    fields:
+      bookingNo: { type: string, required: true, example: "BK20251224-01" }
+
+      # 4 类箱量（0~99；可空；至少有一项 &gt; 0）
+      gp20: { type: int, required: false, min: 0, max: 99 }
+      gp40: { type: int, required: false, min: 0, max: 99 }
+      hc40: { type: int, required: false, min: 0, max: 99 }
+      rh40: { type: int, required: false, min: 0, max: 99 }
+
+      # 航次信息（来自 voyage_master 回填，页面字段只读）
+      voyageId: { type: string, required: true, fk: voyage_master.id }
+      carrier:  { type: string, required: true }
+      vessel:   { type: string, required: true }
+      voyage:   { type: string, required: true }
+      etd:      { type: date,   required: true }
+
+      # 负责人
+      ffOwner:  { type: string, required: true, description: "FF担当（自由输入）" }
+      clOwner:  { type: string, required: true, description: "CL担当（自由输入）" }
+
+      remark:   { type: string, required: false }
+
+      # 附件（演示：仅保存数量；真实系统应保存文件元数据/存储引用）
+      fileCount:{ type: int, required: true, min: 0, default: 0 }
+
+      # 发送相关（本页展示：状态胶囊不展示运输公司名称；运输公司单独列）
+      sendState:{ type: enum, required: true, values: ["未发送","已发送"], default: "未发送" }
+      vendor:   { type: string, required: false, description: "运输公司（仅已发送时显示；未发送留空）" }
+
+      # 记录元信息
+      createdAt:{ type: int64, required: true, description: "录入时间（毫秒时间戳）" }
+      entryState:{ type: enum, required: true, values: ["草稿","已提交"] }
+
+    constraints:
+      - name: pk_crp_booking
+        type: unique
+        fields: [bookingNo]
+        note: "同一 Booking No 覆盖更新（upsert）"
+
+      - name: ck_qty_at_least_one
+        type: check
+        note: "gp20/gp40/hc40/rh40 至少 1 项 &gt; 0"
+
+      - name: ck_qty_0_99
+        type: check
+        note: "每个箱量字段范围 0~99（页面输入最多 2 位）"
+
+integration_notes:
+  local_storage_keys:
+    crp_rows: "slms_crp_bookings_v1"
+    splitter: "slms_crp_split_leftW_v1"
+
+ui_contract:
+  send_embed_url: "send-crp.html?embed=1&amp;booking={bookingNo}&amp;mode={send|resend}"
+  post_message_close: "type=SLMS_CLOSE_SEND_PANEL"
+</pre>
+        </div>
+      </div>
+
+      <!-- slms-data-dict.md -->
+      <div class="docBlock">
+        <div class="docHd">
+          <b>slms-data-dict.md</b>
+          <span class="badge">字段/口径说明（Data Dictionary）</span>
+        </div>
+        <div class="docBd">
+<pre class="code"># SLMS - CRP 录入（crp-management）数据字典
+
+## 1) voyage_master（航次主数据）
+| 字段 | 类型 | 必填 | 口径/说明 | 规则/校验 |
+|---|---|---:|---|---|
+| id | string | Y | 航次主键（系统生成/维护） | 主键唯一 |
+| carrier | string | Y | 船公司（系统受控） | 选择/新建产生，禁止主页面手输 |
+| vessel | string | Y | 船名（系统受控） | 同上 |
+| voyage | string | Y | 航次（系统受控） | 同上 |
+| etd | date | Y | 开船日（ETD） | 同上 |
+| createdAt | int64(ms) | N | 创建时间戳（演示可无） | - |
+> 唯一约束：carrier + vessel + voyage + etd 完全相同不可重复。
+
+## 2) crp_booking（按 Booking No 汇总的 CRP 录入记录）
+| 字段 | 类型 | 必填 | 口径/说明 | 规则/校验 |
+|---|---|---:|---|---|
+| bookingNo | string | Y | Booking No（业务主键） | 不能为空；同 booking 覆盖更新（upsert） |
+| gp20 | int(0~99) | N | 20GP 箱量 | 仅数字；页面最多 2 位；可空（等价 0） |
+| gp40 | int(0~99) | N | 40GP 箱量 | 同上 |
+| hc40 | int(0~99) | N | 40HC 箱量 | 同上 |
+| rh40 | int(0~99) | N | 40RH 箱量 | 同上 |
+| voyageId | string | Y | 航次主数据 id | 必须先选择航次（主页面字段只读回填） |
+| carrier | string | Y | 船公司 | 从航次回填；禁止主页面编辑 |
+| vessel | string | Y | 船名 | 从航次回填；禁止主页面编辑 |
+| voyage | string | Y | 航次 | 从航次回填；禁止主页面编辑 |
+| etd | date | Y | ETD | 从航次回填；禁止主页面编辑 |
+| ffOwner | string | Y | FF担当 | 自由输入；必填 |
+| clOwner | string | Y | CL担当 | 自由输入；必填 |
+| remark | string | N | 备注 | 可空 |
+| fileCount | int | Y | 附件数量（演示口径） | 真实系统应为附件清单/引用；本页仅存数量 |
+| sendState | enum | Y | 发送状态 | 未发送 / 已发送 |
+| vendor | string | N | 运输公司 | 仅 sendState=已发送 时有值；未发送显示空白 |
+| createdAt | int64(ms) | Y | 录入时间 | 用于列表排序与展示 |
+| entryState | enum | Y | 录入状态 | 草稿 / 已提交 |
+
+### 关键口径
+- “至少 1 个箱型箱量”：gp20/gp40/hc40/rh40 中，至少一项 &gt; 0。
+- “未发送/已发送”是发送结果维度；“草稿/已提交”是录入提交维度。
+- 列表状态胶囊不显示运输公司名称：运输公司单独列展示（仅已发送显示）。
+</pre>
+        </div>
+      </div>
+
+      <!-- slms-ui-spec.md -->
+      <div class="docBlock">
+        <div class="docHd">
+          <b>slms-ui-spec.md</b>
+          <span class="badge">页面交互/校验/入口（UI Spec）</span>
+        </div>
+        <div class="docBd">
+<pre class="code"># SLMS - CRP 录入页（crp-management）UI Spec
+
+## 0. 页面定位
+- 用途：录入 CRP（按 Booking No 汇总）并在右侧列表检索/触发发送。
+- 一次录入：仅 1 个 Booking No（单行输入模型）。
+- 入口：crp/crp-management.html
+
+## 1. 布局与自适应
+- 顶部：标题 + 权限模拟开关（发送CRP） + 版本号（点击打开三件套弹窗）。
+- 主体：左右两栏（左录入/右列表），中间 splitter 支持拖拽。
+- splitter：
+  - 拖拽改变左侧宽度 --leftW
+  - 持久化：localStorage['slms_crp_split_leftW_v1']
+- 小屏（&lt;=1300px）：变为单列；splitter 隐藏。
+
+## 2. 左侧录入区（一次 1 个 Booking）
+### 2.1 Booking & 箱量表
+- 字段：
+  - Booking No（必填）
+  - 20GP / 40GP / 40HC / 40RH（最多 2 位，仅数字，可空）
+- 输入限制：
+  - oninput：去非数字 + 截断 2 位（123 -&gt; 12）
+  - inputmode=numeric，maxlength=2（移动端友好）
+- 业务校验：
+  - Booking No 不能为空
+  - 四个箱量至少 1 项 &gt; 0
+  - 箱量必须为数字（空视为未填/0）
+
+### 2.2 航次信息（系统受控）
+- 主页面字段只读：船公司/船名/航次/ETD
+- 操作：
+  - 选择航次：打开“航次选择弹窗”
+  - 清空航次：清空回填字段 + selectedVoyageIdMain
+- 校验：提交/保存前必须已选择航次（voyageId 必填）
+
+### 2.3 负责人 & 备注 & 附件
+- FF担当（必填，自由输入）
+- CL担当（必填，自由输入）
+- 备注（可空）
+- 附件（演示）：
+  - 仅统计数量 fileCount
+  - UI 展示文件名列表
+  - 提交成功后清空附件选择
+
+### 2.4 按钮行为
+- 新建：清空录入区 + 附件 + 航次 + 负责人/备注；右侧选中清空；录入状态回到“草稿”
+- 保存草稿：
+  - 走同样校验（航次 + FF/CL + Booking + 至少 1 箱量）
+  - entryState=草稿
+  - 本页实现为 upsert（同 Booking 覆盖）
+- 提交：
+  - 校验同上
+  - entryState=已提交
+  - 成功后清空：Booking/箱量/附件（保留航次不清空，便于连续录入）
+- Toast：成功/失败给出提示（2.6s 自动收起）
+
+## 3. 航次选择弹窗（系统主数据）
+- 列表：支持按 “船公司/船名/航次/ETD” 模糊搜索
+- 选择：点击“选择”回填主页面并关闭弹窗
+- 新建航次：
+  - 点击“+ 新建航次”展开表单
+  - 必填：船公司、船名、航次、ETD
+  - 规则：完全相同（carrier+vessel+voyage+etd）不允许重复
+  - 保存后：写入主数据列表并自动回填主页面
+
+## 4. 右侧 CRP 列表（按 Booking 汇总）
+- 数据源：localStorage['slms_crp_bookings_v1']（演示）
+- 列表过滤：
+  - Booking / 船公司 / 船名 / 航次：模糊匹配
+  - 状态：全部 / 未发送 / 已发送（精确）
+- 行选择：点击行高亮，并更新“已选：Booking”
+- 列展示：
+  - 录入时间（createdAt 格式化）
+  - Booking/船公司/船名/航次/ETD/FF/CL
+  - 四类箱量、文件数量
+  - 运输公司（仅已发送显示；未发送显示空）
+  - 状态胶囊（未发送/已发送）
+
+## 5. 发送权限与发送面板（embed）
+- 顶部勾选“发送CRP”：
+  - canSend=true：列表行内显示按钮
+  - canSend=false：不显示发送/再发送按钮
+- 行内按钮规则（只出现 1 个按钮）：
+  - 未发送 =&gt; 显示“发送”
+  - 已发送 =&gt; 显示“再发送”
+- 打开方式：
+  - iframe 打开 send-crp.html?embed=1&amp;booking={bookingNo}&amp;mode={send|resend}
+  - embed 模式：仅展示发送面板，不展示发送页列表
+  - 弹窗提供“打开完整发送页面”（新窗口打开 send-crp.html）
+- 关闭逻辑：
+  - 关闭发送弹窗后：回读 localStorage 刷新列表（以反映发送状态变化）
+  - 支持 postMessage：type=SLMS_CLOSE_SEND_PANEL 触发关闭
+
+## 6. 数据保存策略（演示实现）
+- upsert：以 bookingNo 为 key；同 booking 覆盖更新（不创建重复行）
+- createdAt：首次创建保留；再次 upsert 不改 createdAt（本页实现即如此）
+- sendState/vendor：默认继承旧值（若该 booking 已存在）
+- 真实系统：应接入后端表 + 审计日志 + 权限体系
+</pre>
+        </div>
+      </div>
+
+      <div class="small" style="margin-top:10px">
+        提示：本弹窗内容与版本号同步维护（v16）。
+      </div>
     </div>
     <div class="modalFt">
       <button class="btn" type="button" onclick="closeReq()">关闭</button>
@@ -519,7 +774,7 @@ fileInput.onchange = ()=>{
 };
 function clearFiles(){ pickedFiles=[]; fileInput.value=''; fileList.innerHTML='<li>未选择文件</li>'; }
 
-/* ===== v15: 数字限制工具函数（最多两位、只保留数字） ===== */
+/* 数字限制工具函数（最多两位、只保留数字） */
 function limit2Digits(v){
   return String(v ?? '').replace(/\D/g,'').slice(0,2);
 }
@@ -619,7 +874,7 @@ function clearVoyageMain(){
 const voyMask = document.getElementById('voyMask');
 const voyTbody = document.getElementById('voyTbody');
 
-/* 兼容按钮传参（v12~v15 都有人传 'main'） */
+/* 兼容按钮传参（有人传 'main'） */
 function openVoyageModal(_target){
   voySearch.value='';
   cancelNewVoyage();
@@ -787,7 +1042,7 @@ function render(){
 
     const sent = (r.sendState==='已发送');
 
-    // v14/v15：只显示一个按钮：未发送=发送；已发送=再发送
+    // 只显示一个按钮：未发送=发送；已发送=再发送
     let opBtn = '';
     if(canSend){
       opBtn = sent
