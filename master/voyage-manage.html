@@ -1,0 +1,573 @@
+<!--
+File: master/voyage-manage.html
+Version: voyage-manage-v1
+Date: 2025-12-29
+
+功能要点：
+1) 航次管理：新增/编辑/停用（软删除）
+2) 船公司/船舶必须从字典选择（限制用户随意输入）
+3) 唯一性：carrier + vessel + voyageNo + etd 组合唯一
+4) 查询：carrier / vessel / voyageNo / POD / ETD区间 / 状态 / 关键词
+5) 一键复制航次：复制选中行，快速改航次号/ETD
+6) 导出 CSV
+7) 右上角版本号可点击：显示页面功能要求（随版本维护）
+-->
+
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>航次管理</title>
+<style>
+:root{
+  --brand:#e0205c;--bg:#f1f2f5;--card:#fff;--text:#222;--muted:#666;--line:#e9e9ee;
+  --ok:#1a7f37;--warn:#b54708;--bad:#b42318;
+}
+*{box-sizing:border-box}
+body{margin:0;font-family:Arial,"Microsoft YaHei";background:var(--bg);color:var(--text)}
+.topbar{height:56px;background:#fff;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;padding:0 16px}
+.left{font-weight:900}
+.right{display:flex;gap:10px;align-items:center}
+.btn{border:1px solid #ddd;background:#fff;border-radius:10px;padding:10px 14px;font-weight:900;font-size:13px;cursor:pointer}
+.btn.primary{background:var(--brand);border-color:var(--brand);color:#fff}
+.btn:active{transform:translateY(1px)}
+.ver{cursor:pointer;background:#f6f6f6;border:1px solid #eee;border-radius:999px;padding:6px 10px;font-size:12px;font-family:ui-monospace,Menlo,Consolas,monospace;display:flex;align-items:center;gap:6px}
+.ver .dot{width:8px;height:8px;border-radius:99px;background:var(--brand)}
+
+.wrap{max-width:1400px;margin:16px auto;padding:0 12px}
+.card{background:#fff;border:1px solid var(--line);border-radius:12px;box-shadow:0 6px 18px rgba(0,0,0,.04);overflow:hidden}
+.cardHd{padding:12px 14px;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;gap:10px;font-weight:900}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end}
+.field{display:flex;flex-direction:column;gap:6px;min-width:180px}
+.label{font-size:12px;color:var(--muted)}
+.input,.select{border:1px solid #ddd;border-radius:10px;padding:10px;font-size:13px;background:#fff;outline:none}
+
+.tableScroll{overflow:auto}
+table{width:100%;border-collapse:collapse;min-width:1250px}
+th,td{border-bottom:1px solid var(--line);padding:10px 10px;font-size:12px;white-space:nowrap}
+th{background:#fafafa;color:var(--muted);text-align:left;font-weight:900;position:sticky;top:0}
+tr:hover td{background:#fff7fb}
+tr.selected td{background:#fff7fb;outline:2px solid rgba(224,32,92,.22)}
+.badge{display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border-radius:999px;border:1px solid var(--line);background:#fafafa;font-weight:900;font-size:12px}
+.badge.ok{border-color:rgba(26,127,55,.25);background:rgba(26,127,55,.06);color:#135d2a}
+.badge.off{border-color:rgba(180,35,24,.25);background:rgba(180,35,24,.06);color:#7a1b13}
+.ops{display:flex;gap:8px}
+.link{border:1px solid #ddd;background:#fff;border-radius:999px;padding:6px 10px;font-weight:900;font-size:12px;cursor:pointer}
+.link.danger{border-color:rgba(180,35,24,.35);color:#7a1b13}
+.small{font-size:12px;color:var(--muted)}
+code{font-family:ui-monospace,Menlo,Consolas,monospace}
+
+.modalMask{position:fixed;inset:0;background:rgba(0,0,0,.35);display:none;align-items:center;justify-content:center;z-index:9999;padding:10px}
+.modal{width:min(980px,96vw);background:#fff;border-radius:12px;box-shadow:0 20px 60px rgba(0,0,0,.3);display:flex;flex-direction:column;overflow:hidden}
+.modalHd{padding:12px 16px;border-bottom:1px solid #eee;font-weight:900;display:flex;justify-content:space-between;align-items:center}
+.modalBd{padding:14px 16px;max-height:72vh;overflow:auto}
+.modalFt{padding:12px 16px;border-top:1px solid #eee;display:flex;justify-content:flex-end;gap:10px}
+.kv{display:grid;grid-template-columns:160px 1fr;gap:8px 10px;font-size:12px;color:#444}
+.kv .k{color:var(--muted)}
+.reqMask .modal{width:980px}
+.reqMask .modalBd{font-size:13px;line-height:1.7}
+</style>
+</head>
+
+<body>
+<div class="topbar">
+  <div class="left">航次管理</div>
+  <div class="right">
+    <button class="btn" type="button" onclick="exportCsv()">导出CSV</button>
+    <button class="btn" type="button" onclick="copySelected()">复制航次</button>
+    <button class="btn primary" type="button" onclick="openEdit()">新增航次</button>
+    <div class="ver" id="verBtn" title="点击查看页面功能要求">
+      <span class="dot"></span>
+      <span>voyage-manage-v1</span>
+    </div>
+  </div>
+</div>
+
+<div class="wrap">
+  <div class="card">
+    <div class="cardHd">
+      <span>查询条件</span>
+      <div class="row">
+        <button class="btn" type="button" onclick="seedDemo()">生成演示数据</button>
+        <button class="btn" type="button" onclick="resetFilters()">重置</button>
+        <button class="btn primary" type="button" onclick="render()">查询</button>
+      </div>
+    </div>
+
+    <div style="padding:14px">
+      <div class="row">
+        <div class="field" style="min-width:220px;flex:1">
+          <div class="label">关键词（航次/船名）</div>
+          <input class="input" id="q_kw" placeholder="如 012W / STAR" oninput="render()">
+        </div>
+        <div class="field">
+          <div class="label">船公司</div>
+          <select class="select" id="q_carrier" onchange="render()"></select>
+        </div>
+        <div class="field">
+          <div class="label">船舶</div>
+          <select class="select" id="q_vessel" onchange="render()"></select>
+        </div>
+        <div class="field">
+          <div class="label">POD</div>
+          <input class="input" id="q_pod" placeholder="BUSAN/LAX..." oninput="render()">
+        </div>
+        <div class="field">
+          <div class="label">ETD 从</div>
+          <input class="input" type="date" id="q_etd_from" onchange="render()">
+        </div>
+        <div class="field">
+          <div class="label">ETD 到</div>
+          <input class="input" type="date" id="q_etd_to" onchange="render()">
+        </div>
+        <div class="field">
+          <div class="label">状态</div>
+          <select class="select" id="q_status" onchange="render()">
+            <option value="">全部</option>
+            <option value="active">启用</option>
+            <option value="inactive">停用</option>
+          </select>
+        </div>
+      </div>
+      <div class="small" style="margin-top:8px">
+        提示：新增/编辑时，船公司/船舶必须从字典选择；若下拉为空，请先维护 <code>slms_carriers_v1</code> 与 <code>slms_vessels_v1</code>。
+      </div>
+    </div>
+
+    <div class="tableScroll">
+      <table>
+        <thead>
+          <tr>
+            <th style="min-width:90px">船公司</th>
+            <th style="min-width:220px">船名</th>
+            <th style="min-width:90px">航次</th>
+            <th style="min-width:120px">POL</th>
+            <th style="min-width:120px">POD</th>
+            <th style="min-width:110px">ETD</th>
+            <th style="min-width:110px">ETA</th>
+            <th style="min-width:110px">状态</th>
+            <th style="min-width:160px">更新时间</th>
+            <th style="min-width:160px">操作</th>
+          </tr>
+        </thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </div>
+
+    <div style="padding:12px 14px" class="small" id="foot"></div>
+  </div>
+</div>
+
+<!-- edit modal -->
+<div class="modalMask" id="editMask">
+  <div class="modal">
+    <div class="modalHd">
+      <span id="editTitle">新增/编辑航次</span>
+      <span style="cursor:pointer;color:var(--muted)" onclick="closeEdit()">关闭</span>
+    </div>
+    <div class="modalBd">
+      <div class="kv">
+        <div class="k">船公司<span style="color:var(--brand);font-weight:900">*</span></div>
+        <div><select class="select" id="f_carrier"></select></div>
+
+        <div class="k">船舶<span style="color:var(--brand);font-weight:900">*</span></div>
+        <div><select class="select" id="f_vessel"></select></div>
+
+        <div class="k">航次号<span style="color:var(--brand);font-weight:900">*</span></div>
+        <div><input class="input" id="f_voyage" placeholder="如 012W / 118E"></div>
+
+        <div class="k">POL<span style="color:var(--brand);font-weight:900">*</span></div>
+        <div><input class="input" id="f_pol" placeholder="如 TIANJIN / CNSHA"></div>
+
+        <div class="k">POD<span style="color:var(--brand);font-weight:900">*</span></div>
+        <div><input class="input" id="f_pod" placeholder="如 BUSAN / USLAX"></div>
+
+        <div class="k">ETD<span style="color:var(--brand);font-weight:900">*</span></div>
+        <div><input class="input" type="date" id="f_etd"></div>
+
+        <div class="k">ETA</div>
+        <div><input class="input" type="date" id="f_eta"></div>
+
+        <div class="k">状态</div>
+        <div>
+          <select class="select" id="f_status">
+            <option value="active">启用</option>
+            <option value="inactive">停用</option>
+          </select>
+        </div>
+
+        <div class="k">备注</div>
+        <div><input class="input" id="f_remark" placeholder="可选"></div>
+      </div>
+      <div class="small" style="margin-top:10px">
+        唯一性：<code>carrier + vessel + voyageNo + etd</code> 组合唯一（防止重复建航次）。
+      </div>
+    </div>
+    <div class="modalFt">
+      <button class="btn" type="button" onclick="closeEdit()">取消</button>
+      <button class="btn primary" type="button" onclick="save()">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- requirements -->
+<div class="modalMask reqMask" id="reqMask">
+  <div class="modal">
+    <div class="modalHd">
+      <span>页面功能要求（voyage-manage.html / voyage-manage-v1）</span>
+      <span style="cursor:pointer;color:var(--muted)" onclick="closeReq()">关闭</span>
+    </div>
+    <div class="modalBd">
+      <ol>
+        <li>航次管理支持新增/编辑/停用（软删除），保留历史引用。</li>
+        <li>船公司/船舶必须从字典选择（限制用户随意输入）。</li>
+        <li>保存时做唯一性校验：carrier + vessel + voyageNo + etd 组合唯一。</li>
+        <li>支持查询：carrier/vessel/关键词/POD/ETD区间/状态。</li>
+        <li>支持一键复制航次：复制选中行，便于快速改航次号/ETD。</li>
+        <li>列表支持导出 CSV。</li>
+        <li>右上角版本号可点击弹窗：显示本页页面功能要求（与版本同步维护）。</li>
+      </ol>
+    </div>
+    <div class="modalFt">
+      <button class="btn" type="button" onclick="closeReq()">关闭</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const LS_CARRIERS = "slms_carriers_v1";
+const LS_VESSELS  = "slms_vessels_v1";
+const LS_VOYAGES  = "slms_voyages_v1";
+const VERSION = "voyage-manage-v1";
+
+/* requirements */
+const reqMask = document.getElementById("reqMask");
+document.getElementById("verBtn").onclick = ()=> reqMask.style.display="flex";
+function closeReq(){ reqMask.style.display="none"; }
+reqMask.onclick = e=>{ if(e.target===reqMask) closeReq(); };
+
+function esc(s){return String(s??'').replace(/[&<>"']/g,m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[m]));}
+function loadArr(key){
+  try{ const s=localStorage.getItem(key); const v=s?JSON.parse(s):[]; return Array.isArray(v)?v:[]; }catch(_){ return []; }
+}
+function saveArr(key, arr){ try{ localStorage.setItem(key, JSON.stringify(arr)); }catch(_){ } }
+
+function pad2(n){ return String(n).padStart(2,'0'); }
+function fmt(ts){
+  if(!ts) return "-";
+  const d=new Date(ts);
+  return `${d.getFullYear()}-${pad2(d.getMonth()+1)}-${pad2(d.getDate())} ${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+}
+
+const tbody = document.getElementById("tbody");
+const foot = document.getElementById("foot");
+
+const q_kw = document.getElementById("q_kw");
+const q_carrier = document.getElementById("q_carrier");
+const q_vessel = document.getElementById("q_vessel");
+const q_pod = document.getElementById("q_pod");
+const q_etd_from = document.getElementById("q_etd_from");
+const q_etd_to = document.getElementById("q_etd_to");
+const q_status = document.getElementById("q_status");
+
+let selectedId = null;
+let editId = null;
+
+function ensureCarrierDict(){
+  const arr = loadArr(LS_CARRIERS);
+  if(arr.length) return;
+  saveArr(LS_CARRIERS, [
+    {id:"CAR-1", code:"OOCL", name:"OOCL", status:"active", updatedAt:Date.now()},
+    {id:"CAR-2", code:"MAERSK", name:"MAERSK", status:"active", updatedAt:Date.now()},
+    {id:"CAR-3", code:"MSC", name:"MSC", status:"active", updatedAt:Date.now()}
+  ]);
+}
+
+function bindSelectOptions(){
+  ensureCarrierDict();
+  const carriers = loadArr(LS_CARRIERS).filter(x=>x.status!=="inactive");
+  const vessels  = loadArr(LS_VESSELS).filter(x=>x.status!=="inactive");
+
+  function fill(sel, allLabel, rows, getLabel, getVal){
+    sel.innerHTML = "";
+    const o0=document.createElement("option");
+    o0.value=""; o0.textContent=allLabel;
+    sel.appendChild(o0);
+    rows.forEach(r=>{
+      const o=document.createElement("option");
+      o.value=getVal(r);
+      o.textContent=getLabel(r);
+      sel.appendChild(o);
+    });
+  }
+
+  fill(q_carrier, "全部", carriers, r=>r.code, r=>r.id);
+  fill(q_vessel,  "全部", vessels,  r=>`${r.name}（IMO ${r.imo}）`, r=>r.id);
+
+  // edit modal selects
+  fill(document.getElementById("f_carrier"), "— 请选择 —", carriers, r=>r.code, r=>r.id);
+  fill(document.getElementById("f_vessel"),  "— 请选择 —", vessels,  r=>`${r.name}（IMO ${r.imo}）`, r=>r.id);
+}
+
+function resetFilters(){
+  q_kw.value=""; q_carrier.value=""; q_vessel.value=""; q_pod.value="";
+  q_etd_from.value=""; q_etd_to.value=""; q_status.value="";
+  selectedId=null;
+  render();
+}
+
+function openEdit(row){
+  bindSelectOptions();
+
+  editId = row ? row.id : null;
+  document.getElementById("editTitle").textContent = row ? "编辑航次" : "新增航次";
+
+  document.getElementById("f_carrier").value = row?.carrierId || "";
+  document.getElementById("f_vessel").value  = row?.vesselId || "";
+  document.getElementById("f_voyage").value  = row?.voyageNo || "";
+  document.getElementById("f_pol").value     = row?.pol || "";
+  document.getElementById("f_pod").value     = row?.pod || "";
+  document.getElementById("f_etd").value     = row?.etd || "";
+  document.getElementById("f_eta").value     = row?.eta || "";
+  document.getElementById("f_status").value  = row?.status || "active";
+  document.getElementById("f_remark").value  = row?.remark || "";
+
+  document.getElementById("editMask").style.display="flex";
+}
+function closeEdit(){ document.getElementById("editMask").style.display="none"; }
+document.getElementById("editMask").onclick = e=>{ if(e.target.id==="editMask") closeEdit(); };
+
+function getCarrierCode(id){
+  const c = loadArr(LS_CARRIERS).find(x=>x.id===id);
+  return c ? c.code : "";
+}
+function getVesselName(id){
+  const v = loadArr(LS_VESSELS).find(x=>x.id===id);
+  return v ? v.name : "";
+}
+
+function save(){
+  const carrierId = document.getElementById("f_carrier").value;
+  const vesselId  = document.getElementById("f_vessel").value;
+  const voyageNo  = document.getElementById("f_voyage").value.trim().toUpperCase();
+  const pol       = document.getElementById("f_pol").value.trim().toUpperCase();
+  const pod       = document.getElementById("f_pod").value.trim().toUpperCase();
+  const etd       = document.getElementById("f_etd").value;
+  const eta       = document.getElementById("f_eta").value;
+  const status    = document.getElementById("f_status").value;
+  const remark    = document.getElementById("f_remark").value.trim();
+
+  if(!carrierId) return alert("请选择船公司");
+  if(!vesselId)  return alert("请选择船舶");
+  if(!voyageNo)  return alert("航次号不能为空");
+  if(!pol)       return alert("POL 不能为空");
+  if(!pod)       return alert("POD 不能为空");
+  if(!etd)       return alert("ETD 不能为空");
+  if(eta && eta < etd) return alert("ETA 不能早于 ETD");
+
+  const arr = loadArr(LS_VOYAGES);
+
+  // unique: carrierId + vesselId + voyageNo + etd
+  const dup = arr.find(x =>
+    x.carrierId===carrierId && x.vesselId===vesselId && String(x.voyageNo||"")===voyageNo && String(x.etd||"")===etd && x.id!==editId
+  );
+  if(dup){
+    return alert(`保存失败：已存在相同航次（${getCarrierCode(dup.carrierId)} / ${getVesselName(dup.vesselId)} ${dup.voyageNo} / ETD ${dup.etd}）`);
+  }
+
+  if(editId){
+    const idx=arr.findIndex(x=>x.id===editId);
+    if(idx<0) return alert("记录不存在");
+    arr[idx] = Object.assign({}, arr[idx], { carrierId,vesselId,voyageNo,pol,pod,etd,eta,status,remark, updatedAt:Date.now() });
+  }else{
+    arr.unshift({ id:"VOY-"+Date.now(), carrierId,vesselId,voyageNo,pol,pod,etd,eta,status,remark, createdAt:Date.now(), updatedAt:Date.now() });
+  }
+  saveArr(LS_VOYAGES, arr);
+  closeEdit();
+  render();
+}
+
+function toggleStatus(id){
+  const arr=loadArr(LS_VOYAGES);
+  const idx=arr.findIndex(x=>x.id===id);
+  if(idx<0) return;
+  const next = arr[idx].status==="active" ? "inactive" : "active";
+  const ok = confirm(`确认将该航次状态改为：${next==="active"?"启用":"停用"}？`);
+  if(!ok) return;
+  arr[idx].status = next;
+  arr[idx].updatedAt = Date.now();
+  saveArr(LS_VOYAGES, arr);
+  render();
+}
+
+function buildView(){
+  const kw = q_kw.value.trim().toLowerCase();
+  const carrierId = q_carrier.value;
+  const vesselId  = q_vessel.value;
+  const pod       = q_pod.value.trim().toUpperCase();
+  const from      = q_etd_from.value;
+  const to        = q_etd_to.value;
+  const st        = q_status.value;
+
+  let list = loadArr(LS_VOYAGES).slice().sort((a,b)=>(b.updatedAt||0)-(a.updatedAt||0));
+
+  if(kw){
+    list = list.filter(x=>{
+      const text = `${getCarrierCode(x.carrierId)} ${getVesselName(x.vesselId)} ${x.voyageNo||""}`.toLowerCase();
+      return text.includes(kw);
+    });
+  }
+  if(carrierId) list = list.filter(x=>x.carrierId===carrierId);
+  if(vesselId)  list = list.filter(x=>x.vesselId===vesselId);
+  if(pod)       list = list.filter(x=>String(x.pod||"").toUpperCase().includes(pod));
+  if(from)      list = list.filter(x=>String(x.etd||"") >= from);
+  if(to)        list = list.filter(x=>String(x.etd||"") <= to);
+  if(st)        list = list.filter(x=>x.status===st);
+
+  return list;
+}
+
+function render(){
+  bindSelectOptions();
+  const list = buildView();
+  tbody.innerHTML="";
+
+  if(!list.length){
+    const tr=document.createElement("tr");
+    tr.innerHTML = `<td colspan="10" style="padding:16px;color:var(--muted)">暂无数据</td>`;
+    tbody.appendChild(tr);
+    foot.textContent = "0 条";
+    return;
+  }
+
+  list.forEach(x=>{
+    const tr=document.createElement("tr");
+    if(x.id===selectedId) tr.classList.add("selected");
+    const st = x.status==="active"
+      ? `<span class="badge ok">启用</span>`
+      : `<span class="badge off">停用</span>`;
+
+    tr.innerHTML = `
+      <td><b>${esc(getCarrierCode(x.carrierId))}</b></td>
+      <td>${esc(getVesselName(x.vesselId))}</td>
+      <td><b>${esc(x.voyageNo||"")}</b></td>
+      <td>${esc(x.pol||"")}</td>
+      <td>${esc(x.pod||"")}</td>
+      <td>${esc(x.etd||"")}</td>
+      <td>${esc(x.eta||"")}</td>
+      <td>${st}</td>
+      <td>${esc(fmt(x.updatedAt))}</td>
+      <td>
+        <div class="ops">
+          <button class="link" type="button" onclick='openEdit(${JSON.stringify(x).replace(/'/g,"&#39;")})'>编辑</button>
+          <button class="link danger" type="button" onclick="toggleStatus('${esc(x.id)}')">${x.status==="active"?"停用":"启用"}</button>
+        </div>
+      </td>
+    `;
+    tr.onclick=()=>{ selectedId=x.id; render(); };
+    tbody.appendChild(tr);
+  });
+
+  foot.textContent = `${list.length} 条（点击行可选中，用于复制航次）`;
+}
+
+function copySelected(){
+  if(!selectedId) return alert("请先点击列表行选中一条航次，再点“复制航次”");
+  const arr = loadArr(LS_VOYAGES);
+  const src = arr.find(x=>x.id===selectedId);
+  if(!src) return alert("选中记录不存在");
+
+  // 打开新增窗口，带默认值（voyageNo/etd 让用户修改）
+  openEdit(Object.assign({}, src, { id:null, voyageNo: src.voyageNo, etd: src.etd }));
+  editId = null;
+  document.getElementById("editTitle").textContent = "复制航次（请修改航次号/ETD）";
+}
+
+function csvEscape(v){
+  const s=String(v??"");
+  return /[",\n]/.test(s) ? `"${s.replace(/"/g,'""')}"` : s;
+}
+function downloadCsv(filename, rows){
+  const blob = new Blob([rows.join("\n")], {type:"text/csv;charset=utf-8;"});
+  const a=document.createElement("a");
+  a.href=URL.createObjectURL(blob);
+  a.download=filename;
+  document.body.appendChild(a);
+  a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(a.href), 800);
+}
+function exportCsv(){
+  const list = buildView();
+  const head = ["carrier","vessel","voyageNo","pol","pod","etd","eta","status","updatedAt"].join(",");
+  const lines=[head];
+  list.forEach(x=>{
+    lines.push([
+      getCarrierCode(x.carrierId), getVesselName(x.vesselId), x.voyageNo, x.pol, x.pod, x.etd, x.eta, x.status, fmt(x.updatedAt)
+    ].map(csvEscape).join(","));
+  });
+  downloadCsv(`voyages_${new Date().toISOString().slice(0,10)}.csv`, lines);
+}
+
+function seedDemo(){
+  const ok = confirm("生成演示数据将写入本地（localStorage），确定？");
+  if(!ok) return;
+
+  ensureCarrierDict();
+
+  // 如果船舶为空，提示先去 vessel-manage 建
+  const vessels = loadArr(LS_VESSELS);
+  if(!vessels.length){
+    alert("当前没有船舶主档，请先打开 vessel-manage.html 维护船舶（至少一条），再回来生成航次。");
+    return;
+  }
+
+  const carriers = loadArr(LS_CARRIERS).filter(x=>x.status!=="inactive");
+  const arr = loadArr(LS_VOYAGES);
+
+  function todayISO(){
+    const d=new Date(); const p=n=>String(n).padStart(2,'0');
+    return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}`;
+  }
+  function addDays(baseISO, n){
+    const d=new Date(baseISO+"T00:00:00"); d.setDate(d.getDate()+n);
+    const p=n=>String(n).padStart(2,'0');
+    return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}`;
+  }
+
+  const base = todayISO();
+  const pods = ["BUSAN","USLAX","HAMBURG"];
+  const pols = ["TIANJIN","CNSHA","CNXMN"];
+  const vnos = ["012W","118E","003N","021S"];
+
+  for(let i=0;i<8;i++){
+    const carrier = carriers[i%carriers.length];
+    const vessel = vessels[i%vessels.length];
+    const etd = addDays(base, i*2);
+    const row = {
+      id:"VOY-"+Date.now()+"-"+Math.random().toString(16).slice(2),
+      carrierId: carrier.id,
+      vesselId: vessel.id,
+      voyageNo: vnos[i%vnos.length],
+      pol: pols[i%pols.length],
+      pod: pods[i%pods.length],
+      etd,
+      eta: addDays(etd, 10),
+      status:"active",
+      remark:"",
+      createdAt:Date.now(),
+      updatedAt:Date.now()
+    };
+    const dup = arr.find(x=>x.carrierId===row.carrierId && x.vesselId===row.vesselId && x.voyageNo===row.voyageNo && x.etd===row.etd);
+    if(!dup) arr.unshift(row);
+  }
+  saveArr(LS_VOYAGES, arr);
+  render();
+}
+
+/* init */
+bindSelectOptions();
+render();
+</script>
+</body>
+</html>
