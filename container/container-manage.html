@@ -1,0 +1,2008 @@
+<!--
+File: container/container-manage.html
+Version: container-manage-v1
+Date: 2025-12-29
+
+v1 变更点：
+1) 新增【集装箱管理】页面：内置 200 条演示数据（localStorage 可持久化），支持查询/分页/多选/编辑/导出 CSV
+2) 编辑必须为页面内 Modal（彻底去掉 window.open）
+3) 编辑 Modal 支持【错误箱号更正】：
+   - 勾选后出现红色警告容器：新箱号输入 + 检查按钮
+   - 检查：若新箱号已存在则自动带入；不存在则提示“无当前箱号”，保存时按旧箱号字段创建并承接
+   - 保存更正：若旧箱号已配 CRP 且 assignStatus=assigned → 对应 CRP 该箱型完成量 -1（不小于0）
+   - 空箱检查任务转移到正确箱号；旧箱号标记 correctedTo；新箱号标记 correctedFrom
+4) 右上角版本号弹窗升级为固定三件套 SLMS-ThreeKitStyle（左导航 + 右单文档区），并遵循滚动条默认规则
+5) 所有列表/表格：根据画面自适应，溢出自动出现滚动条（优先纵向；长行/宽表支持横向）
+-->
+
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>集装箱管理</title>
+
+  <style>
+    :root{
+      --brand:#e0205c; --bg:#f1f2f5; --card:#fff; --text:#222; --muted:#666; --line:#e9e9ee;
+      --ok:#1a7f37; --warn:#b54708; --bad:#b42318;
+      --shadow:0 6px 18px rgba(0,0,0,.06);
+    }
+    *{box-sizing:border-box}
+    body{margin:0;font-family:Arial,"Microsoft YaHei";background:var(--bg);color:var(--text)}
+    .topbar{
+      height:56px;background:#fff;border-bottom:1px solid var(--line);
+      display:flex;align-items:center;justify-content:space-between;padding:0 16px;gap:10px
+    }
+    .left{font-weight:900;font-size:16px;display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+    .meta{font-size:12px;color:var(--muted);font-weight:700}
+    .right{display:flex;align-items:center;gap:12px}
+    .ver{
+      cursor:pointer;background:#f6f6f6;border:1px solid #eee;border-radius:999px;padding:6px 10px;
+      font-size:12px;font-family:ui-monospace,Menlo,Consolas,monospace;display:flex;align-items:center;gap:6px;
+      user-select:none
+    }
+    .ver .dot{width:8px;height:8px;border-radius:99px;background:var(--brand)}
+    .wrap{max-width:none;margin:16px 0;padding:0 12px}
+    .card{
+      background:#fff;border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow);
+      display:flex;flex-direction:column;min-height:0
+    }
+    .cardHd{
+      padding:12px 14px;border-bottom:1px solid var(--line);
+      display:flex;align-items:center;justify-content:space-between;gap:10px;font-weight:900;flex:0 0 auto
+    }
+    .cardBd{padding:14px;flex:0 0 auto}
+    .cardBodyScroll{flex:1 1 auto;min-height:0;overflow:auto;padding:14px}
+
+    .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+    .field{display:flex;flex-direction:column;gap:6px;min-width:140px}
+    .label{font-size:12px;color:var(--muted);font-weight:900}
+    .input,.select,.textarea{
+      border:1px solid #ddd;border-radius:10px;padding:10px;font-size:13px;background:#fff;outline:none
+    }
+    .textarea{min-height:70px;resize:vertical}
+    .btn{
+      border:1px solid #ddd;background:#fff;border-radius:10px;padding:10px 14px;font-weight:900;font-size:13px;cursor:pointer
+    }
+    .btn.primary{background:var(--brand);border-color:var(--brand);color:#fff}
+    .btn.danger{background:var(--bad);border-color:var(--bad);color:#fff}
+    .btn.ghost{border-color:#ddd;color:#444;background:#fff}
+    .btn:active{transform:translateY(1px)}
+    .pill{
+      display:inline-flex;align-items:center;gap:6px;padding:5px 10px;border-radius:999px;border:1px solid var(--line);
+      font-size:12px;background:#fafafa;font-weight:900;color:#333
+    }
+    .pill .dot{width:8px;height:8px;border-radius:99px;background:#bbb}
+    .pill.ok{border-color:rgba(26,127,55,.25);background:rgba(26,127,55,.06);color:#135d2a}
+    .pill.ok .dot{background:var(--ok)}
+    .pill.warn{border-color:rgba(181,71,8,.25);background:rgba(181,71,8,.06);color:#7a3a06}
+    .pill.warn .dot{background:var(--warn)}
+    .pill.bad{border-color:rgba(180,35,24,.25);background:rgba(180,35,24,.06);color:#7a0e13}
+    .pill.bad .dot{background:var(--bad)}
+
+    .toolbar{
+      padding:14px;border-bottom:1px solid var(--line);
+      display:flex;flex-direction:column;gap:10px;flex:0 0 auto
+    }
+    .toolbarTop{display:flex;align-items:flex-end;justify-content:space-between;gap:10px;flex-wrap:wrap}
+    .toolbarBtns{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+    .hint{font-size:12px;color:var(--muted);line-height:1.6}
+    .small{font-size:12px;color:var(--muted)}
+    .num{font-variant-numeric:tabular-nums;font-family:ui-monospace,Menlo,Consolas,monospace}
+    .split{
+      display:grid;
+      grid-template-columns: 1.3fr 0.7fr;
+      gap:12px;
+      height: calc(100vh - 56px - 32px);
+      align-items:stretch;
+      min-height:0;
+    }
+    @media (max-width: 1200px){
+      .split{grid-template-columns:1fr;height:auto}
+    }
+    .pane{min-height:0;display:flex;flex-direction:column}
+
+    /* 表格滚动：默认规则（纵向优先 + 横向支持） */
+    .tableOuter{flex:1 1 auto;min-height:0;border-top:1px solid var(--line)}
+    .tableScroll{height:100%;overflow:auto} /* 关键：横纵都允许 */
+    table{width:100%;border-collapse:collapse;min-width:1650px}
+    th,td{border-bottom:1px solid var(--line);padding:8px 10px;font-size:12px;white-space:nowrap}
+    th{background:#fafafa;color:var(--muted);text-align:left;font-weight:900;position:sticky;top:0;z-index:1}
+    tr:hover td{background:#fff7fb}
+    tr.selected td{outline:2px solid rgba(224,32,92,.25);background:#fff7fb}
+    .tdEllip{max-width:220px;overflow:hidden;text-overflow:ellipsis}
+    .chk{width:44px;text-align:center}
+    .miniBtn{
+      padding:6px 10px;border-radius:999px;border:1px solid #ddd;background:#fff;
+      font-size:12px;font-weight:900;cursor:pointer
+    }
+    .miniBtn.primary{background:var(--brand);border-color:var(--brand);color:#fff}
+    .miniBtn.warn{border-color:rgba(181,71,8,.35);background:rgba(181,71,8,.06);color:#7a3a06}
+    .miniBtn.bad{border-color:rgba(180,35,24,.35);background:rgba(180,35,24,.06);color:#7a0e13}
+    .miniBtn:active{transform:translateY(1px)}
+    .miniBtn.dis{opacity:.45;cursor:not-allowed}
+
+    /* 右侧详情：列表滚动 */
+    .detailBox{display:flex;flex-direction:column;gap:10px}
+    .kv{display:grid;grid-template-columns:150px 1fr;gap:8px;font-size:12px;color:#444}
+    .kv div:nth-child(odd){color:#777}
+    .logBox{
+      border:1px solid var(--line);border-radius:12px;background:#fff;overflow:hidden;display:flex;flex-direction:column;min-height:0
+    }
+    .logHd{padding:10px 12px;background:#fafafa;border-bottom:1px solid var(--line);font-weight:900;display:flex;justify-content:space-between;align-items:center;gap:10px}
+    .logScroll{flex:1 1 auto;min-height:0;overflow:auto;padding:10px 12px;font-size:12px;line-height:1.6;color:#444}
+    .logScroll .t{color:#999;font-family:ui-monospace,Menlo,Consolas,monospace}
+
+    /* Toast */
+    .toast{position:fixed;left:12px;bottom:12px;z-index:9998;max-width:min(560px,94vw);
+      font-size:12px;color:var(--muted);padding:10px 12px;border-radius:10px;border:1px solid var(--line);background:#fafafa;display:none}
+    .toast.show{display:block}
+    .toast.bad{border-color:rgba(180,35,24,.25);background:rgba(180,35,24,.06)}
+    .toast.ok{border-color:rgba(26,127,55,.25);background:rgba(26,127,55,.06)}
+
+    /* Modal */
+    .modalMask{position:fixed;inset:0;background:rgba(0,0,0,.35);display:none;align-items:center;justify-content:center;z-index:9999}
+    .modal{width:980px;max-width:96vw;background:#fff;border-radius:12px;box-shadow:0 20px 60px rgba(0,0,0,.3);display:flex;flex-direction:column;overflow:hidden}
+    .modalHd{padding:12px 16px;border-bottom:1px solid #eee;font-weight:900;display:flex;justify-content:space-between;align-items:center;gap:10px}
+    .modalBd{padding:14px 16px;max-height:76vh;overflow:auto}
+    .modalFt{padding:12px 16px;border-top:1px solid #eee;display:flex;justify-content:flex-end;gap:10px}
+    .closeX{cursor:pointer;color:var(--muted);font-weight:900}
+
+    .grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+    .full{grid-column:1 / -1}
+
+    .warnPanel{
+      border:1px solid rgba(180,35,24,.35);
+      background:rgba(180,35,24,.06);
+      border-radius:12px;
+      padding:12px;
+    }
+    .warnTitle{font-weight:900;color:#7a0e13;margin-bottom:8px}
+    .inlineRow{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end}
+    .inlineRow .field{min-width:220px;flex:1}
+    .checkLine{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+    .checkLine .small{flex:1}
+    .mono{font-family:ui-monospace,Menlo,Consolas,monospace}
+
+    /* ===== 三件套弹窗（SLMS-ThreeKitStyle） ===== */
+    .reqModal{width:1180px;max-width:96vw}
+    .reqBody{padding:0;max-height:78vh;overflow:hidden}
+    .reqWrap{display:flex;min-height:70vh}
+    .reqNav{
+      width:260px;flex:0 0 auto;
+      border-right:1px solid #eee;
+      background:#fbfbfd;
+      padding:12px;
+      overflow:auto; /* 规则：溢出纵向滚动 */
+    }
+    .reqNav .h{font-size:12px;color:var(--muted);margin:2px 0 10px}
+    .reqNavBtn{
+      width:100%;
+      text-align:left;
+      padding:10px 12px;
+      border-radius:10px;
+      border:1px solid #eee;
+      background:#fff;
+      cursor:pointer;
+      font-weight:900;
+      font-size:13px;
+      margin-bottom:10px;
+    }
+    .reqNavBtn.active{
+      border-color:rgba(224,32,92,.35);
+      background:rgba(224,32,92,.06);
+      color:#8a0f33;
+    }
+    .reqMain{flex:1 1 auto;min-width:0;padding:14px 16px;overflow:auto} /* 规则：右侧内容区优先纵向滚动 */
+    .docCard{border:1px solid var(--line);border-radius:12px;overflow:hidden;background:#fff}
+    .docCardHd{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 12px;background:#fafafa;border-bottom:1px solid var(--line)}
+    .docCardHd b{font-size:13px}
+    .badge{font-size:12px;color:var(--muted);border:1px solid #eee;background:#fff;border-radius:999px;padding:4px 10px}
+    .copyBtn{padding:6px 10px;border-radius:999px;border:1px solid #ddd;background:#fff;font-size:12px;font-weight:900;cursor:pointer}
+    pre.code{margin:0;padding:12px;font-size:12px;line-height:1.6;font-family: ui-monospace, Menlo, Consolas, monospace;white-space:pre;overflow:auto;background:#fbfbfd}
+    .hidden{display:none}
+  </style>
+</head>
+
+<body>
+  <div class="topbar">
+    <div class="left">
+      <span>集装箱管理</span>
+      <span class="meta">查询 / 编辑（含错误箱号更正）/ 导出</span>
+    </div>
+    <div class="right">
+      <div class="ver" id="verBtn" title="点击查看三件套（schema / dict / ui spec）">
+        <span class="dot"></span>
+        <span id="verText">container-manage-v1</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="wrap">
+    <div class="split">
+
+      <!-- 左：列表 -->
+      <div class="pane">
+        <div class="card" style="height:100%">
+          <div class="cardHd">
+            <span>集装箱列表</span>
+            <span class="small" id="selSummary">未选择</span>
+          </div>
+
+          <div class="toolbar">
+            <div class="toolbarTop">
+              <div class="row" style="align-items:flex-end">
+                <div class="field" style="min-width:240px">
+                  <div class="label">箱号</div>
+                  <input class="input" id="f_no" placeholder="MSCU..." oninput="applyFiltersAndRender()">
+                </div>
+                <div class="field" style="min-width:180px">
+                  <div class="label">Booking No</div>
+                  <input class="input" id="f_booking" placeholder="BK..." oninput="applyFiltersAndRender()">
+                </div>
+                <div class="field" style="min-width:180px">
+                  <div class="label">CRP No</div>
+                  <input class="input" id="f_crp" placeholder="CRP..." oninput="applyFiltersAndRender()">
+                </div>
+                <div class="field" style="min-width:180px">
+                  <div class="label">RequestKey（整箱）</div>
+                  <input class="input" id="f_req" placeholder="2970（前缀）..." oninput="applyFiltersAndRender()">
+                </div>
+                <div class="field" style="min-width:180px">
+                  <div class="label">车辆号码</div>
+                  <input class="input" id="f_truck" placeholder="津A..." oninput="applyFiltersAndRender()">
+                </div>
+              </div>
+
+              <div class="toolbarBtns">
+                <button class="btn primary" type="button" onclick="applyFiltersAndRender()">查询</button>
+                <button class="btn" type="button" onclick="resetFilters()">重置</button>
+                <button class="btn" type="button" onclick="runAnomalyScan()">异常检测</button>
+                <button class="btn" type="button" onclick="exportCSV()">导出CSV</button>
+                <button class="btn" type="button" onclick="openBulkModal()" id="bulkBtn" disabled>批量修改</button>
+              </div>
+            </div>
+
+            <div class="row" style="align-items:flex-end">
+              <div class="field">
+                <div class="label">箱型</div>
+                <select class="select" id="f_type" onchange="applyFiltersAndRender()">
+                  <option value="">全部</option>
+                  <option value="20GP">20GP</option>
+                  <option value="40GP">40GP</option>
+                  <option value="40HQ">40HQ</option>
+                  <option value="40RH">40RH</option>
+                </select>
+              </div>
+              <div class="field">
+                <div class="label">船公司</div>
+                <select class="select" id="f_carrier" onchange="applyFiltersAndRender()">
+                  <option value="">全部</option>
+                  <option value="MAERSK">MAERSK</option>
+                  <option value="MSC">MSC</option>
+                  <option value="OOCL">OOCL</option>
+                  <option value="COSCO">COSCO</option>
+                </select>
+              </div>
+              <div class="field">
+                <div class="label">运输公司</div>
+                <select class="select" id="f_vendor" onchange="applyFiltersAndRender()">
+                  <option value="">全部</option>
+                  <option value="中集">中集</option>
+                  <option value="顺航">顺航</option>
+                  <option value="联达">联达</option>
+                  <option value="合顺">合顺</option>
+                </select>
+              </div>
+              <div class="field">
+                <div class="label">目的港</div>
+                <select class="select" id="f_pod" onchange="applyFiltersAndRender()">
+                  <option value="">全部</option>
+                  <option value="BUSAN">BUSAN</option>
+                  <option value="HAMBURG">HAMBURG</option>
+                  <option value="LOS ANGELES">LOS ANGELES</option>
+                  <option value="VANCOUVER">VANCOUVER</option>
+                </select>
+              </div>
+              <div class="field">
+                <div class="label">箱状态</div>
+                <select class="select" id="f_cntrStatus" onchange="applyFiltersAndRender()">
+                  <option value="">全部</option>
+                  <option value="EMPTY">EMPTY</option>
+                  <option value="RELEASED">RELEASED</option>
+                  <option value="GATE_IN">GATE_IN</option>
+                  <option value="STUFFING">STUFFING</option>
+                  <option value="LOADED">LOADED</option>
+                  <option value="SHIPPED">SHIPPED</option>
+                  <option value="HOLD">HOLD</option>
+                </select>
+              </div>
+              <div class="field">
+                <div class="label">配箱状态</div>
+                <select class="select" id="f_assign" onchange="applyFiltersAndRender()">
+                  <option value="">全部</option>
+                  <option value="unassigned">unassigned</option>
+                  <option value="assigned">assigned</option>
+                  <option value="corrected">corrected</option>
+                  <option value="cancelled">cancelled</option>
+                </select>
+              </div>
+              <div class="field">
+                <div class="label">空箱检查</div>
+                <select class="select" id="f_check" onchange="applyFiltersAndRender()">
+                  <option value="">全部</option>
+                  <option value="none">none</option>
+                  <option value="pending">pending</option>
+                  <option value="passed">passed</option>
+                  <option value="failed">failed</option>
+                </select>
+              </div>
+              <div class="field">
+                <div class="label">数据质量</div>
+                <select class="select" id="f_quality" onchange="applyFiltersAndRender()">
+                  <option value="">全部</option>
+                  <option value="ok">ok</option>
+                  <option value="suspect">suspect</option>
+                  <option value="conflict">conflict</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="row" style="align-items:flex-end">
+              <div class="field">
+                <div class="label">提箱日期从</div>
+                <input class="input" id="f_releaseFrom" type="date" onchange="applyFiltersAndRender()">
+              </div>
+              <div class="field">
+                <div class="label">提箱日期到</div>
+                <input class="input" id="f_releaseTo" type="date" onchange="applyFiltersAndRender()">
+              </div>
+              <div class="field">
+                <div class="label">计划装箱日期从</div>
+                <input class="input" id="f_stuffFrom" type="date" onchange="applyFiltersAndRender()">
+              </div>
+              <div class="field">
+                <div class="label">计划装箱日期到</div>
+                <input class="input" id="f_stuffTo" type="date" onchange="applyFiltersAndRender()">
+              </div>
+              <div class="field" style="min-width:220px;flex:1">
+                <div class="label">作业地</div>
+                <input class="input" id="f_worksite" placeholder="DGZ / TJ..." oninput="applyFiltersAndRender()">
+              </div>
+
+              <div class="field">
+                <div class="label">每页</div>
+                <select class="select" id="pageSizeSel" onchange="onPageSizeChange()">
+                  <option value="20">20</option>
+                  <option value="50">50</option>
+                  <option value="100">100</option>
+                </select>
+              </div>
+              <div class="field" style="min-width:280px;flex:1">
+                <div class="label">提示</div>
+                <div class="hint">
+                  - 勾选多选可批量修改；点击行查看详情；点击“编辑”打开页面内 Modal<br/>
+                  - 表格溢出自动滚动（纵向优先，宽表支持横向）
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="tableOuter">
+            <div class="tableScroll">
+              <table>
+                <thead>
+                  <tr>
+                    <th class="chk"><input type="checkbox" id="chkAll" onchange="toggleAll(this.checked)"></th>
+                    <th style="min-width:150px">箱号</th>
+                    <th style="min-width:80px">箱型</th>
+                    <th style="min-width:90px">Tare</th>
+                    <th style="min-width:140px">Booking No</th>
+                    <th style="min-width:130px">RequestKey</th>
+                    <th style="min-width:120px">CRP No</th>
+                    <th style="min-width:130px">车辆号码</th>
+                    <th style="min-width:100px">运输公司</th>
+                    <th style="min-width:90px">船公司</th>
+                    <th style="min-width:150px">POD</th>
+                    <th style="min-width:110px">提箱日期</th>
+                    <th style="min-width:120px">计划装箱日期</th>
+                    <th style="min-width:120px">作业地</th>
+                    <th style="min-width:110px">箱状态</th>
+                    <th style="min-width:110px">配箱状态</th>
+                    <th style="min-width:120px">空箱检查</th>
+                    <th style="min-width:110px">数据质量</th>
+                    <th style="min-width:160px">更新时间</th>
+                    <th style="min-width:120px">操作</th>
+                  </tr>
+                </thead>
+                <tbody id="tbody"></tbody>
+              </table>
+            </div>
+          </div>
+
+          <div class="cardBd">
+            <div class="row" style="justify-content:space-between">
+              <div class="small" id="pageInfo">—</div>
+              <div class="row">
+                <button class="btn" type="button" onclick="prevPage()">上一页</button>
+                <div class="pill" id="pagePill"><span class="dot"></span><span class="num" id="pageNum">1</span></div>
+                <button class="btn" type="button" onclick="nextPage()">下一页</button>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- 右：详情与日志 -->
+      <div class="pane">
+        <div class="card" style="height:100%">
+          <div class="cardHd">
+            <span>详情</span>
+            <span class="small" id="detailTitle">未选择箱号</span>
+          </div>
+
+          <div class="cardBodyScroll">
+            <div class="detailBox">
+              <div class="docCard">
+                <div class="docCardHd">
+                  <b>关键字段</b>
+                  <span class="badge" id="detailBadge">—</span>
+                </div>
+                <div style="padding:12px">
+                  <div class="kv" id="detailKV"></div>
+                </div>
+              </div>
+
+              <div class="logBox" style="height:320px">
+                <div class="logHd">
+                  <span>操作日志（history）</span>
+                  <button class="miniBtn" type="button" onclick="clearHistoryForSelected()" id="clearHistBtn" disabled>清空该箱日志</button>
+                </div>
+                <div class="logScroll" id="histScroll">
+                  <div class="small">选择箱号后显示。</div>
+                </div>
+              </div>
+
+              <div class="docCard">
+                <div class="docCardHd">
+                  <b>CRP 完成量（演示）</b>
+                  <span class="badge">用于“纠错 -1”验证</span>
+                </div>
+                <div style="padding:12px">
+                  <div class="small">仅当箱号绑定 CRP 时展示该 CRP 的完成量。</div>
+                  <pre class="code" id="crpDoneBox" style="margin-top:10px">—</pre>
+                </div>
+              </div>
+
+              <div class="small">
+                说明：本页为演示版（localStorage 持久化），真实系统需对接后端权限、审计、数据校验与并发控制。
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Toast -->
+  <div class="toast" id="toast"></div>
+
+  <!-- 编辑 Modal -->
+  <div class="modalMask" id="editMask">
+    <div class="modal">
+      <div class="modalHd">
+        <span id="editTitle">编辑集装箱</span>
+        <span class="closeX" onclick="closeEdit()">关闭</span>
+      </div>
+
+      <div class="modalBd">
+        <div class="row" style="justify-content:space-between;align-items:center">
+          <div class="row" style="gap:8px">
+            <span class="pill" id="isoPill"><span class="dot"></span><span id="isoText">箱号校验：—</span></span>
+            <button class="miniBtn" type="button" onclick="checkISOInModal()">箱号校验</button>
+          </div>
+          <div class="small mono" id="editKeyHint">—</div>
+        </div>
+
+        <div class="grid2" style="margin-top:10px">
+          <div class="field">
+            <div class="label">箱号（containerNo）</div>
+            <input class="input" id="e_no" placeholder="MSCU1234567" oninput="onModalNoChange()">
+          </div>
+          <div class="field">
+            <div class="label">箱型（boxType）</div>
+            <select class="select" id="e_type">
+              <option value="20GP">20GP</option>
+              <option value="40GP">40GP</option>
+              <option value="40HQ">40HQ</option>
+              <option value="40RH">40RH</option>
+            </select>
+          </div>
+
+          <div class="field">
+            <div class="label">Booking No</div>
+            <input class="input" id="e_booking" placeholder="BK...">
+          </div>
+          <div class="field">
+            <div class="label">Tare（kg）</div>
+            <input class="input" id="e_tare" inputmode="numeric" placeholder="例如 3800" oninput="this.value=onlyInt(this.value)">
+          </div>
+
+          <div class="field">
+            <div class="label">车辆号码（truckNo）</div>
+            <input class="input" id="e_truck" placeholder="津A·12345">
+          </div>
+          <div class="field">
+            <div class="label">运输公司（vendor）</div>
+            <select class="select" id="e_vendor">
+              <option value="中集">中集</option>
+              <option value="顺航">顺航</option>
+              <option value="联达">联达</option>
+              <option value="合顺">合顺</option>
+            </select>
+          </div>
+
+          <div class="field">
+            <div class="label">船公司（carrier）</div>
+            <select class="select" id="e_carrier">
+              <option value="MAERSK">MAERSK</option>
+              <option value="MSC">MSC</option>
+              <option value="OOCL">OOCL</option>
+              <option value="COSCO">COSCO</option>
+            </select>
+          </div>
+          <div class="field">
+            <div class="label">目的港（POD）</div>
+            <select class="select" id="e_pod">
+              <option value="BUSAN">BUSAN</option>
+              <option value="HAMBURG">HAMBURG</option>
+              <option value="LOS ANGELES">LOS ANGELES</option>
+              <option value="VANCOUVER">VANCOUVER</option>
+            </select>
+          </div>
+
+          <div class="field">
+            <div class="label">提箱日期（releaseDate）</div>
+            <input class="input" id="e_releaseDate" type="date">
+          </div>
+          <div class="field">
+            <div class="label">计划装箱日期（stuffDate）</div>
+            <input class="input" id="e_stuffDate" type="date">
+          </div>
+
+          <div class="field">
+            <div class="label">作业地（worksite）</div>
+            <input class="input" id="e_worksite" placeholder="DGZ/TJ/…">
+          </div>
+          <div class="field">
+            <div class="label">箱状态（cntrStatus）</div>
+            <select class="select" id="e_cntrStatus">
+              <option value="EMPTY">EMPTY</option>
+              <option value="RELEASED">RELEASED</option>
+              <option value="GATE_IN">GATE_IN</option>
+              <option value="STUFFING">STUFFING</option>
+              <option value="LOADED">LOADED</option>
+              <option value="SHIPPED">SHIPPED</option>
+              <option value="HOLD">HOLD</option>
+            </select>
+          </div>
+
+          <div class="field">
+            <div class="label">配箱状态（assignStatus）</div>
+            <select class="select" id="e_assignStatus">
+              <option value="unassigned">unassigned</option>
+              <option value="assigned">assigned</option>
+              <option value="corrected">corrected</option>
+              <option value="cancelled">cancelled</option>
+            </select>
+          </div>
+          <div class="field">
+            <div class="label">空箱检查（checkStatus）</div>
+            <select class="select" id="e_checkStatus">
+              <option value="none">none</option>
+              <option value="pending">pending</option>
+              <option value="passed">passed</option>
+              <option value="failed">failed</option>
+            </select>
+          </div>
+
+          <div class="field">
+            <div class="label">数据质量（dataQuality）</div>
+            <select class="select" id="e_quality">
+              <option value="ok">ok</option>
+              <option value="suspect">suspect</option>
+              <option value="conflict">conflict</option>
+            </select>
+          </div>
+          <div class="field">
+            <div class="label">CRP No（crpNo）</div>
+            <input class="input" id="e_crpNo" placeholder="CRP...">
+          </div>
+
+          <div class="field full">
+            <div class="label">备注（remark）</div>
+            <textarea class="textarea" id="e_remark" placeholder="可选"></textarea>
+          </div>
+        </div>
+
+        <div class="row" style="margin-top:12px;align-items:center;justify-content:space-between">
+          <label class="row" style="gap:8px;cursor:pointer;user-select:none">
+            <input type="checkbox" id="e_fixWrong" onchange="toggleFixPanel()">
+            <span class="small"><b>错误箱号更正</b>（用于录错箱号/信息纠错；仅允许在本 Modal 内完成）</span>
+          </label>
+          <div class="small" id="fixHelp">—</div>
+        </div>
+
+        <div class="warnPanel" id="fixPanel" style="display:none;margin-top:10px">
+          <div class="warnTitle">⚠ 错误箱号更正（红色区域为高风险操作）</div>
+
+          <div class="inlineRow">
+            <div class="field">
+              <div class="label">新的正确箱号（newContainerNo）</div>
+              <input class="input" id="fix_newNo" placeholder="例如 MSCU7654321" oninput="fix_newMsg.textContent='';fix_foundHint.textContent='—';fix_preview.textContent='—';">
+            </div>
+            <div class="field" style="min-width:220px;flex:0 0 auto">
+              <div class="label">检查</div>
+              <button class="btn danger" type="button" onclick="checkNewNo()">检查新箱号</button>
+            </div>
+          </div>
+
+          <div class="checkLine" style="margin-top:8px">
+            <span class="pill" id="fix_foundPill"><span class="dot"></span><span id="fix_foundHint">—</span></span>
+            <span class="small" id="fix_newMsg">点击“检查新箱号”后，会尝试带入系统已有字段；无当前箱号则提示并在保存时创建。</span>
+          </div>
+
+          <div class="small" style="margin-top:10px">更正预览（保存时将执行）：</div>
+          <pre class="code" id="fix_preview" style="margin-top:8px">—</pre>
+        </div>
+
+        <div class="small" style="margin-top:12px">
+          说明：演示版会把每次保存写入 <b>history</b>；更正会触发：CRP 完成量 -1（若已配箱且绑定 CRP）、空箱检查转移、旧箱号标记 correctedTo。
+        </div>
+      </div>
+
+      <div class="modalFt">
+        <button class="btn" type="button" onclick="closeEdit()">取消</button>
+        <button class="btn primary" type="button" onclick="saveEdit()">保存</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 批量修改 Modal -->
+  <div class="modalMask" id="bulkMask">
+    <div class="modal" style="width:920px">
+      <div class="modalHd">
+        <span>批量修改（选中 <span class="num" id="bulkCount">0</span> 条）</span>
+        <span class="closeX" onclick="closeBulk()">关闭</span>
+      </div>
+      <div class="modalBd">
+        <div class="hint" style="margin-bottom:10px">
+          说明：批量修改用于行业常见维护（如运输公司/状态统一调整）。演示版只对选中记录生效，并写入 history。
+        </div>
+
+        <div class="grid2">
+          <div class="field">
+            <div class="label">运输公司（vendor）</div>
+            <select class="select" id="b_vendor">
+              <option value="">（不修改）</option>
+              <option value="中集">中集</option>
+              <option value="顺航">顺航</option>
+              <option value="联达">联达</option>
+              <option value="合顺">合顺</option>
+            </select>
+          </div>
+          <div class="field">
+            <div class="label">箱状态（cntrStatus）</div>
+            <select class="select" id="b_cntrStatus">
+              <option value="">（不修改）</option>
+              <option value="EMPTY">EMPTY</option>
+              <option value="RELEASED">RELEASED</option>
+              <option value="GATE_IN">GATE_IN</option>
+              <option value="STUFFING">STUFFING</option>
+              <option value="LOADED">LOADED</option>
+              <option value="SHIPPED">SHIPPED</option>
+              <option value="HOLD">HOLD</option>
+            </select>
+          </div>
+          <div class="field">
+            <div class="label">配箱状态（assignStatus）</div>
+            <select class="select" id="b_assignStatus">
+              <option value="">（不修改）</option>
+              <option value="unassigned">unassigned</option>
+              <option value="assigned">assigned</option>
+              <option value="corrected">corrected</option>
+              <option value="cancelled">cancelled</option>
+            </select>
+          </div>
+          <div class="field">
+            <div class="label">空箱检查（checkStatus）</div>
+            <select class="select" id="b_checkStatus">
+              <option value="">（不修改）</option>
+              <option value="none">none</option>
+              <option value="pending">pending</option>
+              <option value="passed">passed</option>
+              <option value="failed">failed</option>
+            </select>
+          </div>
+
+          <div class="field full">
+            <div class="label">批量备注（写入 history）</div>
+            <input class="input" id="b_note" placeholder="例如：按调度要求统一调整运输公司/状态">
+          </div>
+        </div>
+
+        <div class="small" style="margin-top:10px">
+          批量修改不会自动改变 Booking/CRP 关联（避免误操作），若需要联动规则可后续扩展。
+        </div>
+      </div>
+
+      <div class="modalFt">
+        <button class="btn" type="button" onclick="closeBulk()">取消</button>
+        <button class="btn primary" type="button" onclick="applyBulk()">保存批量修改</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 三件套（SLMS-ThreeKitStyle） -->
+  <div class="modalMask" id="reqMask">
+    <div class="modal reqModal">
+      <div class="modalHd">
+        <span>三件套（集装箱管理 / <span class="mono">container-manage-v1</span>）</span>
+        <span class="closeX" onclick="closeReq()">关闭</span>
+      </div>
+
+      <div class="modalBd reqBody">
+        <div class="reqWrap">
+          <div class="reqNav">
+            <div class="h">导航</div>
+            <button class="reqNavBtn active" id="navSchema" onclick="showDoc('schema')">slms-schema.yaml</button>
+            <button class="reqNavBtn" id="navDict" onclick="showDoc('dict')">slms-data-dict.md</button>
+            <button class="reqNavBtn" id="navUi" onclick="showDoc('ui')">slms-ui-spec.md</button>
+            <div class="small" style="margin-top:8px">
+              提示：右上角版本号与本弹窗内容必须随版本同步维护（v1）。
+            </div>
+          </div>
+
+          <div class="reqMain">
+            <!-- schema -->
+            <div id="docSchema" class="docCard">
+              <div class="docCardHd">
+                <b>slms-schema.yaml</b>
+                <div class="row">
+                  <span class="badge">结构唯一真源（Schema）</span>
+                  <button class="copyBtn" type="button" onclick="copyText('schemaText')">复制</button>
+                </div>
+              </div>
+<pre class="code" id="schemaText">version: slms-container-manage-schema-v1
+domain: slms
+module: container_manage
+
+entities:
+
+  container:
+    description: "集装箱主数据/过程数据（演示：localStorage持久化）。支持查询、编辑、错误箱号更正。"
+    primary_key: containerNo
+    fields:
+      containerNo:  { type: string, required: true, example: "MSCU1234567" }  # 箱号
+      boxType:      { type: enum, required: true, values: ["20GP","40GP","40HQ","40RH"] }
+      tare:         { type: int, required: false, note: "Tare 自重(kg)" }
+
+      bookingNo:    { type: string, required: false, note: "Booking No；可为空" }
+      requestKey:   { type: string, required: false, note: "整箱 Request 前缀（例如 2970）；可为空" }
+      crpNo:        { type: string, required: false, note: "CRP/提箱单号；可为空" }
+      truckNo:      { type: string, required: false, note: "车辆号码；可为空" }
+
+      vendor:       { type: string, required: false, note: "运输公司" }
+      carrier:      { type: string, required: false, note: "船公司" }
+      pod:          { type: string, required: false, note: "目的港" }
+
+      releaseDate:  { type: date, required: false, note: "提箱日期" }
+      stuffDate:    { type: date, required: false, note: "计划装箱日期" }
+      worksite:     { type: string, required: false, note: "作业地" }
+
+      cntrStatus:   { type: enum, required: true, values: ["EMPTY","RELEASED","GATE_IN","STUFFING","LOADED","SHIPPED","HOLD"] }
+      assignStatus: { type: enum, required: true, values: ["unassigned","assigned","corrected","cancelled"] }
+      checkStatus:  { type: enum, required: true, values: ["none","pending","passed","failed"], note: "空箱检查任务状态（演示）" }
+      dataQuality:  { type: enum, required: true, values: ["ok","suspect","conflict"] }
+
+      correctedFrom:{ type: string, required: false, note: "若本箱为纠错后正确箱号：记录来源旧箱号" }
+      correctedTo:  { type: string, required: false, note: "若本箱为纠错前错误箱号：指向正确箱号" }
+
+      remark:       { type: string, required: false }
+      updatedAt:    { type: int64, required: true, note: "更新时间戳(ms)" }
+      history:      { type: array, required: false, note: "操作日志（演示结构）" }
+
+  crp_done:
+    description: "CRP 对应箱型完成量（演示：用于错误箱号更正时 -1）"
+    primary_key: crpNo
+    fields:
+      crpNo: { type: string, required: true }
+      doneQtyByType: { type: map, required: true, note: "例如 {20GP:1,40HQ:0,...}" }</pre>
+            </div>
+
+            <!-- dict -->
+            <div id="docDict" class="docCard hidden">
+              <div class="docCardHd">
+                <b>slms-data-dict.md</b>
+                <div class="row">
+                  <span class="badge">字段/口径说明（Data Dictionary）</span>
+                  <button class="copyBtn" type="button" onclick="copyText('dictText')">复制</button>
+                </div>
+              </div>
+<pre class="code" id="dictText"># SLMS - 集装箱管理（container-manage）数据字典（v1）
+
+## 1) container（集装箱）
+- containerNo：箱号（业务主键，演示版允许修改；真实系统通常限制）
+- boxType：箱型（20GP/40GP/40HQ/40RH）
+- tare：Tare 自重（kg）
+- bookingNo：Booking No（可为空）
+- requestKey：整箱 Request 前缀（同一整箱可能对应多个型号行；此处用前缀聚合，演示用）
+- crpNo：CRP/提箱单号（可为空；已配箱时通常存在）
+- truckNo：车辆号码（可为空）
+- vendor/carrier/pod：运输公司/船公司/目的港
+- releaseDate：提箱日期
+- stuffDate/worksite：计划装箱日期 / 作业地（为后续装箱计划使用）
+
+### 状态枚举
+- cntrStatus（箱状态）：EMPTY/RELEASED/GATE_IN/STUFFING/LOADED/SHIPPED/HOLD
+- assignStatus（配箱状态）：unassigned/assigned/corrected/cancelled
+- checkStatus（空箱检查）：none/pending/passed/failed
+- dataQuality（数据质量）：ok/suspect/conflict
+
+### 纠错字段（错误箱号更正）
+- correctedTo：错误箱号 -> 正确箱号
+- correctedFrom：正确箱号 <- 错误箱号
+
+## 2) crp_done（CRP 完成量，演示口径）
+- doneQtyByType：记录该 CRP 按箱型的“完成箱量”（演示）
+- 错误箱号更正时，如果旧箱号满足：
+  - assignStatus=assigned 且 crpNo 非空
+  - 则对该 crpNo 的 doneQtyByType[旧箱号.boxType] 执行 -1（不小于0）
+
+## 3) history（操作日志，演示）
+- 每次编辑/批量修改/纠错，都追加一条：
+  - ts：时间戳
+  - action：动作（edit / bulk / correct）
+  - note：说明
+  - by：操作者（演示固定为 "demo-user"）</pre>
+            </div>
+
+            <!-- ui -->
+            <div id="docUi" class="docCard hidden">
+              <div class="docCardHd">
+                <b>slms-ui-spec.md</b>
+                <div class="row">
+                  <span class="badge">页面交互/约束（UI Spec）</span>
+                  <button class="copyBtn" type="button" onclick="copyText('uiText')">复制</button>
+                </div>
+              </div>
+<pre class="code" id="uiText"># SLMS - 集装箱管理 UI Spec（container-manage-v1）
+
+## 1) 页面结构
+- 顶部：标题 + 右上角版本号（可点击打开三件套）
+- 左侧：筛选 + 列表（分页、多选、编辑、导出）
+- 右侧：详情（关键字段、history、CRP完成量展示）
+
+## 2) 默认滚动规则（全局）
+- 所有列表/表格/列表视图根据画面大小自适应
+- 内容溢出时自动出现滚动条：
+  - 优先纵向滚动
+  - 长行/宽表支持横向滚动
+
+## 3) 查询
+- 支持按：箱号/Booking/CRP/RequestKey/车辆/箱型/船公司/运输公司/POD/箱状态/配箱状态/空箱检查/数据质量/日期范围/作业地 筛选
+- 查询后列表刷新，分页回到第一页
+
+## 4) 列表操作
+- 行点击：选中并在右侧显示详情与日志
+- 多选：勾选复选框；支持全选（仅当前页范围）
+- 批量修改：仅对选中记录生效（运输公司/状态等）；写入 history
+- 导出CSV：导出“当前筛选结果（不受分页限制）”
+
+## 5) 编辑（必须为页面内 Modal）
+- 每行【编辑】打开页面内 modal（禁止 window.open / 浏览器新窗口）
+- 可修改字段：箱号、箱型、Booking No、Tare、车辆号码、运输公司、船公司、POD、提箱日期、计划装箱日期、作业地、箱状态、配箱状态、空箱检查、数据质量、CRP No、备注
+- 提供“箱号校验”按钮（ISO 6346 简化实现）
+
+## 6) 错误箱号更正（在编辑 Modal 内）
+- 勾选“错误箱号更正”后显示红色容器：
+  - 新箱号输入 + 检查按钮
+  - 检查：若系统已存在该新箱号 → 自动带入其字段（若有）；否则提示“无当前箱号”
+- 保存更正时执行：
+  1) 如果旧箱号 assignStatus=assigned 且 crpNo 非空：
+     - 对 CRP 完成量 doneQtyByType[旧箱号.boxType] 执行 -1（不小于0）
+  2) 转移空箱检查任务：checkStatus（及演示任务字段）从旧箱号转移到新箱号
+  3) 旧箱号标记：assignStatus=corrected，correctedTo=newNo
+  4) 新箱号标记：correctedFrom=oldNo，并承接旧箱号的 Booking/CRP 等字段（若新箱号不存在则创建）
+  5) 双方写入 history
+
+## 7) 三件套（SLMS-ThreeKitStyle）
+- 布局固定：左侧导航（3按钮）+ 右侧单文档内容区（docCard + copy + pre）
+- 内容区不够一屏时自动滚动（右侧优先纵向；pre/长行支持横向）</pre>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="modalFt">
+        <button class="btn" type="button" onclick="closeReq()">关闭</button>
+      </div>
+    </div>
+  </div>
+
+<script>
+/* ================= 基础配置 ================= */
+const VERSION = "container-manage-v1";
+const LS_KEY = "slms_container_manage_v1";
+const LS_CRP_DONE = "slms_container_manage_crp_done_v1";
+const DEMO_USER = "demo-user";
+
+const BOX_TYPES = ["20GP","40GP","40HQ","40RH"];
+const CARRIERS = ["MAERSK","MSC","OOCL","COSCO"];
+const VENDORS  = ["中集","顺航","联达","合顺"];
+const PODS     = ["BUSAN","HAMBURG","LOS ANGELES","VANCOUVER"];
+const CNTR_STATUS = ["EMPTY","RELEASED","GATE_IN","STUFFING","LOADED","SHIPPED","HOLD"];
+const ASSIGN_STATUS = ["unassigned","assigned","corrected","cancelled"];
+const CHECK_STATUS = ["none","pending","passed","failed"];
+const QUALITY = ["ok","suspect","conflict"];
+const WORKSITES = ["DGZ","TJ","XNG","CDC","RDC-A","RDC-B"];
+
+const verBtn = document.getElementById("verBtn");
+const reqMask = document.getElementById("reqMask");
+verBtn.onclick = ()=> reqMask.style.display = "flex";
+reqMask.onclick = (e)=>{ if(e.target===reqMask) closeReq(); };
+function closeReq(){ reqMask.style.display = "none"; }
+function showDoc(which){
+  const map = { schema: ['docSchema','navSchema'], dict: ['docDict','navDict'], ui: ['docUi','navUi'] };
+  Object.keys(map).forEach(k=>{
+    const [docId, navId] = map[k];
+    document.getElementById(docId).classList.toggle('hidden', k!==which);
+    document.getElementById(navId).classList.toggle('active', k===which);
+  });
+}
+function copyText(id){
+  const el = document.getElementById(id);
+  const txt = el ? el.textContent : '';
+  if(!txt) return;
+  try{ navigator.clipboard.writeText(txt); showToast("已复制到剪贴板", true); }
+  catch(e){ alert("复制失败：请手动选择文本复制"); }
+}
+
+/* Toast */
+const toast = document.getElementById("toast");
+function showToast(msg, ok=true){
+  toast.className = "toast show " + (ok ? "ok" : "bad");
+  toast.textContent = msg;
+  setTimeout(()=> toast.className = "toast", 2600);
+}
+
+/* ================= 工具函数 ================= */
+function esc(s){return String(s??'').replace(/[&<>"']/g,m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[m]));}
+function onlyInt(v){ return String(v ?? '').replace(/\D/g,'').slice(0,6); }
+function pad2(n){ return String(n).padStart(2,'0'); }
+function isoDate(d){
+  const dt = new Date(d);
+  return `${dt.getFullYear()}-${pad2(dt.getMonth()+1)}-${pad2(dt.getDate())}`;
+}
+function addDays(ymd, days){
+  const [y,m,dd] = ymd.split("-").map(x=>parseInt(x,10));
+  const dt = new Date(y, m-1, dd);
+  dt.setDate(dt.getDate()+days);
+  return isoDate(dt);
+}
+function nowTs(){ return Date.now(); }
+function fmtTs(ts){
+  const d=new Date(ts||Date.now());
+  return `${d.getFullYear()}-${pad2(d.getMonth()+1)}-${pad2(d.getDate())} ${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+}
+function randPick(arr){ return arr[Math.floor(Math.random()*arr.length)]; }
+function randInt(a,b){ return a + Math.floor(Math.random()*(b-a+1)); }
+
+/* ================= ISO 6346（简化但可用） =================
+   - 4 letters + 6 digits + 1 check digit (e.g., MSCU1234567)
+   - letter mapping: A=10,B=12,C=13,... (skip multiples of 11)
+*/
+const ISO_MAP = {
+  A:10,B:12,C:13,D:14,E:15,F:16,G:17,H:18,I:19,J:20,K:21,L:23,M:24,N:25,O:26,P:27,Q:28,R:29,S:30,T:31,U:32,V:34,W:35,X:36,Y:37,Z:38
+};
+function iso6346CheckDigit(code){
+  const s = String(code||"").trim().toUpperCase();
+  if(!/^[A-Z]{4}\d{6}\d$/.test(s)) return null;
+  let sum=0;
+  for(let i=0;i<10;i++){
+    const ch=s[i];
+    const val = (i<4) ? ISO_MAP[ch] : parseInt(ch,10);
+    if(!Number.isFinite(val)) return null;
+    sum += val * Math.pow(2,i);
+  }
+  const rem = sum % 11;
+  const cd = rem % 10; // ISO rule
+  return cd;
+}
+function iso6346Valid(code){
+  const s = String(code||"").trim().toUpperCase();
+  if(!/^[A-Z]{4}\d{7}$/.test(s)) return { ok:false, reason:"格式应为4字母+7数字（含校验位）" };
+  const cd = iso6346CheckDigit(s);
+  if(cd===null) return { ok:false, reason:"无法计算校验位" };
+  const last = parseInt(s[10],10);
+  if(cd!==last) return { ok:false, reason:`校验位不匹配（期望 ${cd}，实际 ${last}）` };
+  return { ok:true, reason:"校验通过" };
+}
+
+/* ================= 数据加载/保存 ================= */
+let containers = [];
+let crpDoneMap = {}; // { crpNo: { doneQtyByType: {20GP:..}, updatedAt } }
+
+function loadLS(){
+  try{
+    const s = localStorage.getItem(LS_KEY);
+    const arr = s ? JSON.parse(s) : null;
+    if(Array.isArray(arr)) containers = arr; else containers = [];
+  }catch(e){ containers = []; }
+
+  try{
+    const s2 = localStorage.getItem(LS_CRP_DONE);
+    const obj = s2 ? JSON.parse(s2) : null;
+    if(obj && typeof obj==="object") crpDoneMap = obj; else crpDoneMap = {};
+  }catch(e){ crpDoneMap = {}; }
+}
+function saveLS(){
+  try{ localStorage.setItem(LS_KEY, JSON.stringify(containers)); }catch(e){}
+  try{ localStorage.setItem(LS_CRP_DONE, JSON.stringify(crpDoneMap)); }catch(e){}
+}
+
+/* ================= 生成演示数据（200条） ================= */
+function makePlate(idx){
+  // 演示：津A、冀B、鲁C混合
+  const prefixes = ["津A","津B","冀B","冀C","鲁B"];
+  const p = prefixes[idx % prefixes.length];
+  const tail = String(10000 + (idx*37)%89999);
+  return `${p}·${tail}`;
+}
+function makeBooking(idx){
+  // BK202512xx-yy
+  const day = 10 + (idx % 20);
+  const seq = pad2((idx % 90)+1);
+  return `BK202512${pad2(day)}-${seq}`;
+}
+function makeRequestKey(idx){
+  // 2970-1 前缀：2970
+  const base = 2970 + (idx % 60);
+  const suffix = 1 + (idx % 3);
+  return `${base}-${suffix}`;
+}
+function makeCRP(idx){
+  // CRP-202512-xxx
+  const n = 100 + (idx % 120);
+  return `CRP-202512-${pad2(n)}`;
+}
+function makeCntrNo(idx){
+  const owners = ["MSCU","OOLU","MAEU","COSU"];
+  const o = owners[idx % owners.length];
+  const serial = String(100000 + (idx*73)%899999).padStart(6,"0");
+  // 临时先不含校验位，后续补上
+  const base10 = `${o}${serial}`;
+  // 先填0，再算校验位
+  let cand = base10 + "0";
+  const cd = iso6346CheckDigit(cand);
+  cand = base10 + String(cd ?? 0);
+  return cand;
+}
+function makeHistory(action, note){
+  return { ts: nowTs(), action, note: note||"", by: DEMO_USER };
+}
+
+function seedDemoIfEmpty(){
+  loadLS();
+  if(containers.length >= 50) { normalizeAfterLoad(); return; }
+
+  const today = isoDate(new Date());
+  containers = [];
+  crpDoneMap = {};
+
+  for(let i=0;i<200;i++){
+    const containerNo = makeCntrNo(i);
+    const boxType = randPick(BOX_TYPES);
+    const carrier = randPick(CARRIERS);
+    const vendor  = randPick(VENDORS);
+    const pod     = randPick(PODS);
+
+    const cntrStatus = randPick(CNTR_STATUS);
+    const checkStatus = (Math.random()<0.15) ? "pending" : (Math.random()<0.1 ? "failed" : "none");
+    const dataQuality = (Math.random()<0.06) ? "suspect" : "ok";
+
+    const assigned = Math.random()<0.45;
+    const assignStatus = assigned ? "assigned" : "unassigned";
+
+    const bookingNo = (Math.random()<0.7) ? makeBooking(i) : "";
+    const requestKey = (Math.random()<0.55) ? makeRequestKey(i) : "";
+    const crpNo = assigned ? makeCRP(i) : "";
+    const truckNo = (Math.random()<0.6) ? makePlate(i) : "";
+    const releaseDate = addDays(today, -randInt(0,25));
+    const stuffDate = (Math.random()<0.45) ? addDays(today, randInt(0,18)) : "";
+    const worksite = (Math.random()<0.55) ? randPick(WORKSITES) : "";
+
+    const tare = String(3300 + randInt(0, 1500));
+
+    const rec = {
+      containerNo, boxType, tare,
+      bookingNo, requestKey, crpNo, truckNo,
+      vendor, carrier, pod,
+      releaseDate, stuffDate, worksite,
+      cntrStatus, assignStatus, checkStatus, dataQuality,
+      correctedFrom:"", correctedTo:"",
+      remark:"",
+      updatedAt: nowTs() - randInt(0, 1000*60*60*24*8),
+      history: [ makeHistory("seed", "初始化演示数据") ]
+    };
+
+    containers.push(rec);
+
+    if(crpNo){
+      if(!crpDoneMap[crpNo]){
+        crpDoneMap[crpNo] = { doneQtyByType: { "20GP":0,"40GP":0,"40HQ":0,"40RH":0 }, updatedAt: nowTs() };
+      }
+      crpDoneMap[crpNo].doneQtyByType[boxType] = (crpDoneMap[crpNo].doneQtyByType[boxType]||0) + 1;
+      crpDoneMap[crpNo].updatedAt = nowTs();
+    }
+  }
+
+  // 制造少量冲突：重复箱号（用于异常检测演示）
+  for(let k=0;k<3;k++){
+    const a = containers[randInt(0,199)];
+    const b = containers[randInt(0,199)];
+    if(a && b && a!==b){
+      b.containerNo = a.containerNo; // 直接制造重复
+      b.dataQuality = "conflict";
+      b.history.push(makeHistory("seed", "演示：制造重复箱号冲突"));
+    }
+  }
+
+  saveLS();
+  normalizeAfterLoad();
+}
+
+function normalizeAfterLoad(){
+  // 统一大写箱号
+  containers.forEach(c=>{
+    c.containerNo = String(c.containerNo||"").trim().toUpperCase();
+    c.bookingNo = String(c.bookingNo||"").trim().toUpperCase();
+    c.crpNo = String(c.crpNo||"").trim().toUpperCase();
+    c.requestKey = String(c.requestKey||"").trim();
+    c.truckNo = String(c.truckNo||"").trim().toUpperCase();
+    c.correctedFrom = String(c.correctedFrom||"").trim().toUpperCase();
+    c.correctedTo = String(c.correctedTo||"").trim().toUpperCase();
+    if(!Array.isArray(c.history)) c.history = [];
+    if(!c.updatedAt) c.updatedAt = nowTs();
+  });
+}
+
+/* ================= 筛选/分页/渲染 ================= */
+let filtered = [];
+let selectedNo = "";
+let selectedSet = new Set();
+let page = 1;
+let pageSize = 20;
+
+const tbody = document.getElementById("tbody");
+
+function getFilterValues(){
+  return {
+    no: (f_no.value||"").trim().toUpperCase(),
+    booking: (f_booking.value||"").trim().toUpperCase(),
+    crp: (f_crp.value||"").trim().toUpperCase(),
+    req: (f_req.value||"").trim(),
+    truck: (f_truck.value||"").trim().toUpperCase(),
+    type: f_type.value,
+    carrier: f_carrier.value,
+    vendor: f_vendor.value,
+    pod: f_pod.value,
+    cntrStatus: f_cntrStatus.value,
+    assign: f_assign.value,
+    check: f_check.value,
+    quality: f_quality.value,
+    releaseFrom: (f_releaseFrom.value||"").trim(),
+    releaseTo: (f_releaseTo.value||"").trim(),
+    stuffFrom: (f_stuffFrom.value||"").trim(),
+    stuffTo: (f_stuffTo.value||"").trim(),
+    worksite: (f_worksite.value||"").trim().toUpperCase()
+  };
+}
+function matchDateRange(val, from, to){
+  if(!from && !to) return true;
+  const v = String(val||"").slice(0,10);
+  if(!v) return false;
+  if(from && v < from) return false;
+  if(to && v > to) return false;
+  return true;
+}
+
+function applyFilters(){
+  const f = getFilterValues();
+  const list = containers.slice();
+
+  filtered = list.filter(c=>{
+    if(f.no && !String(c.containerNo||"").includes(f.no)) return false;
+    if(f.booking && !String(c.bookingNo||"").includes(f.booking)) return false;
+    if(f.crp && !String(c.crpNo||"").includes(f.crp)) return false;
+    if(f.req && !String(c.requestKey||"").includes(f.req)) return false;
+    if(f.truck && !String(c.truckNo||"").includes(f.truck)) return false;
+
+    if(f.type && c.boxType!==f.type) return false;
+    if(f.carrier && c.carrier!==f.carrier) return false;
+    if(f.vendor && c.vendor!==f.vendor) return false;
+    if(f.pod && c.pod!==f.pod) return false;
+
+    if(f.cntrStatus && c.cntrStatus!==f.cntrStatus) return false;
+    if(f.assign && c.assignStatus!==f.assign) return false;
+    if(f.check && c.checkStatus!==f.check) return false;
+    if(f.quality && c.dataQuality!==f.quality) return false;
+
+    if(f.worksite && !String(c.worksite||"").toUpperCase().includes(f.worksite)) return false;
+
+    if(!matchDateRange(c.releaseDate, f.releaseFrom, f.releaseTo)) return false;
+    if(!matchDateRange(c.stuffDate, f.stuffFrom, f.stuffTo)) return false;
+
+    return true;
+  });
+
+  // 排序：更新时间 desc
+  filtered.sort((a,b)=>(b.updatedAt||0)-(a.updatedAt||0));
+}
+
+function applyFiltersAndRender(){
+  page = 1;
+  applyFilters();
+  renderTable();
+  updateSelectionUI();
+}
+
+function renderTable(){
+  tbody.innerHTML = "";
+
+  const total = filtered.length;
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  if(page > totalPages) page = totalPages;
+
+  const start = (page-1)*pageSize;
+  const end = Math.min(total, start+pageSize);
+  const slice = filtered.slice(start, end);
+
+  if(!slice.length){
+    const tr=document.createElement("tr");
+    tr.innerHTML = `<td colspan="20" style="color:var(--muted);padding:18px">暂无数据</td>`;
+    tbody.appendChild(tr);
+    updatePageInfo(total, totalPages);
+    return;
+  }
+
+  slice.forEach(c=>{
+    const tr=document.createElement("tr");
+    if(c.containerNo===selectedNo) tr.classList.add("selected");
+
+    const qualityPill = (c.dataQuality==="conflict")
+      ? `<span class="pill bad"><span class="dot"></span>conflict</span>`
+      : (c.dataQuality==="suspect")
+        ? `<span class="pill warn"><span class="dot"></span>suspect</span>`
+        : `<span class="pill ok"><span class="dot"></span>ok</span>`;
+
+    tr.innerHTML = `
+      <td class="chk"><input type="checkbox" ${selectedSet.has(c.containerNo)?"checked":""} onclick="toggleOne(event,'${escAttr(c.containerNo)}')"></td>
+      <td class="mono"><b>${esc(c.containerNo)}</b></td>
+      <td>${esc(c.boxType)}</td>
+      <td class="num">${esc(c.tare||"")}</td>
+      <td>${esc(c.bookingNo||"")}</td>
+      <td>${esc(c.requestKey||"")}</td>
+      <td>${esc(c.crpNo||"")}</td>
+      <td>${esc(c.truckNo||"")}</td>
+      <td>${esc(c.vendor||"")}</td>
+      <td>${esc(c.carrier||"")}</td>
+      <td>${esc(c.pod||"")}</td>
+      <td>${esc(c.releaseDate||"")}</td>
+      <td>${esc(c.stuffDate||"")}</td>
+      <td>${esc(c.worksite||"")}</td>
+      <td>${esc(c.cntrStatus||"")}</td>
+      <td>${esc(c.assignStatus||"")}</td>
+      <td>${esc(c.checkStatus||"")}</td>
+      <td>${qualityPill}</td>
+      <td class="mono">${esc(fmtTs(c.updatedAt||Date.now()))}</td>
+      <td>
+        <button class="miniBtn primary" onclick="event.stopPropagation();openEdit('${escAttr(c.containerNo)}')">编辑</button>
+      </td>
+    `;
+
+    tr.addEventListener("click", ()=>{
+      selectedNo = c.containerNo;
+      renderTable();
+      renderDetail();
+      updateSelectionUI();
+    });
+
+    tbody.appendChild(tr);
+  });
+
+  updatePageInfo(total, Math.max(1, Math.ceil(total/pageSize)));
+}
+
+function escAttr(s){
+  return String(s??'').replace(/&/g,"&amp;").replace(/"/g,"&quot;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+}
+
+/* 分页 */
+function updatePageInfo(total, totalPages){
+  pageNum.textContent = String(page);
+  pageInfo.textContent = `共 ${total} 条｜第 ${page}/${totalPages} 页｜每页 ${pageSize} 条`;
+}
+function prevPage(){ if(page>1){ page--; renderTable(); } }
+function nextPage(){
+  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
+  if(page<totalPages){ page++; renderTable(); }
+}
+function onPageSizeChange(){
+  pageSize = parseInt(pageSizeSel.value,10) || 20;
+  page = 1;
+  renderTable();
+  updateSelectionUI();
+}
+
+/* 选择 */
+function toggleOne(e, no){
+  e.stopPropagation();
+  const n = String(no||"").toUpperCase();
+  if(selectedSet.has(n)) selectedSet.delete(n);
+  else selectedSet.add(n);
+  updateSelectionUI();
+}
+function toggleAll(checked){
+  // 仅对当前页
+  const total = filtered.length;
+  const start = (page-1)*pageSize;
+  const end = Math.min(total, start+pageSize);
+  const slice = filtered.slice(start, end);
+
+  if(checked){
+    slice.forEach(c=> selectedSet.add(c.containerNo));
+  }else{
+    slice.forEach(c=> selectedSet.delete(c.containerNo));
+  }
+  renderTable();
+  updateSelectionUI();
+}
+function updateSelectionUI(){
+  selSummary.textContent = selectedNo ? `已选：${selectedNo}` : "未选择";
+  const count = selectedSet.size;
+  bulkBtn.disabled = count===0;
+  if(count===0) chkAll.checked = false;
+  selHintText();
+  renderDetail();
+}
+function selHintText(){
+  // 右侧详情标题 + 批量
+  //（selSummary 已在上面）
+}
+
+/* ================= 右侧详情渲染 ================= */
+function findByNo(no){
+  const n = String(no||"").trim().toUpperCase();
+  return containers.find(x=>String(x.containerNo||"").toUpperCase()===n) || null;
+}
+function renderDetail(){
+  const c = findByNo(selectedNo);
+  if(!c){
+    detailTitle.textContent = "未选择箱号";
+    detailBadge.textContent = "—";
+    detailKV.innerHTML = `<div class="small" style="grid-column:1/-1">选择箱号后显示详情。</div>`;
+    histScroll.innerHTML = `<div class="small">选择箱号后显示。</div>`;
+    crpDoneBox.textContent = "—";
+    clearHistBtn.disabled = true;
+    return;
+  }
+
+  detailTitle.textContent = c.containerNo;
+  detailBadge.textContent = `${c.assignStatus} / ${c.cntrStatus} / ${c.checkStatus}`;
+
+  const kv = [
+    ["箱号", c.containerNo],
+    ["箱型", c.boxType],
+    ["Tare(kg)", c.tare||""],
+    ["Booking No", c.bookingNo||""],
+    ["RequestKey", c.requestKey||""],
+    ["CRP No", c.crpNo||""],
+    ["车辆号码", c.truckNo||""],
+    ["运输公司", c.vendor||""],
+    ["船公司", c.carrier||""],
+    ["POD", c.pod||""],
+    ["提箱日期", c.releaseDate||""],
+    ["计划装箱日期", c.stuffDate||""],
+    ["作业地", c.worksite||""],
+    ["箱状态", c.cntrStatus||""],
+    ["配箱状态", c.assignStatus||""],
+    ["空箱检查", c.checkStatus||""],
+    ["数据质量", c.dataQuality||""],
+    ["纠错来源", c.correctedFrom||""],
+    ["纠错去向", c.correctedTo||""],
+    ["更新时间", fmtTs(c.updatedAt||Date.now())]
+  ];
+  detailKV.innerHTML = kv.map(([k,v])=>`<div>${esc(k)}</div><div class="mono">${esc(v||"")}</div>`).join("");
+
+  const hist = Array.isArray(c.history) ? c.history.slice().sort((a,b)=>(b.ts||0)-(a.ts||0)) : [];
+  if(!hist.length){
+    histScroll.innerHTML = `<div class="small">暂无日志</div>`;
+  }else{
+    histScroll.innerHTML = hist.map(h=>{
+      const t = fmtTs(h.ts||Date.now());
+      return `<div><span class="t">${esc(t)}</span> <b>${esc(h.action||"")}</b> - ${esc(h.note||"")} <span class="small">(${esc(h.by||"")})</span></div>`;
+    }).join("");
+  }
+  clearHistBtn.disabled = false;
+
+  // CRP Done
+  const crpNo = String(c.crpNo||"").trim().toUpperCase();
+  if(crpNo && crpDoneMap[crpNo]){
+    crpDoneBox.textContent = JSON.stringify(crpDoneMap[crpNo], null, 2);
+  }else{
+    crpDoneBox.textContent = "—";
+  }
+}
+function clearHistoryForSelected(){
+  const c = findByNo(selectedNo);
+  if(!c) return;
+  if(!confirm(`确认清空该箱日志？\n\n${c.containerNo}`)) return;
+  c.history = [];
+  c.updatedAt = nowTs();
+  saveLS();
+  renderDetail();
+  renderTable();
+  showToast("已清空该箱日志", true);
+}
+
+/* ================= 异常检测 ================= */
+function runAnomalyScan(){
+  // 规则：
+  // 1) 重复箱号 => conflict
+  // 2) assigned 但无 crpNo => suspect
+  // 3) 有 crpNo 但 assignStatus!=assigned => suspect
+  // 4) ISO 校验失败 => suspect
+  const map = new Map();
+  containers.forEach(c=>{
+    const k = String(c.containerNo||"").trim().toUpperCase();
+    map.set(k, (map.get(k)||0)+1);
+  });
+
+  let conflict=0, suspect=0, fixed=0;
+
+  containers.forEach(c=>{
+    const no = String(c.containerNo||"").trim().toUpperCase();
+    let q = "ok";
+
+    if((map.get(no)||0)>1) q = "conflict";
+    else{
+      if(c.assignStatus==="assigned" && !String(c.crpNo||"").trim()) q = "suspect";
+      if(String(c.crpNo||"").trim() && c.assignStatus!=="assigned") q = "suspect";
+      const iso = iso6346Valid(no);
+      if(!iso.ok) q = (q==="ok") ? "suspect" : q;
+    }
+
+    if(q!==c.dataQuality){
+      c.dataQuality = q;
+      c.updatedAt = nowTs();
+      c.history.push(makeHistory("scan", `异常检测：dataQuality -> ${q}`));
+      fixed++;
+    }
+
+    if(q==="conflict") conflict++;
+    if(q==="suspect") suspect++;
+  });
+
+  saveLS();
+  applyFilters();
+  renderTable();
+  renderDetail();
+  showToast(`异常检测完成：conflict=${conflict}，suspect=${suspect}，更新=${fixed}`, true);
+}
+
+/* ================= 导出 CSV（导出当前筛选结果，不受分页影响） ================= */
+function exportCSV(){
+  applyFilters();
+  if(!filtered.length){
+    showToast("当前无数据可导出", false);
+    return;
+  }
+  const cols = [
+    "containerNo","boxType","tare","bookingNo","requestKey","crpNo","truckNo","vendor","carrier","pod",
+    "releaseDate","stuffDate","worksite","cntrStatus","assignStatus","checkStatus","dataQuality",
+    "correctedFrom","correctedTo","remark","updatedAt"
+  ];
+  const lines = [];
+  lines.push(cols.join(","));
+  filtered.forEach(c=>{
+    const row = cols.map(k=>{
+      const v = (c[k]===undefined || c[k]===null) ? "" : String(c[k]);
+      // CSV escape
+      const vv = v.replace(/"/g,'""');
+      return `"${vv}"`;
+    }).join(",");
+    lines.push(row);
+  });
+
+  const blob = new Blob([lines.join("\n")], { type:"text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `container-manage-export-${Date.now()}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(()=> URL.revokeObjectURL(url), 1000);
+
+  showToast(`已导出 CSV：${filtered.length} 条`, true);
+}
+
+/* ================= 编辑 Modal ================= */
+const editMask = document.getElementById("editMask");
+let editCtx = {
+  mode:"edit",
+  originalNo:"",
+  record:null,
+  newNoCheck: { checkedNo:"", found:false, foundRec:null, msg:"" }
+};
+
+function openEdit(no){
+  const c = findByNo(no);
+  if(!c){ showToast("记录不存在", false); return; }
+  editCtx.originalNo = c.containerNo;
+  editCtx.record = JSON.parse(JSON.stringify(c));
+  editCtx.newNoCheck = { checkedNo:"", found:false, foundRec:null, msg:"" };
+
+  // 填充表单
+  e_no.value = c.containerNo || "";
+  e_type.value = c.boxType || "20GP";
+  e_booking.value = c.bookingNo || "";
+  e_tare.value = String(c.tare||"");
+  e_truck.value = c.truckNo || "";
+  e_vendor.value = c.vendor || "中集";
+  e_carrier.value = c.carrier || "MAERSK";
+  e_pod.value = c.pod || "BUSAN";
+  e_releaseDate.value = c.releaseDate || "";
+  e_stuffDate.value = c.stuffDate || "";
+  e_worksite.value = c.worksite || "";
+  e_cntrStatus.value = c.cntrStatus || "EMPTY";
+  e_assignStatus.value = c.assignStatus || "unassigned";
+  e_checkStatus.value = c.checkStatus || "none";
+  e_quality.value = c.dataQuality || "ok";
+  e_crpNo.value = c.crpNo || "";
+  e_remark.value = c.remark || "";
+
+  e_fixWrong.checked = false;
+  toggleFixPanel();
+
+  editTitle.textContent = `编辑（${c.containerNo}）`;
+  editKeyHint.textContent = `原箱号：${c.containerNo}`;
+  isoPill.className = "pill";
+  isoText.textContent = "箱号校验：—";
+  fixHelp.textContent = `若需纠错，请勾选“错误箱号更正”并检查新箱号`;
+
+  editMask.style.display = "flex";
+}
+function closeEdit(){
+  editMask.style.display = "none";
+  editCtx.originalNo = "";
+  editCtx.record = null;
+  editCtx.newNoCheck = { checkedNo:"", found:false, foundRec:null, msg:"" };
+}
+editMask.onclick = (e)=>{ if(e.target===editMask) closeEdit(); };
+
+function onModalNoChange(){
+  // 当用户直接改 e_no（非纠错）时：只更新提示
+  isoPill.className = "pill";
+  isoText.textContent = "箱号校验：—";
+}
+
+function checkISOInModal(){
+  const no = (e_no.value||"").trim().toUpperCase();
+  const r = iso6346Valid(no);
+  if(r.ok){
+    isoPill.className = "pill ok";
+    isoText.textContent = "箱号校验：通过";
+  }else{
+    isoPill.className = "pill warn";
+    isoText.textContent = `箱号校验：未通过（${r.reason}）`;
+  }
+}
+
+function toggleFixPanel(){
+  const on = e_fixWrong.checked;
+  fixPanel.style.display = on ? "block" : "none";
+  if(!on){
+    fix_newNo.value = "";
+    fix_foundHint.textContent = "—";
+    fix_foundPill.className = "pill";
+    fix_newMsg.textContent = "点击“检查新箱号”后，会尝试带入系统已有字段；无当前箱号则提示并在保存时创建。";
+    fix_preview.textContent = "—";
+    editCtx.newNoCheck = { checkedNo:"", found:false, foundRec:null, msg:"" };
+  }else{
+    fix_foundHint.textContent = "待检查";
+    fix_foundPill.className = "pill warn";
+    fix_preview.textContent = "—";
+  }
+}
+
+/* 新箱号检查：存在则带入，不存在则仅提示 */
+function checkNewNo(){
+  const newNo = (fix_newNo.value||"").trim().toUpperCase();
+  if(!newNo){
+    fix_newMsg.textContent = "请输入新的正确箱号。";
+    fix_foundPill.className = "pill warn";
+    fix_foundHint.textContent = "新箱号为空";
+    return;
+  }
+
+  const iso = iso6346Valid(newNo);
+  if(!iso.ok){
+    fix_foundPill.className = "pill warn";
+    fix_foundHint.textContent = "校验未通过";
+    fix_newMsg.textContent = `箱号格式/校验不通过：${iso.reason}（仍可继续，但建议纠正）`;
+  }
+
+  const found = findByNo(newNo);
+  editCtx.newNoCheck.checkedNo = newNo;
+  editCtx.newNoCheck.found = !!found;
+  editCtx.newNoCheck.foundRec = found ? JSON.parse(JSON.stringify(found)) : null;
+
+  if(found){
+    // 自动带入：如果系统里已经有记录
+    // 注意：你要求“如果系统里已经有带入其他对应字段内容”，这里采用“带入到表单的下半部分（主表单）”，方便用户最终保存。
+    e_type.value = found.boxType || e_type.value;
+    e_booking.value = found.bookingNo || e_booking.value;
+    if(found.tare) e_tare.value = String(found.tare);
+    e_truck.value = found.truckNo || e_truck.value;
+    e_vendor.value = found.vendor || e_vendor.value;
+    e_carrier.value = found.carrier || e_carrier.value;
+    e_pod.value = found.pod || e_pod.value;
+    e_releaseDate.value = found.releaseDate || e_releaseDate.value;
+    e_stuffDate.value = found.stuffDate || e_stuffDate.value;
+    e_worksite.value = found.worksite || e_worksite.value;
+    e_cntrStatus.value = found.cntrStatus || e_cntrStatus.value;
+    e_assignStatus.value = found.assignStatus || e_assignStatus.value;
+    e_checkStatus.value = found.checkStatus || e_checkStatus.value;
+    e_quality.value = found.dataQuality || e_quality.value;
+    e_crpNo.value = found.crpNo || e_crpNo.value;
+    e_remark.value = found.remark || e_remark.value;
+
+    fix_foundPill.className = "pill ok";
+    fix_foundHint.textContent = "系统已存在该箱号，已自动带入字段";
+    fix_newMsg.textContent = `已找到：${newNo}。保存更正时将转移/对齐关联，并标记旧箱号 correctedTo。`;
+  }else{
+    fix_foundPill.className = "pill warn";
+    fix_foundHint.textContent = "无当前箱号";
+    fix_newMsg.textContent = `系统中不存在：${newNo}。保存更正时将按旧箱号字段创建新箱号记录，并承接关联。`;
+  }
+
+  // 预览
+  const oldNo = editCtx.originalNo;
+  const oldRec = findByNo(oldNo);
+  const oldType = oldRec?.boxType || e_type.value;
+  const oldCrp = String(oldRec?.crpNo||"").trim().toUpperCase();
+
+  const preview = {
+    oldNo,
+    newNo,
+    willCreateNew: !found,
+    transfer: {
+      checkStatus: oldRec?.checkStatus || "(none)",
+      bookingNo: oldRec?.bookingNo || "",
+      crpNo: oldCrp || "",
+      boxType: oldType
+    },
+    crpDoneMinus1: (oldRec && oldRec.assignStatus==="assigned" && oldCrp) ? { crpNo: oldCrp, boxType: oldType, delta: -1 } : null,
+    mark: {
+      old_assignStatus: "corrected",
+      old_correctedTo: newNo,
+      new_correctedFrom: oldNo
+    }
+  };
+  fix_preview.textContent = JSON.stringify(preview, null, 2);
+}
+
+function saveEdit(){
+  const oldNo = editCtx.originalNo;
+  const base = findByNo(oldNo);
+  if(!base){ showToast("保存失败：原记录不存在（可能已被删除）", false); closeEdit(); return; }
+
+  // 采集当前表单值
+  const next = {
+    containerNo: (e_no.value||"").trim().toUpperCase(),
+    boxType: e_type.value,
+    tare: (e_tare.value||"").trim(),
+    bookingNo: (e_booking.value||"").trim().toUpperCase(),
+    requestKey: String(base.requestKey||"").trim(), // 本页编辑不强制改 requestKey，避免误操作（如需要可后续开放）
+    crpNo: (e_crpNo.value||"").trim().toUpperCase(),
+    truckNo: (e_truck.value||"").trim().toUpperCase(),
+    vendor: e_vendor.value,
+    carrier: e_carrier.value,
+    pod: e_pod.value,
+    releaseDate: (e_releaseDate.value||"").trim(),
+    stuffDate: (e_stuffDate.value||"").trim(),
+    worksite: (e_worksite.value||"").trim().toUpperCase(),
+    cntrStatus: e_cntrStatus.value,
+    assignStatus: e_assignStatus.value,
+    checkStatus: e_checkStatus.value,
+    dataQuality: e_quality.value,
+    remark: (e_remark.value||"").trim()
+  };
+
+  // 基本校验
+  if(!next.containerNo){
+    showToast("箱号不能为空", false); return;
+  }
+  if(!/^[A-Z]{4}\d{7}$/.test(next.containerNo)){
+    showToast("箱号格式建议为：4字母+7数字（含校验位）", false);
+    // 允许继续（演示），但给提示
+  }
+
+  // 是否纠错
+  const doFix = e_fixWrong.checked;
+
+  if(!doFix){
+    // 普通保存：允许改箱号，但需避免重复（除非就是自己）
+    const dup = containers.find(x => x.containerNo===next.containerNo && x.containerNo!==base.containerNo);
+    if(dup){
+      showToast(`保存失败：目标箱号已存在（${dup.containerNo}）`, false);
+      return;
+    }
+
+    // 应用更新
+    applyUpdateRecord(base.containerNo, next, { action:"edit", note:"编辑保存（普通）" });
+    closeEdit();
+    showToast("保存成功", true);
+    applyFilters();
+    renderTable();
+    selectedNo = next.containerNo;
+    renderDetail();
+    updateSelectionUI();
+    return;
+  }
+
+  // 纠错逻辑：要求输入新箱号并检查过（但不强制必须点过检查；若没点则按表单值推断）
+  const newNo = (fix_newNo.value||"").trim().toUpperCase();
+  if(!newNo){
+    showToast("错误箱号更正：请填写新的正确箱号", false);
+    return;
+  }
+  if(newNo === base.containerNo){
+    showToast("新箱号不能与旧箱号相同", false);
+    return;
+  }
+
+  // 纠错检查：是否存在新箱号记录
+  let target = findByNo(newNo);
+  const willCreate = !target;
+
+  // 1) CRP 完成量 -1（满足条件）
+  const needMinus = (base.assignStatus==="assigned" && String(base.crpNo||"").trim());
+  if(needMinus){
+    const crp = String(base.crpNo||"").trim().toUpperCase();
+    const t = base.boxType;
+    if(!crpDoneMap[crp]){
+      crpDoneMap[crp] = { doneQtyByType: { "20GP":0,"40GP":0,"40HQ":0,"40RH":0 }, updatedAt: nowTs() };
+    }
+    const cur = Number(crpDoneMap[crp].doneQtyByType[t] || 0);
+    crpDoneMap[crp].doneQtyByType[t] = Math.max(0, cur - 1);
+    crpDoneMap[crp].updatedAt = nowTs();
+  }
+
+  // 2) 准备新记录（不存在则创建；存在则承接旧箱号关键字段）
+  if(!target){
+    // 创建：以“旧箱号字段”为基线，并用当前表单（next）作为“正确箱号最终值”
+    const created = Object.assign({}, base, next, {
+      containerNo: newNo,
+      correctedFrom: base.containerNo,
+      correctedTo: "",
+      updatedAt: nowTs(),
+      history: Array.isArray(base.history) ? base.history.slice() : []
+    });
+    created.history.push(makeHistory("correct", `纠错创建新箱号：${base.containerNo} -> ${newNo}`));
+    containers.unshift(created);
+    target = created;
+  }else{
+    // 已存在：把旧箱号关键字段带入正确箱号（你要求：把上方错误箱号相关字段带入正确箱号）
+    // 策略：优先用“旧箱号的 booking/crp/requestKey 等”覆盖到 target（除非 target 已有且用户在表单修改了）
+    const merged = Object.assign({}, target, {
+      bookingNo: next.bookingNo || base.bookingNo || target.bookingNo,
+      requestKey: base.requestKey || target.requestKey,
+      crpNo: next.crpNo || base.crpNo || target.crpNo,
+      truckNo: next.truckNo || base.truckNo || target.truckNo,
+      vendor: next.vendor || base.vendor || target.vendor,
+      carrier: next.carrier || base.carrier || target.carrier,
+      pod: next.pod || base.pod || target.pod,
+      boxType: next.boxType || base.boxType || target.boxType,
+      tare: next.tare || base.tare || target.tare,
+      releaseDate: next.releaseDate || base.releaseDate || target.releaseDate,
+      stuffDate: next.stuffDate || base.stuffDate || target.stuffDate,
+      worksite: next.worksite || base.worksite || target.worksite,
+      cntrStatus: next.cntrStatus || target.cntrStatus,
+      assignStatus: next.assignStatus || target.assignStatus,
+      dataQuality: next.dataQuality || target.dataQuality,
+      remark: next.remark || target.remark,
+      correctedFrom: base.containerNo,
+      updatedAt: nowTs()
+    });
+
+    // 空箱检查任务转移（旧 -> 新）
+    merged.checkStatus = base.checkStatus || merged.checkStatus || "none";
+
+    // 写回 target
+    const idx = containers.findIndex(x=>x.containerNo===target.containerNo);
+    if(idx>-1){
+      if(!Array.isArray(containers[idx].history)) containers[idx].history = [];
+      containers[idx] = Object.assign({}, containers[idx], merged);
+      containers[idx].history.push(makeHistory("correct", `纠错承接旧箱号字段：${base.containerNo} -> ${newNo}`));
+      target = containers[idx];
+    }
+  }
+
+  // 3) 旧箱号标记 correctedTo + assignStatus corrected，并“移除空箱检查任务”（转移到新箱号）
+  const oldUpdate = Object.assign({}, base, {
+    assignStatus: "corrected",
+    correctedTo: newNo,
+    checkStatus: "none",
+    updatedAt: nowTs()
+  });
+  if(!Array.isArray(oldUpdate.history)) oldUpdate.history = [];
+  oldUpdate.history.push(makeHistory("correct", `错误箱号更正：指向 ${newNo}；空箱检查任务转移；CRP完成量${needMinus?"-1": "不变"}`));
+
+  // 应用旧记录更新（保持旧箱号仍在系统，便于追溯）
+  const oldIdx = containers.findIndex(x=>x.containerNo===base.containerNo);
+  if(oldIdx>-1) containers[oldIdx] = oldUpdate;
+
+  saveLS();
+
+  closeEdit();
+  showToast(`纠错完成：${base.containerNo} -> ${newNo}`, true);
+
+  // 更新选择到新箱号
+  selectedNo = newNo;
+  selectedSet.delete(base.containerNo);
+  selectedSet.add(newNo);
+
+  applyFilters();
+  renderTable();
+  renderDetail();
+  updateSelectionUI();
+}
+
+function applyUpdateRecord(oldNo, next, meta){
+  // 替换/改key（容许改箱号）
+  const idx = containers.findIndex(x=>x.containerNo===oldNo);
+  if(idx<0) return;
+
+  const before = containers[idx];
+  const hist = Array.isArray(before.history) ? before.history : [];
+  const note = meta?.note || "update";
+  const action = meta?.action || "edit";
+
+  const updated = Object.assign({}, before, next, {
+    correctedFrom: before.correctedFrom || "",
+    correctedTo: before.correctedTo || "",
+    updatedAt: nowTs(),
+    history: hist
+  });
+
+  updated.history.push(makeHistory(action, note));
+
+  // 如果改了箱号，需要确保 selectedNo/selectedSet同步
+  const newNo = updated.containerNo;
+
+  // 删除旧位，插入新位（保持排序不重要）
+  if(newNo !== oldNo){
+    containers.splice(idx,1);
+    containers.unshift(updated);
+
+    if(selectedNo===oldNo) selectedNo=newNo;
+    if(selectedSet.has(oldNo)){ selectedSet.delete(oldNo); selectedSet.add(newNo); }
+  }else{
+    containers[idx]=updated;
+  }
+
+  saveLS();
+}
+
+/* ================= 批量修改 ================= */
+const bulkMask = document.getElementById("bulkMask");
+function openBulkModal(){
+  const count = selectedSet.size;
+  if(!count){ showToast("请先勾选要批量修改的箱号", false); return; }
+  bulkCount.textContent = String(count);
+  b_vendor.value = "";
+  b_cntrStatus.value = "";
+  b_assignStatus.value = "";
+  b_checkStatus.value = "";
+  b_note.value = "";
+  bulkMask.style.display = "flex";
+}
+function closeBulk(){ bulkMask.style.display = "none"; }
+bulkMask.onclick = (e)=>{ if(e.target===bulkMask) closeBulk(); };
+
+function applyBulk(){
+  const targets = Array.from(selectedSet);
+  if(!targets.length){ showToast("未选择记录", false); closeBulk(); return; }
+
+  const patch = {
+    vendor: b_vendor.value || null,
+    cntrStatus: b_cntrStatus.value || null,
+    assignStatus: b_assignStatus.value || null,
+    checkStatus: b_checkStatus.value || null
+  };
+  const note = (b_note.value||"").trim() || "批量修改";
+
+  let changed=0;
+  targets.forEach(no=>{
+    const c = findByNo(no);
+    if(!c) return;
+    const next = Object.assign({}, c);
+
+    if(patch.vendor) next.vendor = patch.vendor;
+    if(patch.cntrStatus) next.cntrStatus = patch.cntrStatus;
+    if(patch.assignStatus) next.assignStatus = patch.assignStatus;
+    if(patch.checkStatus) next.checkStatus = patch.checkStatus;
+
+    next.updatedAt = nowTs();
+    if(!Array.isArray(next.history)) next.history = [];
+    next.history.push(makeHistory("bulk", `${note}（vendor=${patch.vendor||"-"} cntrStatus=${patch.cntrStatus||"-"} assignStatus=${patch.assignStatus||"-"} checkStatus=${patch.checkStatus||"-"}）`));
+
+    const idx = containers.findIndex(x=>x.containerNo===c.containerNo);
+    if(idx>-1){ containers[idx]=next; changed++; }
+  });
+
+  saveLS();
+  closeBulk();
+  showToast(`批量修改完成：${changed} 条`, true);
+
+  applyFilters();
+  renderTable();
+  renderDetail();
+  updateSelectionUI();
+}
+
+/* ================= 重置筛选 ================= */
+function resetFilters(){
+  f_no.value=""; f_booking.value=""; f_crp.value=""; f_req.value=""; f_truck.value="";
+  f_type.value=""; f_carrier.value=""; f_vendor.value=""; f_pod.value="";
+  f_cntrStatus.value=""; f_assign.value=""; f_check.value=""; f_quality.value="";
+  f_releaseFrom.value=""; f_releaseTo.value="";
+  f_stuffFrom.value=""; f_stuffTo.value="";
+  f_worksite.value="";
+  pageSizeSel.value = "20";
+  pageSize = 20;
+  selectedSet.clear();
+  chkAll.checked = false;
+  selectedNo = "";
+  applyFiltersAndRender();
+  showToast("已重置筛选", true);
+}
+
+/* ================= init ================= */
+seedDemoIfEmpty();
+applyFilters();
+renderTable();
+renderDetail();
+updateSelectionUI();
+
+/* 防止外部修改导致本页不同步：可选监听 storage */
+window.addEventListener("storage",(ev)=>{
+  if(ev.key===LS_KEY || ev.key===LS_CRP_DONE){
+    loadLS();
+    normalizeAfterLoad();
+    applyFilters();
+    renderTable();
+    renderDetail();
+    updateSelectionUI();
+    showToast("检测到数据变更，已刷新", true);
+  }
+});
+</script>
+</body>
+</html>
