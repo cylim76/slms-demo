@@ -3,14 +3,12 @@ File: master/vessel-manage.html
 Version: vessel-manage-v2
 Date: 2025-12-29
 
-v2 变更点（在 v1 基础上，不丢功能）：
-1) 输入更受控：
-   - IMO：仅数字，最多7位（必填，强唯一）
-   - MMSI：仅数字，最多9位（可选）
-   - Call Sign / Flag：自动转大写（可选）
-   - 船名：自动压缩多余空格（必填）
-2) requirements 弹窗与右上角版本号同步更新为 v2
-3) 数据结构保持兼容：localStorage['slms_vessels_v1'] => {id,name,imo,mmsi,callSign,flag,type,status,remark,createdAt,updatedAt}
+功能要点：
+1) 船舶主档（Vessel Master）维护：新增/编辑/停用（软删除）
+2) IMO 作为强唯一字段（必填）；船名必填
+3) 查询：关键词（船名/IMO）+ 状态
+4) 导出 CSV
+5) 右上角版本号可点击：显示“三件套”内容（随版本维护）
 -->
 
 <!doctype html>
@@ -57,15 +55,31 @@ tr:hover td{background:#fff7fb}
 .small{font-size:12px;color:var(--muted)}
 
 .modalMask{position:fixed;inset:0;background:rgba(0,0,0,.35);display:none;align-items:center;justify-content:center;z-index:9999;padding:10px}
-.modal{width:min(920px,96vw);background:#fff;border-radius:12px;box-shadow:0 20px 60px rgba(0,0,0,.3);display:flex;flex-direction:column;overflow:hidden}
+.modal{width:min(980px,96vw);background:#fff;border-radius:12px;box-shadow:0 20px 60px rgba(0,0,0,.3);display:flex;flex-direction:column;overflow:hidden}
 .modalHd{padding:12px 16px;border-bottom:1px solid #eee;font-weight:900;display:flex;justify-content:space-between;align-items:center}
 .modalBd{padding:14px 16px;max-height:72vh;overflow:auto}
 .modalFt{padding:12px 16px;border-top:1px solid #eee;display:flex;justify-content:flex-end;gap:10px}
-.kv{display:grid;grid-template-columns:140px 1fr;gap:8px 10px;font-size:12px;color:#444}
-.kv .k{color:var(--muted)}
-.reqMask .modal{width:980px}
-.reqMask .modalBd{font-size:13px;line-height:1.7}
-code{font-family:ui-monospace,Menlo,Consolas,monospace}
+
+.reqMask .modal{width:min(1080px,96vw)}
+.reqMask .modalBd{font-size:13px;line-height:1.6}
+.reqMask h3{margin:0 0 8px}
+.reqMask h4{margin:14px 0 6px}
+.reqMask pre{
+  margin:8px 0;
+  padding:12px;
+  background:#0b1020;
+  color:#e7e9ee;
+  border-radius:12px;
+  overflow:auto;
+  font-size:12px;
+  line-height:1.5;
+}
+.reqMask code{font-family:ui-monospace,Menlo,Consolas,monospace}
+.pill{display:inline-flex;align-items:center;gap:8px;padding:6px 10px;border-radius:999px;border:1px solid #eee;background:#f7f7fb;font-weight:900;font-size:12px}
+.pill .dot{width:8px;height:8px;border-radius:99px;background:var(--brand)}
+.tabRow{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0 0}
+.tbtn{cursor:pointer;border:1px solid #e6e6ee;background:#fff;border-radius:999px;padding:8px 10px;font-weight:900;font-size:12px}
+.tbtn.active{border-color:rgba(224,32,92,.35);color:var(--brand)}
 </style>
 </head>
 
@@ -75,7 +89,7 @@ code{font-family:ui-monospace,Menlo,Consolas,monospace}
   <div class="right">
     <button class="btn" type="button" onclick="exportCsv()">导出CSV</button>
     <button class="btn primary" type="button" onclick="openEdit()">新增船舶</button>
-    <div class="ver" id="verBtn" title="点击查看页面功能要求">
+    <div class="ver" id="verBtn" title="点击查看三件套">
       <span class="dot"></span>
       <span>vessel-manage-v2</span>
     </div>
@@ -144,27 +158,23 @@ code{font-family:ui-monospace,Menlo,Consolas,monospace}
       <span style="cursor:pointer;color:var(--muted)" onclick="closeEdit()">关闭</span>
     </div>
     <div class="modalBd">
-      <div class="kv">
-        <div class="k">船名（EN）<span style="color:var(--brand);font-weight:900">*</span></div>
-        <div><input class="input" id="f_name" placeholder="例如 STAR RIVER" oninput="onNameInput()"></div>
+      <div class="kv" style="display:grid;grid-template-columns:140px 1fr;gap:8px 10px;font-size:12px;color:#444">
+        <div class="k" style="color:var(--muted)">船名（EN）<span style="color:var(--brand);font-weight:900">*</span></div>
+        <div><input class="input" id="f_name" placeholder="例如 STAR RIVER"></div>
 
-        <div class="k">IMO（唯一）<span style="color:var(--brand);font-weight:900">*</span></div>
-        <div>
-          <input class="input" id="f_imo" placeholder="7位数字，例如 9312345" inputmode="numeric" maxlength="7" oninput="onImoInput()">
-        </div>
+        <div class="k" style="color:var(--muted)">IMO（唯一）<span style="color:var(--brand);font-weight:900">*</span></div>
+        <div><input class="input" id="f_imo" placeholder="7位数字，例如 9312345"></div>
 
-        <div class="k">MMSI</div>
-        <div>
-          <input class="input" id="f_mmsi" placeholder="可选（最多9位数字）" inputmode="numeric" maxlength="9" oninput="onMmsiInput()">
-        </div>
+        <div class="k" style="color:var(--muted)">MMSI</div>
+        <div><input class="input" id="f_mmsi" placeholder="可选"></div>
 
-        <div class="k">Call Sign</div>
-        <div><input class="input" id="f_call" placeholder="可选" oninput="onUpper('f_call')"></div>
+        <div class="k" style="color:var(--muted)">Call Sign</div>
+        <div><input class="input" id="f_call" placeholder="可选"></div>
 
-        <div class="k">Flag</div>
-        <div><input class="input" id="f_flag" placeholder="可选：PANAMA 等" oninput="onUpper('f_flag')"></div>
+        <div class="k" style="color:var(--muted)">Flag</div>
+        <div><input class="input" id="f_flag" placeholder="可选：PANAMA 等"></div>
 
-        <div class="k">类型</div>
+        <div class="k" style="color:var(--muted)">类型</div>
         <div>
           <select class="select" id="f_type">
             <option value="">—</option>
@@ -174,7 +184,7 @@ code{font-family:ui-monospace,Menlo,Consolas,monospace}
           </select>
         </div>
 
-        <div class="k">状态</div>
+        <div class="k" style="color:var(--muted)">状态</div>
         <div>
           <select class="select" id="f_status">
             <option value="active">启用</option>
@@ -182,11 +192,8 @@ code{font-family:ui-monospace,Menlo,Consolas,monospace}
           </select>
         </div>
 
-        <div class="k">备注</div>
+        <div class="k" style="color:var(--muted)">备注</div>
         <div><input class="input" id="f_remark" placeholder="可选"></div>
-      </div>
-      <div class="small" style="margin-top:10px">
-        规则：IMO 强唯一；停用=软删除（历史引用保留）。
       </div>
     </div>
     <div class="modalFt">
@@ -196,22 +203,101 @@ code{font-family:ui-monospace,Menlo,Consolas,monospace}
   </div>
 </div>
 
-<!-- requirements -->
+<!-- requirements (三件套) -->
 <div class="modalMask reqMask" id="reqMask">
   <div class="modal">
     <div class="modalHd">
-      <span>页面功能要求（vessel-manage.html / vessel-manage-v2）</span>
+      <span class="pill"><span class="dot"></span>三件套（vessel-manage.html / vessel-manage-v2）</span>
       <span style="cursor:pointer;color:var(--muted)" onclick="closeReq()">关闭</span>
     </div>
     <div class="modalBd">
-      <ol>
-        <li>船舶主档支持新增/编辑/停用（软删除）；停用不删除历史引用。</li>
-        <li>IMO 为强唯一字段（必填，7位数字）；船名必填；保存时做唯一性校验。</li>
-        <li>输入规范化：IMO/MMSI 仅数字；Call Sign/Flag 自动转大写；船名多空格压缩。</li>
-        <li>支持查询：关键词（船名/IMO）+ 状态。</li>
-        <li>列表支持导出 CSV。</li>
-        <li>右上角版本号可点击弹窗：显示本页页面功能要求（与版本同步维护）。</li>
-      </ol>
+      <div class="small">说明：本弹窗内容需与版本号同步维护；用于把“结构/口径/交互”固化，避免页面改了但约定没更新。</div>
+
+      <div class="tabRow">
+        <button class="tbtn active" id="t_schema" onclick="showKit('schema')">slms-schema.yaml</button>
+        <button class="tbtn" id="t_dict" onclick="showKit('dict')">slms-data-dict.md</button>
+        <button class="tbtn" id="t_ui" onclick="showKit('ui')">slms-ui-spec.md</button>
+      </div>
+
+      <div id="kit_schema">
+        <h4>slms-schema.yaml（结构唯一真源）</h4>
+        <pre><code># --- Vessel Master (船舶主档) ---
+# 演示版存储映射：localStorage key = slms_vessels_v1
+# 正式落库建议表名：slms_vessels
+
+tables:
+  slms_vessels:
+    pk: id
+    columns:
+      id: {type: string, required: true, note: "主键：VES-xxx"}
+      name: {type: string, required: true, note: "船名(EN)，必填"}
+      imo: {type: string, required: true, note: "IMO 7位数字，强唯一"}
+      mmsi: {type: string, required: false}
+      callSign: {type: string, required: false}
+      flag: {type: string, required: false}
+      type: {type: string, required: false, enum: [Container, Bulk, RoRo]}
+      status: {type: string, required: true, enum: [active, inactive], note: "inactive=软删除"}
+      remark: {type: string, required: false}
+      createdAt: {type: int64, required: true, note: "毫秒时间戳"}
+      updatedAt: {type: int64, required: true, note: "毫秒时间戳"}
+    uniques:
+      - name: uq_slms_vessels_imo
+        columns: [imo]
+    indexes:
+      - name: ix_slms_vessels_status_updatedAt
+        columns: [status, updatedAt]
+</code></pre>
+      </div>
+
+      <div id="kit_dict" style="display:none">
+        <h4>slms-data-dict.md（字段/口径说明）</h4>
+        <pre><code># Vessel Master 字段口径（slms_vessels）
+
+- id：主键（演示 VES-时间戳；正式可用UUID/雪花ID）
+- name：船名(EN)，必填
+- imo：IMO号（7位数字），必填且全局唯一
+- mmsi / callSign / flag / type / remark：可选辅助字段
+- status：
+  - active：启用（可被航次引用、下拉显示）
+  - inactive：停用=软删除（禁止新引用；历史引用保留显示）
+- createdAt/updatedAt：毫秒时间戳（演示版）；正式可用datetime
+
+校验口径：
+- IMO 必须为 7 位数字
+- IMO 强唯一：同一 IMO 只能存在一条记录（不区分状态）
+</code></pre>
+      </div>
+
+      <div id="kit_ui" style="display:none">
+        <h4>slms-ui-spec.md（页面交互/导出/入口）</h4>
+        <pre><code># vessel-manage.html 交互规范（vessel-manage-v2）
+
+入口/导航：
+- Index 里归属 Master 一级菜单下的二级菜单：Vessel Master（船舶）
+
+查询：
+- 关键词：匹配 name 或 imo（不区分大小写）
+- 状态：active / inactive / 全部
+
+新增/编辑：
+- 必填：name、imo
+- 保存校验：
+  - IMO 7位数字
+  - IMO 全局唯一（排除当前编辑记录）
+
+停用/启用（软删除）：
+- 切换状态需二次确认
+- 停用后：不删除记录；仅状态变更 & updatedAt 更新
+
+导出：
+- 导出当前筛选结果 CSV
+- 字段：name, imo, mmsi, callSign, flag, type, status, updatedAt
+
+存储：
+- localStorage: slms_vessels_v1（演示）
+- 正式：slms_vessels 表（以 schema 为准）
+</code></pre>
+      </div>
     </div>
     <div class="modalFt">
       <button class="btn" type="button" onclick="closeReq()">关闭</button>
@@ -228,6 +314,15 @@ const reqMask = document.getElementById("reqMask");
 document.getElementById("verBtn").onclick = ()=> reqMask.style.display="flex";
 function closeReq(){ reqMask.style.display="none"; }
 reqMask.onclick = e=>{ if(e.target===reqMask) closeReq(); };
+
+/* 三件套 tabs */
+function setKitTab(active){
+  ["schema","dict","ui"].forEach(k=>{
+    document.getElementById("t_"+k).classList.toggle("active", k===active);
+    document.getElementById("kit_"+k).style.display = (k===active) ? "block" : "none";
+  });
+}
+function showKit(k){ setKitTab(k); }
 
 function pad2(n){ return String(n).padStart(2,'0'); }
 function fmt(ts){
@@ -248,29 +343,6 @@ const q_status = document.getElementById("q_status");
 
 let editId = null;
 
-/* ===== 输入规范化 ===== */
-function collapseSpaces(s){ return String(s||"").trim().replace(/\s+/g,' '); }
-function digitsOnly(s, maxLen){
-  const t = String(s||"").replace(/\D/g,'');
-  return maxLen ? t.slice(0, maxLen) : t;
-}
-function onUpper(id){
-  const el=document.getElementById(id);
-  el.value = String(el.value||"").toUpperCase();
-}
-function onNameInput(){
-  const el=document.getElementById("f_name");
-  el.value = collapseSpaces(el.value);
-}
-function onImoInput(){
-  const el=document.getElementById("f_imo");
-  el.value = digitsOnly(el.value, 7);
-}
-function onMmsiInput(){
-  const el=document.getElementById("f_mmsi");
-  el.value = digitsOnly(el.value, 9);
-}
-
 function resetFilters(){
   q.value=""; q_status.value="";
   render();
@@ -287,10 +359,6 @@ function openEdit(row){
   document.getElementById("f_type").value = row?.type || "";
   document.getElementById("f_status").value = row?.status || "active";
   document.getElementById("f_remark").value = row?.remark || "";
-
-  // 规范化一次（避免历史数据乱格式）
-  onNameInput(); onImoInput(); onMmsiInput(); onUpper("f_call"); onUpper("f_flag");
-
   document.getElementById("editMask").style.display="flex";
 }
 function closeEdit(){ document.getElementById("editMask").style.display="none"; }
@@ -303,11 +371,11 @@ function validateIMO(imo){
 }
 
 function save(){
-  let name = collapseSpaces(document.getElementById("f_name").value);
-  let imo  = digitsOnly(document.getElementById("f_imo").value, 7);
-  let mmsi = digitsOnly(document.getElementById("f_mmsi").value, 9);
-  let call = String(document.getElementById("f_call").value||"").trim().toUpperCase();
-  let flag = String(document.getElementById("f_flag").value||"").trim().toUpperCase();
+  const name = document.getElementById("f_name").value.trim();
+  const imo  = document.getElementById("f_imo").value.trim();
+  const mmsi = document.getElementById("f_mmsi").value.trim();
+  const call = document.getElementById("f_call").value.trim();
+  const flag = document.getElementById("f_flag").value.trim();
   const type = document.getElementById("f_type").value.trim();
   const status = document.getElementById("f_status").value;
   const remark = document.getElementById("f_remark").value.trim();
@@ -378,10 +446,6 @@ function render(){
     const st = x.status==="active"
       ? `<span class="badge ok">启用</span>`
       : `<span class="badge off">停用</span>`;
-
-    // 注意：这里用对象字面量传参（JSON string 直接作为 JS 对象文本）
-    const objLiteral = JSON.stringify(x).replace(/</g,'\\u003c');
-
     tr.innerHTML = `
       <td><b>${esc(x.name||"")}</b></td>
       <td>${esc(x.imo||"")}</td>
@@ -393,7 +457,7 @@ function render(){
       <td>${esc(fmt(x.updatedAt))}</td>
       <td>
         <div class="ops">
-          <button class="link" type="button" onclick='openEdit(${objLiteral})'>编辑</button>
+          <button class="link" type="button" onclick='openEdit(${JSON.stringify(x).replace(/'/g,"&#39;")})'>编辑</button>
           <button class="link danger" type="button" onclick="toggleStatus('${esc(x.id)}')">${x.status==="active"?"停用":"启用"}</button>
         </div>
       </td>
@@ -440,12 +504,7 @@ function seedDemo(){
   ];
   demo.forEach(d=>{
     if(arr.some(x=>x.imo===d.imo)) return;
-    arr.unshift({
-      id:"VES-"+Date.now()+"-"+Math.random().toString(16).slice(2),
-      ...d,
-      createdAt:Date.now(),
-      updatedAt:Date.now()
-    });
+    arr.unshift({ id:"VES-"+Date.now()+"-"+Math.random().toString(16).slice(2), ...d, createdAt:Date.now(), updatedAt:Date.now() });
   });
   saveArr(arr);
   render();
