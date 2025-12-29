@@ -1,23 +1,13 @@
 <!--
 File: crp/rpt-crp-trans-status.html
-Version: rpt-crp-trans-status-v1
-Date: 2025-12-24
+Version: rpt-crp-trans-status-v2
+Date: 2025-12-29
 
-功能要点：
-1) 查询条件：
-   - Booking No / 船公司 / 船名航次 / 状态(未发送/已发送/运输中/已完成) / 箱号 / 运输公司
-   - 日期类型下拉：默认“发送CRP日期”，可切换“ETD”
-   - 默认日期：
-     * 发送CRP日期：开始=今天-7天，结束=今天
-     * ETD：开始=今天，结束=今天+14天
-2) 列表：基于 slms_crp_bookings_v1（CRP录入数据），箱量列显示“已完成/计划”（如 4/5）
-3) 状态计算规则：
-   - 任一箱型已完成(分子)>0 => 运输中
-   - 计划>0的箱型均完成(分子=分母)，且总计划>0 => 已完成
-   - 否则按 sendState => 未发送/已发送
-4) 底部统计条：按运输公司汇总“未完成箱量”并显示：中集:??个，顺航:??个...
-5) 详细弹窗：日期类型+范围查询，显示“日期(列) × 运输公司(行)”的未完成数量矩阵
-6) 导出CSV：主列表与弹窗矩阵均支持导出
+v2 变更点（在 v1 基础上，确保不丢失任何功能）：
+1) ✅ 版本号同步升级：v1 -> v2（右上角显示 + 点击版本号弹窗内容同步）
+2) ✅ 将 requirements 弹窗替换为三件套：slms-schema.yaml / slms-data-dict.md / slms-ui-spec.md（按“标准”）
+3) ✅ 不改动原有功能点：筛选条件、日期默认、状态计算、统计条、矩阵弹窗、导出 CSV 均保持
+4) ✅ 三件套中明确：状态计算口径、矩阵口径、导出字段、演示数据（LS_PICK）仅为 demo
 -->
 
 <!doctype html>
@@ -68,7 +58,7 @@ body{margin:0;font-family:Arial,"Microsoft YaHei";background:var(--bg);color:var
   border:1px solid #ddd;border-radius:10px;padding:10px;font-size:13px;background:#fff;outline:none
 }
 
-.tableOuter{height:calc(100vh - 56px - 16px - 16px - 68px - 70px); /* 顶部/外边距/筛选卡头/统计条 */
+.tableOuter{height:calc(100vh - 56px - 16px - 16px - 68px - 70px);
   min-height:360px;
 }
 @media (max-width: 1100px){
@@ -131,9 +121,25 @@ tr:hover td{background:#fff7fb}
 .mTbl td.num{text-align:center}
 .mTbl tr:hover td{background:#fff7fb}
 
-/* requirements */
-.reqMask .modal{width:980px}
-.reqMask .modalBd{font-size:13px;line-height:1.7}
+/* ===== v2: 三件套弹窗样式（替换 requirements） ===== */
+.kitModal .modal{width:1060px}
+.kitModal .modalBd{font-size:13px;line-height:1.7}
+.docBlock{border:1px solid var(--line);border-radius:12px;overflow:hidden;margin:12px 0;background:#fff}
+.docHd{padding:10px 12px;background:#fafafa;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;gap:10px}
+.docHd b{font-size:13px}
+.badge2{font-size:12px;color:var(--muted);border:1px solid #eee;background:#fff;border-radius:999px;padding:4px 10px}
+pre.code{
+  margin:0;
+  padding:12px;
+  border-radius:10px;
+  border:1px solid #eee;
+  background:#fbfbfd;
+  overflow:auto;
+  font-size:12px;
+  line-height:1.6;
+  font-family:ui-monospace,Menlo,Consolas,monospace;
+  white-space:pre;
+}
 code{font-family:ui-monospace,Menlo,Consolas,monospace}
 </style>
 </head>
@@ -143,9 +149,9 @@ code{font-family:ui-monospace,Menlo,Consolas,monospace}
   <div class="left">CRP 提箱现况 RPT</div>
   <div class="right">
     <button class="btn" type="button" onclick="exportMainCSV()">导出CSV</button>
-    <div class="ver" id="verBtn" title="点击查看页面功能要求">
+    <div class="ver" id="verBtn" title="点击查看三件套（schema / dict / ui spec）">
       <span class="dot"></span>
-      <span>rpt-crp-trans-status-v1</span>
+      <span>rpt-crp-trans-status-v2</span>
     </div>
   </div>
 </div>
@@ -313,24 +319,166 @@ code{font-family:ui-monospace,Menlo,Consolas,monospace}
   </div>
 </div>
 
-<!-- requirements -->
-<div class="modalMask reqMask" id="reqMask">
+<!-- 三件套（替换旧 requirements） -->
+<div class="modalMask kitModal" id="reqMask">
   <div class="modal">
     <div class="modalHd">
-      <span>页面功能要求（rpt-crp-trans-status.html / rpt-crp-trans-status-v1）</span>
+      <span>三件套（CRP 提箱现况 RPT / rpt-crp-trans-status-v2）</span>
       <span style="cursor:pointer;color:var(--muted)" onclick="closeReq()">关闭</span>
     </div>
     <div class="modalBd">
-      <ol>
-        <li>查询条件包含：Booking/船公司/船名航次/状态(未发送/已发送/运输中/已完成)/箱号/运输公司。</li>
-        <li>日期条件：日期类型下拉（默认发送CRP日期，可切换ETD），并提供开始/结束日期。</li>
-        <li>默认日期：发送CRP日期=今天-7到今天；ETD=今天到今天+14。</li>
-        <li>列表箱量列显示为“已完成/计划”（如 <code>4/5</code>）。</li>
-        <li>状态规则：任一分子&gt;0 => 运输中；若计划&gt;0且全部完成 => 已完成；否则=未发送/已发送。</li>
-        <li>底部统计条：按运输公司汇总未完成箱量并展示，同时提供“查看详细内容”。</li>
-        <li>详细弹窗：日期×运输公司矩阵展示未完成箱量，并支持导出CSV。</li>
-        <li>主列表也支持导出CSV。</li>
-      </ol>
+
+      <!-- slms-schema.yaml -->
+      <div class="docBlock">
+        <div class="docHd">
+          <b>slms-schema.yaml</b>
+          <span class="badge2">结构唯一真源（Schema）</span>
+        </div>
+        <div class="docBd">
+<pre class="code">version: slms-crp-trans-status-schema-v1
+domain: slms
+module: crp_trans_status_rpt
+
+storage:
+  crp_booking:
+    type: localStorage_demo
+    key: slms_crp_bookings_v1
+  pickup_demo:
+    type: localStorage_demo
+    key: slms_crp_pickups_v1
+    note: "演示用：用于模拟箱号/完成情况。正式系统应来自提箱/运输任务表。"
+
+entities:
+
+  crp_booking:
+    primary_key: bookingNo
+    fields:
+      bookingNo: { type: string, required: true }
+      carrier:   { type: string, required: true }
+      vessel:    { type: string, required: true }
+      voyage:    { type: string, required: true }
+      etd:       { type: date,   required: true }
+      gp20:      { type: int, required: false, min: 0, max: 99 }
+      gp40:      { type: int, required: false, min: 0, max: 99 }
+      hc40:      { type: int, required: false, min: 0, max: 99 }
+      rh40:      { type: int, required: false, min: 0, max: 99 }
+      createdAt: { type: int64, required: true }
+
+      sendState: { type: enum, required: true, values: ["未发送","已发送"], default: "未发送" }
+      vendor:    { type: string, required: false }
+      sendAt:    { type: int64, required: false, note: "演示：若缺失则用 createdAt 兜底生成" }
+
+  pickup_demo:
+    primary_key: containerNo
+    fields:
+      bookingNo:   { type: string, required: true }
+      vendor:      { type: string, required: false }
+      containerNo: { type: string, required: true }
+      boxType:     { type: enum, required: true, values: ["20GP","40GP","40HC","40RH"] }
+      status:      { type: enum, required: true, values: ["未完成","已完成"] }
+      createdAt:   { type: int64, required: true }
+      doneAt:      { type: int64, required: false }
+
+derived:
+  computed_columns:
+    doneQtyByType: "count(pickup_demo where bookingNo &amp; boxType &amp; status=已完成)"
+    unFinishedQty: "sum(max(0, plan - done) by type)"
+    transStatus:
+      rule:
+        - if any(done&gt;0) =&gt; 运输中
+        - else if totalPlan&gt;0 and all(planned types done==plan) =&gt; 已完成
+        - else =&gt; (sendState==已发送 ? 已发送 : 未发送)</pre>
+        </div>
+      </div>
+
+      <!-- slms-data-dict.md -->
+      <div class="docBlock">
+        <div class="docHd">
+          <b>slms-data-dict.md</b>
+          <span class="badge2">字段/口径说明（Data Dictionary）</span>
+        </div>
+        <div class="docBd">
+<pre class="code"># SLMS - CRP 提箱现况 RPT（rpt-crp-trans-status）数据字典
+
+## 数据来源
+- CRP 录入数据：localStorage['slms_crp_bookings_v1']
+- 提箱/完成数据：localStorage['slms_crp_pickups_v1']（仅演示）
+  - 正式系统应替换为“提箱任务/箱号明细/运输状态表”。
+
+## 关键口径
+1) 计划箱量（plan）
+- 来自 CRP：gp20/gp40/hc40/rh40（空按 0）
+
+2) 已完成箱量（done）
+- 按 bookingNo + boxType 统计 pickup_demo.status=已完成 的数量
+
+3) 未完成箱量（unfinished）
+- sum(max(0, plan - done)) 逐箱型相加
+
+4) 状态（transStatus）
+- 任一箱型 done&gt;0 =&gt; 运输中
+- 若 totalPlan&gt;0 且所有计划箱型 done==plan =&gt; 已完成
+- 否则：按 sendState =&gt; 未发送 / 已发送
+
+5) 日期过滤
+- 日期类型=发送CRP日期：使用 sendAt；若缺失且 sendState=已发送，则用 createdAt 兜底生成（演示）
+- 日期类型=ETD：使用 etd（yyyy-mm-dd）
+
+## 导出
+- 主列表 CSV：输出 booking/vv/日期/箱量(完成/计划)/未完成/状态 等字段
+- 矩阵 CSV：行=运输公司，列=日期，值=未完成箱量</pre>
+        </div>
+      </div>
+
+      <!-- slms-ui-spec.md -->
+      <div class="docBlock">
+        <div class="docHd">
+          <b>slms-ui-spec.md</b>
+          <span class="badge2">页面交互/运算/导出（UI Spec）</span>
+        </div>
+        <div class="docBd">
+<pre class="code"># SLMS - CRP 提箱现况 RPT（rpt-crp-trans-status）UI Spec
+
+## 1. 查询条件
+- Booking No / 船公司 / 船名航次 / 状态(未发送/已发送/运输中/已完成) / 箱号 / 运输公司
+- 日期类型：默认“发送CRP日期”，可切换“ETD”
+- 默认日期：
+  - 发送CRP日期：开始=今天-7天，结束=今天
+  - ETD：开始=今天，结束=今天+14天
+
+## 2. 列表
+- 基于 slms_crp_bookings_v1
+- 箱量列显示“已完成/计划”，例如：4/5
+- 未完成列：sum(max(0, 计划-已完成))，用于统计条与矩阵
+
+## 3. 状态计算
+- 任一 done&gt;0 =&gt; 运输中
+- totalPlan&gt;0 且计划箱型全部完成 =&gt; 已完成
+- 否则按 sendState =&gt; 未发送 / 已发送
+
+## 4. 底部统计条
+- 按运输公司汇总未完成箱量：
+  - 展示：总未完成 + 各运输公司 badge（如 中集:12个）
+
+## 5. 详细弹窗（矩阵）
+- 条件：日期类型 + 日期范围
+- 展示：运输公司（行）× 日期（列）的未完成数量矩阵
+- 口径：按范围内 CRP（按所选日期字段过滤）汇总未完成
+
+## 6. 导出 CSV
+- 主列表：导出当前过滤后的数据
+- 矩阵：导出当前矩阵（行列同界面）
+
+## 7. 演示数据说明
+- 若 slms_crp_pickups_v1 为空，本页会基于 CRP 自动生成 demo 提箱记录
+- 正式系统请删除 demo 生成逻辑，并改为读取真实提箱明细</pre>
+        </div>
+      </div>
+
+      <div class="small" style="margin-top:10px">
+        提示：本弹窗内容与右上角版本号同步维护（当前：v2）。
+      </div>
+
     </div>
     <div class="modalFt">
       <button class="btn" type="button" onclick="closeReq()">关闭</button>
@@ -343,7 +491,7 @@ code{font-family:ui-monospace,Menlo,Consolas,monospace}
 const LS_CRP = 'slms_crp_bookings_v1';
 const LS_PICK = 'slms_crp_pickups_v1'; // 演示：提箱记录（箱号+完成状态）
 
-/* ========= 版本弹窗 ========= */
+/* ========= 三件套弹窗 ========= */
 document.getElementById('verBtn').onclick = ()=> document.getElementById('reqMask').style.display='flex';
 function closeReq(){ document.getElementById('reqMask').style.display='none'; }
 document.getElementById('reqMask').onclick = e=>{ if(e.target.id==='reqMask') closeReq(); };
@@ -383,13 +531,12 @@ function saveJson(key, val){
 function loadCrp(){ const arr=loadJson(LS_CRP, []); return Array.isArray(arr)?arr:[]; }
 function loadPickups(){ const arr=loadJson(LS_PICK, []); return Array.isArray(arr)?arr:[]; }
 
-/* ========= 演示：自动生成提箱记录（让“箱号/完成数量/运输中/已完成”有数据） ========= */
+/* ========= 演示：自动生成提箱记录 ========= */
 function ensureDemoPickups(crpRows){
   let picks = loadPickups();
   const hasAny = picks && picks.length;
   if(hasAny) return picks;
 
-  // 基于 CRP 生成一些箱号记录：部分完成、部分未完成（演示）
   const vendors = ['中集','顺航','XX运输公司','YY车队'];
   function rnd(arr){ return arr[Math.floor(Math.random()*arr.length)]; }
   function rndInt(a,b){ return a + Math.floor(Math.random()*(b-a+1)); }
@@ -405,20 +552,17 @@ function ensureDemoPickups(crpRows){
     const totalPlan = plan20+plan40+planHC+planRH;
     if(totalPlan<=0) return;
 
-    // vendor：优先用 r.vendor（已发送时存在），否则随机
     const vendor = (r.vendor && String(r.vendor).trim()) ? String(r.vendor).trim() : rnd(vendors);
 
-    // 生成每个箱型对应的箱号记录
     function gen(type, plan){
       if(plan<=0) return;
-      // 随机做一部分完成
       const done = rndInt(0, plan);
       for(let i=0;i<plan;i++){
         out.push({
           bookingNo: r.bookingNo,
           vendor,
           containerNo: mkCntr(rnd(prefixes)),
-          boxType: type, // 20GP/40GP/40HC/40RH
+          boxType: type,
           status: (i<done) ? '已完成' : '未完成',
           doneAt: (i<done) ? (nowTs() - rndInt(1,20)*86400000) : null,
           createdAt: nowTs() - rndInt(1,30)*86400000
@@ -436,7 +580,7 @@ function ensureDemoPickups(crpRows){
   return picks;
 }
 
-/* ========= 发送日期兜底：如果历史数据没有 sendAt，就用 createdAt 作为“发送日期演示值”并写回 ========= */
+/* ========= 发送日期兜底 ========= */
 function ensureSendAt(crpRows){
   let changed=false;
   crpRows.forEach(r=>{
@@ -461,19 +605,13 @@ function countHasContainer(picks, bookingNo, containerNoLike){
   return picks.some(p=>p.bookingNo===bookingNo && String(p.containerNo||'').toLowerCase().includes(q));
 }
 function vendorOfBooking(r, picks){
-  // 优先 CRP 上记录的 vendor；否则从提箱记录里推
   const v = String(r.vendor||'').trim();
   if(v) return v;
   const hit = picks.find(p=>p.bookingNo===r.bookingNo && String(p.vendor||'').trim());
   return hit ? String(hit.vendor).trim() : '';
 }
 function getPlan(r){
-  return {
-    gp20: parseInt0(r.gp20),
-    gp40: parseInt0(r.gp40),
-    hc40: parseInt0(r.hc40),
-    rh40: parseInt0(r.rh40),
-  };
+  return { gp20: parseInt0(r.gp20), gp40: parseInt0(r.gp40), hc40: parseInt0(r.hc40), rh40: parseInt0(r.rh40) };
 }
 function getDone(r, picks){
   return {
@@ -544,17 +682,14 @@ function resetFilters(){
   render();
 }
 
-/* 日期过滤：基于所选类型取日期字段 */
 function inDateRange(r, dateType, fromYmd, toYmd){
   const from = fromYmd ? new Date(fromYmd+'T00:00:00') : null;
   const to = toYmd ? new Date(toYmd+'T23:59:59') : null;
 
   let v = null;
   if(dateType==='etd'){
-    // ETD 是 yyyy-mm-dd 字符串
     v = r.etd ? new Date(String(r.etd).trim()+'T00:00:00') : null;
   }else{
-    // send：用 r.sendAt（兜底已做），再兜底 createdAt
     const ts = r.sendAt || r.createdAt || null;
     v = ts ? new Date(ts) : null;
   }
@@ -570,7 +705,7 @@ const statItems = document.getElementById('statItems');
 
 let crpRows = [];
 let picks = [];
-let viewRows = []; // 当前过滤后的行（用于导出）
+let viewRows = [];
 
 function buildView(){
   const fbk=(f_booking.value||'').trim().toLowerCase();
@@ -595,14 +730,11 @@ function buildView(){
     }
     if(!inDateRange(r, dt, df, dt2)) return false;
 
-    // 箱号过滤：看这个 booking 是否存在匹配箱号
     if(fcn && !countHasContainer(picks, r.bookingNo, fcn)) return false;
 
-    // vendor过滤：优先 CRP.vendor，再看 picks.vendor
     const v = vendorOfBooking(r, picks).toLowerCase();
     if(fven && !v.includes(fven)) return false;
 
-    // 状态过滤（需要先计算）
     const plan=getPlan(r);
     const done=getDone(r, picks);
     const st=calcStatus(plan, done, r.sendState);
@@ -611,8 +743,7 @@ function buildView(){
     return true;
   });
 
-  // 生成 viewRows：带上计算字段
-  const out = list.map(r=>{
+  return list.map(r=>{
     const plan=getPlan(r);
     const done=getDone(r, picks);
     const st=calcStatus(plan, done, r.sendState);
@@ -620,8 +751,6 @@ function buildView(){
     const unfin = unfinishedTotal(plan, done);
     return { r, plan, done, st, vendor, unfin };
   });
-
-  return out;
 }
 
 function render(){
@@ -666,14 +795,12 @@ function render(){
 }
 
 function renderStatBar(built){
-  // 按 vendor 汇总未完成
   const map = new Map();
   built.forEach(x=>{
     const v = (x.vendor||'未分配').trim() || '未分配';
     map.set(v, (map.get(v)||0) + (x.unfin||0));
   });
 
-  // 展示：vendor:??个
   const items = Array.from(map.entries())
     .sort((a,b)=>b[1]-a[1])
     .slice(0, 20)
@@ -686,7 +813,7 @@ function renderStatBar(built){
     (items ? items : `<span class="small">暂无统计</span>`);
 }
 
-/* ========= 导出：主列表 CSV ========= */
+/* ========= 导出 CSV ========= */
 function csvEscape(v){
   const s = String(v ?? '');
   if(/[",\n]/.test(s)) return `"${s.replace(/"/g,'""')}"`;
@@ -776,11 +903,8 @@ function renderMatrix(){
   if(new Date(from) > new Date(to)){ alert('开始日期不能大于结束日期'); return; }
 
   const dates = dateList(from, to);
-
-  // 先取符合日期范围的 CRP（按 t）
   const subset = crpRows.filter(r=> inDateRange(r, t, from, to));
 
-  // 构造 vendor 列表：来自 subset 的 vendor（含提箱记录推断）
   const vset = new Set();
   subset.forEach(r=>{
     const v = (vendorOfBooking(r, picks) || '未分配').trim() || '未分配';
@@ -788,7 +912,6 @@ function renderMatrix(){
   });
   const vendors = Array.from(vset).sort((a,b)=>a.localeCompare(b,'zh'));
 
-  // grid key: vendor|date => count
   const grid = new Map();
   function add(v, d, n){
     const key = `${v}||${d}`;
@@ -803,7 +926,6 @@ function renderMatrix(){
 
     const vendor = (vendorOfBooking(r, picks) || '未分配').trim() || '未分配';
 
-    // 归属日期
     let d = '';
     if(t==='etd'){
       d = String(r.etd||'').trim();
@@ -816,7 +938,6 @@ function renderMatrix(){
     add(vendor, d, unfin);
   });
 
-  // 渲染表
   let html = '';
   html += '<thead><tr>';
   html += '<th style="min-width:140px">运输公司</th>';
@@ -866,7 +987,6 @@ function exportMatrixCSV(){
   crpRows = ensureSendAt(loadCrp());
   picks = ensureDemoPickups(crpRows);
 
-  // 默认：发送CRP日期范围（今天-7 到 今天）
   f_dateType.value='send';
   applyDateDefaults(false);
   render();
