@@ -1,0 +1,411 @@
+<!--
+File: master/vessel-manage.html
+Version: vessel-manage-v1
+Date: 2025-12-29
+
+功能要点：
+1) 船舶主档（Vessel Master）维护：新增/编辑/停用（软删除）
+2) IMO 作为强唯一字段（必填）；船名必填
+3) 查询：关键词（船名/IMO）+ 状态
+4) 导出 CSV
+5) 右上角版本号可点击：显示页面功能要求（随版本维护）
+-->
+
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>船舶主档管理</title>
+<style>
+:root{
+  --brand:#e0205c;--bg:#f1f2f5;--card:#fff;--text:#222;--muted:#666;--line:#e9e9ee;
+  --ok:#1a7f37;--warn:#b54708;--bad:#b42318;
+}
+*{box-sizing:border-box}
+body{margin:0;font-family:Arial,"Microsoft YaHei";background:var(--bg);color:var(--text)}
+.topbar{height:56px;background:#fff;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;padding:0 16px}
+.left{font-weight:900}
+.right{display:flex;gap:10px;align-items:center}
+.btn{border:1px solid #ddd;background:#fff;border-radius:10px;padding:10px 14px;font-weight:900;font-size:13px;cursor:pointer}
+.btn.primary{background:var(--brand);border-color:var(--brand);color:#fff}
+.btn:active{transform:translateY(1px)}
+.ver{cursor:pointer;background:#f6f6f6;border:1px solid #eee;border-radius:999px;padding:6px 10px;font-size:12px;font-family:ui-monospace,Menlo,Consolas,monospace;display:flex;align-items:center;gap:6px}
+.ver .dot{width:8px;height:8px;border-radius:99px;background:var(--brand)}
+
+.wrap{max-width:1200px;margin:16px auto;padding:0 12px}
+.card{background:#fff;border:1px solid var(--line);border-radius:12px;box-shadow:0 6px 18px rgba(0,0,0,.04);overflow:hidden}
+.cardHd{padding:12px 14px;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;gap:10px;font-weight:900}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end}
+.field{display:flex;flex-direction:column;gap:6px}
+.label{font-size:12px;color:var(--muted)}
+.input,.select{border:1px solid #ddd;border-radius:10px;padding:10px;font-size:13px;background:#fff;outline:none}
+
+.tableScroll{overflow:auto}
+table{width:100%;border-collapse:collapse;min-width:980px}
+th,td{border-bottom:1px solid var(--line);padding:10px 10px;font-size:12px;white-space:nowrap}
+th{background:#fafafa;color:var(--muted);text-align:left;font-weight:900;position:sticky;top:0}
+tr:hover td{background:#fff7fb}
+.badge{display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border-radius:999px;border:1px solid var(--line);background:#fafafa;font-weight:900;font-size:12px}
+.badge.ok{border-color:rgba(26,127,55,.25);background:rgba(26,127,55,.06);color:#135d2a}
+.badge.off{border-color:rgba(180,35,24,.25);background:rgba(180,35,24,.06);color:#7a1b13}
+.ops{display:flex;gap:8px}
+.link{border:1px solid #ddd;background:#fff;border-radius:999px;padding:6px 10px;font-weight:900;font-size:12px;cursor:pointer}
+.link.danger{border-color:rgba(180,35,24,.35);color:#7a1b13}
+.small{font-size:12px;color:var(--muted)}
+
+.modalMask{position:fixed;inset:0;background:rgba(0,0,0,.35);display:none;align-items:center;justify-content:center;z-index:9999;padding:10px}
+.modal{width:min(920px,96vw);background:#fff;border-radius:12px;box-shadow:0 20px 60px rgba(0,0,0,.3);display:flex;flex-direction:column;overflow:hidden}
+.modalHd{padding:12px 16px;border-bottom:1px solid #eee;font-weight:900;display:flex;justify-content:space-between;align-items:center}
+.modalBd{padding:14px 16px;max-height:72vh;overflow:auto}
+.modalFt{padding:12px 16px;border-top:1px solid #eee;display:flex;justify-content:flex-end;gap:10px}
+.kv{display:grid;grid-template-columns:140px 1fr;gap:8px 10px;font-size:12px;color:#444}
+.kv .k{color:var(--muted)}
+.reqMask .modal{width:980px}
+.reqMask .modalBd{font-size:13px;line-height:1.7}
+code{font-family:ui-monospace,Menlo,Consolas,monospace}
+</style>
+</head>
+
+<body>
+<div class="topbar">
+  <div class="left">船舶主档管理</div>
+  <div class="right">
+    <button class="btn" type="button" onclick="exportCsv()">导出CSV</button>
+    <button class="btn primary" type="button" onclick="openEdit()">新增船舶</button>
+    <div class="ver" id="verBtn" title="点击查看页面功能要求">
+      <span class="dot"></span>
+      <span>vessel-manage-v1</span>
+    </div>
+  </div>
+</div>
+
+<div class="wrap">
+  <div class="card">
+    <div class="cardHd">
+      <span>查询条件</span>
+      <div class="row">
+        <button class="btn" type="button" onclick="seedDemo()">生成演示数据</button>
+        <button class="btn" type="button" onclick="resetFilters()">重置</button>
+        <button class="btn primary" type="button" onclick="render()">查询</button>
+      </div>
+    </div>
+
+    <div style="padding:14px">
+      <div class="row">
+        <div class="field" style="min-width:320px;flex:1">
+          <div class="label">关键词（船名/IMO）</div>
+          <input class="input" id="q" placeholder="例如：STAR / 9312345" oninput="render()">
+        </div>
+        <div class="field" style="min-width:180px">
+          <div class="label">状态</div>
+          <select class="select" id="q_status" onchange="render()">
+            <option value="">全部</option>
+            <option value="active">启用</option>
+            <option value="inactive">停用</option>
+          </select>
+        </div>
+        <div class="small" style="align-self:flex-end;padding-bottom:10px">
+          口径：停用=软删除（保留历史引用）
+        </div>
+      </div>
+    </div>
+
+    <div class="tableScroll">
+      <table>
+        <thead>
+          <tr>
+            <th style="min-width:220px">船名（EN）</th>
+            <th style="min-width:120px">IMO（唯一）</th>
+            <th style="min-width:120px">MMSI</th>
+            <th style="min-width:120px">Call Sign</th>
+            <th style="min-width:120px">Flag</th>
+            <th style="min-width:120px">类型</th>
+            <th style="min-width:120px">状态</th>
+            <th style="min-width:160px">更新时间</th>
+            <th style="min-width:140px">操作</th>
+          </tr>
+        </thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </div>
+
+    <div style="padding:12px 14px" class="small" id="foot"></div>
+  </div>
+</div>
+
+<!-- edit modal -->
+<div class="modalMask" id="editMask">
+  <div class="modal">
+    <div class="modalHd">
+      <span id="editTitle">新增/编辑船舶</span>
+      <span style="cursor:pointer;color:var(--muted)" onclick="closeEdit()">关闭</span>
+    </div>
+    <div class="modalBd">
+      <div class="kv">
+        <div class="k">船名（EN）<span style="color:var(--brand);font-weight:900">*</span></div>
+        <div><input class="input" id="f_name" placeholder="例如 STAR RIVER"></div>
+
+        <div class="k">IMO（唯一）<span style="color:var(--brand);font-weight:900">*</span></div>
+        <div><input class="input" id="f_imo" placeholder="7位数字，例如 9312345"></div>
+
+        <div class="k">MMSI</div>
+        <div><input class="input" id="f_mmsi" placeholder="可选"></div>
+
+        <div class="k">Call Sign</div>
+        <div><input class="input" id="f_call" placeholder="可选"></div>
+
+        <div class="k">Flag</div>
+        <div><input class="input" id="f_flag" placeholder="可选：PANAMA 等"></div>
+
+        <div class="k">类型</div>
+        <div>
+          <select class="select" id="f_type">
+            <option value="">—</option>
+            <option value="Container">Container</option>
+            <option value="Bulk">Bulk</option>
+            <option value="RoRo">RoRo</option>
+          </select>
+        </div>
+
+        <div class="k">状态</div>
+        <div>
+          <select class="select" id="f_status">
+            <option value="active">启用</option>
+            <option value="inactive">停用</option>
+          </select>
+        </div>
+
+        <div class="k">备注</div>
+        <div><input class="input" id="f_remark" placeholder="可选"></div>
+      </div>
+    </div>
+    <div class="modalFt">
+      <button class="btn" type="button" onclick="closeEdit()">取消</button>
+      <button class="btn primary" type="button" onclick="save()">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- requirements -->
+<div class="modalMask reqMask" id="reqMask">
+  <div class="modal">
+    <div class="modalHd">
+      <span>页面功能要求（vessel-manage.html / vessel-manage-v1）</span>
+      <span style="cursor:pointer;color:var(--muted)" onclick="closeReq()">关闭</span>
+    </div>
+    <div class="modalBd">
+      <ol>
+        <li>船舶主档支持新增/编辑/停用（软删除）；停用不删除历史引用。</li>
+        <li>IMO 为强唯一字段（必填）；船名必填；保存时做唯一性校验。</li>
+        <li>支持查询：关键词（船名/IMO）+ 状态。</li>
+        <li>列表支持导出 CSV。</li>
+        <li>右上角版本号可点击弹窗：显示本页页面功能要求（与版本同步维护）。</li>
+      </ol>
+    </div>
+    <div class="modalFt">
+      <button class="btn" type="button" onclick="closeReq()">关闭</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const LS_VESSELS = "slms_vessels_v1";
+const VERSION = "vessel-manage-v1";
+
+/* requirements */
+const reqMask = document.getElementById("reqMask");
+document.getElementById("verBtn").onclick = ()=> reqMask.style.display="flex";
+function closeReq(){ reqMask.style.display="none"; }
+reqMask.onclick = e=>{ if(e.target===reqMask) closeReq(); };
+
+function pad2(n){ return String(n).padStart(2,'0'); }
+function fmt(ts){
+  if(!ts) return "-";
+  const d=new Date(ts);
+  return `${d.getFullYear()}-${pad2(d.getMonth()+1)}-${pad2(d.getDate())} ${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+}
+function esc(s){return String(s??'').replace(/[&<>"']/g,m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[m]));}
+function loadArr(){
+  try{ const s=localStorage.getItem(LS_VESSELS); const v=s?JSON.parse(s):[]; return Array.isArray(v)?v:[]; }catch(_){ return []; }
+}
+function saveArr(arr){ try{ localStorage.setItem(LS_VESSELS, JSON.stringify(arr)); }catch(_){ } }
+
+const tbody = document.getElementById("tbody");
+const foot = document.getElementById("foot");
+const q = document.getElementById("q");
+const q_status = document.getElementById("q_status");
+
+let editId = null;
+
+function resetFilters(){
+  q.value=""; q_status.value="";
+  render();
+}
+
+function openEdit(row){
+  editId = row ? row.id : null;
+  document.getElementById("editTitle").textContent = row ? "编辑船舶" : "新增船舶";
+  document.getElementById("f_name").value = row?.name || "";
+  document.getElementById("f_imo").value = row?.imo || "";
+  document.getElementById("f_mmsi").value = row?.mmsi || "";
+  document.getElementById("f_call").value = row?.callSign || "";
+  document.getElementById("f_flag").value = row?.flag || "";
+  document.getElementById("f_type").value = row?.type || "";
+  document.getElementById("f_status").value = row?.status || "active";
+  document.getElementById("f_remark").value = row?.remark || "";
+  document.getElementById("editMask").style.display="flex";
+}
+function closeEdit(){ document.getElementById("editMask").style.display="none"; }
+document.getElementById("editMask").onclick = e=>{ if(e.target.id==="editMask") closeEdit(); };
+
+function validateIMO(imo){
+  const s=String(imo||"").trim();
+  if(!/^\d{7}$/.test(s)) return "IMO 必须是 7 位数字";
+  return "";
+}
+
+function save(){
+  const name = document.getElementById("f_name").value.trim();
+  const imo  = document.getElementById("f_imo").value.trim();
+  const mmsi = document.getElementById("f_mmsi").value.trim();
+  const call = document.getElementById("f_call").value.trim();
+  const flag = document.getElementById("f_flag").value.trim();
+  const type = document.getElementById("f_type").value.trim();
+  const status = document.getElementById("f_status").value;
+  const remark = document.getElementById("f_remark").value.trim();
+
+  if(!name) return alert("船名不能为空");
+  const imoErr = validateIMO(imo);
+  if(imoErr) return alert(imoErr);
+
+  const arr = loadArr();
+
+  // unique IMO
+  const dup = arr.find(x=>x.imo===imo && x.id!==editId);
+  if(dup) return alert(`保存失败：IMO 已存在（${dup.name} / ${dup.imo}）`);
+
+  if(editId){
+    const idx = arr.findIndex(x=>x.id===editId);
+    if(idx<0) return alert("记录不存在");
+    arr[idx] = Object.assign({}, arr[idx], { name, imo, mmsi, callSign:call, flag, type, status, remark, updatedAt: Date.now() });
+  }else{
+    arr.unshift({ id:"VES-"+Date.now(), name, imo, mmsi, callSign:call, flag, type, status, remark, createdAt: Date.now(), updatedAt: Date.now() });
+  }
+  saveArr(arr);
+  closeEdit();
+  render();
+}
+
+function toggleStatus(id){
+  const arr=loadArr();
+  const idx=arr.findIndex(x=>x.id===id);
+  if(idx<0) return;
+  const next = arr[idx].status==="active" ? "inactive" : "active";
+  const ok = confirm(`确认将该船舶状态改为：${next==="active"?"启用":"停用"}？`);
+  if(!ok) return;
+  arr[idx].status = next;
+  arr[idx].updatedAt = Date.now();
+  saveArr(arr);
+  render();
+}
+
+function buildView(){
+  const kw = q.value.trim().toLowerCase();
+  const st = q_status.value;
+
+  let list = loadArr().slice().sort((a,b)=>(b.updatedAt||0)-(a.updatedAt||0));
+  if(kw){
+    list = list.filter(x=>{
+      const a = `${x.name||""} ${x.imo||""}`.toLowerCase();
+      return a.includes(kw);
+    });
+  }
+  if(st) list = list.filter(x=>x.status===st);
+  return list;
+}
+
+function render(){
+  const list = buildView();
+  tbody.innerHTML="";
+  if(!list.length){
+    const tr=document.createElement("tr");
+    tr.innerHTML = `<td colspan="9" style="padding:16px;color:var(--muted)">暂无数据</td>`;
+    tbody.appendChild(tr);
+    foot.textContent = "0 条";
+    return;
+  }
+
+  list.forEach(x=>{
+    const tr=document.createElement("tr");
+    const st = x.status==="active"
+      ? `<span class="badge ok">启用</span>`
+      : `<span class="badge off">停用</span>`;
+    tr.innerHTML = `
+      <td><b>${esc(x.name||"")}</b></td>
+      <td>${esc(x.imo||"")}</td>
+      <td>${esc(x.mmsi||"")}</td>
+      <td>${esc(x.callSign||"")}</td>
+      <td>${esc(x.flag||"")}</td>
+      <td>${esc(x.type||"")}</td>
+      <td>${st}</td>
+      <td>${esc(fmt(x.updatedAt))}</td>
+      <td>
+        <div class="ops">
+          <button class="link" type="button" onclick='openEdit(${JSON.stringify(x).replace(/'/g,"&#39;")})'>编辑</button>
+          <button class="link danger" type="button" onclick="toggleStatus('${esc(x.id)}')">${x.status==="active"?"停用":"启用"}</button>
+        </div>
+      </td>
+    `;
+    tbody.appendChild(tr);
+  });
+
+  foot.textContent = `${list.length} 条`;
+}
+
+function csvEscape(v){
+  const s=String(v??"");
+  return /[",\n]/.test(s) ? `"${s.replace(/"/g,'""')}"` : s;
+}
+function downloadCsv(filename, rows){
+  const blob = new Blob([rows.join("\n")], {type:"text/csv;charset=utf-8;"});
+  const a=document.createElement("a");
+  a.href=URL.createObjectURL(blob);
+  a.download=filename;
+  document.body.appendChild(a);
+  a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(a.href), 800);
+}
+function exportCsv(){
+  const list = buildView();
+  const head = ["name","imo","mmsi","callSign","flag","type","status","updatedAt"].join(",");
+  const lines=[head];
+  list.forEach(x=>{
+    lines.push([
+      x.name,x.imo,x.mmsi,x.callSign,x.flag,x.type,x.status,fmt(x.updatedAt)
+    ].map(csvEscape).join(","));
+  });
+  downloadCsv(`vessels_${new Date().toISOString().slice(0,10)}.csv`, lines);
+}
+
+function seedDemo(){
+  const ok = confirm("生成演示数据将追加写入本地（localStorage），确定？");
+  if(!ok) return;
+  const arr = loadArr();
+  const demo = [
+    {name:"STAR RIVER", imo:"9312345", mmsi:"", callSign:"", flag:"PANAMA", type:"Container", status:"active"},
+    {name:"BLUE OCEAN", imo:"9409876", mmsi:"", callSign:"", flag:"LIBERIA", type:"Container", status:"active"},
+    {name:"PACIFIC 3",  imo:"9223456", mmsi:"", callSign:"", flag:"HONG KONG", type:"Container", status:"inactive"}
+  ];
+  demo.forEach(d=>{
+    if(arr.some(x=>x.imo===d.imo)) return;
+    arr.unshift({ id:"VES-"+Date.now()+"-"+Math.random().toString(16).slice(2), ...d, createdAt:Date.now(), updatedAt:Date.now() });
+  });
+  saveArr(arr);
+  render();
+}
+
+render();
+</script>
+</body>
+</html>
