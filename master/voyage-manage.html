@@ -7,11 +7,13 @@ Date: 2025-12-29
 1) 航次管理：新增/编辑/停用（软删除）
 2) 船公司/船舶必须从字典选择（限制用户随意输入）
 3) 唯一性：carrier + vessel + voyageNo + etd 组合唯一
-4) 查询：carrier / vessel / voyageNo / POD / ETD区间 / 状态 / 关键词
+4) 查询：carrier / vessel / voyageNo / POD / ETD区间 / 截关区间 / 状态 / 关键词
 5) 一键复制航次：复制选中行，快速改航次号/ETD
-6) 常用字段新增：截关时间 cutoffAt（可估算 ETD-2，后期可更新）
+6) 航次常用字段新增：截关时间（cutoffAt）
+   - 初期可按 ETD-2天 18:00 估算
+   - 临近可录入官方准确时间，便于管理截关顺序与装箱顺序
 7) 导出 CSV
-8) 右上角版本号可点击：显示“三件套”内容（随版本维护）
+8) 右上角版本号可点击：显示“三件套”内容（统一弹窗模板 + 一键复制）
 -->
 
 <!doctype html>
@@ -45,7 +47,7 @@ body{margin:0;font-family:Arial,"Microsoft YaHei";background:var(--bg);color:var
 .input,.select{border:1px solid #ddd;border-radius:10px;padding:10px;font-size:13px;background:#fff;outline:none}
 
 .tableScroll{overflow:auto}
-table{width:100%;border-collapse:collapse;min-width:1400px}
+table{width:100%;border-collapse:collapse;min-width:1450px}
 th,td{border-bottom:1px solid var(--line);padding:10px 10px;font-size:12px;white-space:nowrap}
 th{background:#fafafa;color:var(--muted);text-align:left;font-weight:900;position:sticky;top:0}
 tr:hover td{background:#fff7fb}
@@ -60,18 +62,34 @@ tr.selected td{background:#fff7fb;outline:2px solid rgba(224,32,92,.22)}
 code{font-family:ui-monospace,Menlo,Consolas,monospace}
 
 .modalMask{position:fixed;inset:0;background:rgba(0,0,0,.35);display:none;align-items:center;justify-content:center;z-index:9999;padding:10px}
-.modal{width:min(980px,96vw);background:#fff;border-radius:12px;box-shadow:0 20px 60px rgba(0,0,0,.3);display:flex;flex-direction:column;overflow:hidden}
-.modalHd{padding:12px 16px;border-bottom:1px solid #eee;font-weight:900;display:flex;justify-content:space-between;align-items:center}
+.modal{width:min(1080px,96vw);background:#fff;border-radius:12px;box-shadow:0 20px 60px rgba(0,0,0,.3);display:flex;flex-direction:column;overflow:hidden}
+.modalHd{padding:12px 16px;border-bottom:1px solid #eee;font-weight:900;display:flex;justify-content:space-between;align-items:center;gap:10px}
 .modalBd{padding:14px 16px;max-height:72vh;overflow:auto}
 .modalFt{padding:12px 16px;border-top:1px solid #eee;display:flex;justify-content:flex-end;gap:10px}
 .kv{display:grid;grid-template-columns:160px 1fr;gap:8px 10px;font-size:12px;color:#444}
 .kv .k{color:var(--muted)}
 
-.reqMask .modal{width:min(1080px,96vw)}
+/* 三件套统一弹窗模板 */
+.reqMask .modal{width:min(1120px,96vw)}
 .reqMask .modalBd{font-size:13px;line-height:1.6}
-.reqMask h4{margin:14px 0 6px}
+.pill{display:inline-flex;align-items:center;gap:8px;padding:6px 10px;border-radius:999px;border:1px solid #eee;background:#f7f7fb;font-weight:900;font-size:12px}
+.pill .dot{width:8px;height:8px;border-radius:99px;background:var(--brand)}
+.kitTop{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-top:6px}
+.tabRow{display:flex;gap:8px;flex-wrap:wrap}
+.tbtn{cursor:pointer;border:1px solid #e6e6ee;background:#fff;border-radius:999px;padding:8px 10px;font-weight:900;font-size:12px}
+.tbtn.active{border-color:rgba(224,32,92,.35);color:var(--brand)}
+.actions{display:flex;gap:8px;flex-wrap:wrap}
+.abtn{cursor:pointer;border:1px solid #e6e6ee;background:#fff;border-radius:10px;padding:8px 10px;font-weight:900;font-size:12px}
+.abtn.primary{border-color:rgba(224,32,92,.35);color:#fff;background:var(--brand)}
+.abtn:active{transform:translateY(1px)}
+.toast{
+  position:fixed;left:50%;bottom:18px;transform:translateX(-50%);
+  background:#111827;color:#fff;padding:10px 12px;border-radius:12px;
+  font-size:12px;font-weight:900;box-shadow:0 14px 40px rgba(0,0,0,.25);
+  display:none;z-index:99999;
+}
 .reqMask pre{
-  margin:8px 0;
+  margin:10px 0 0;
   padding:12px;
   background:#0b1020;
   color:#e7e9ee;
@@ -80,11 +98,6 @@ code{font-family:ui-monospace,Menlo,Consolas,monospace}
   font-size:12px;
   line-height:1.5;
 }
-.pill{display:inline-flex;align-items:center;gap:8px;padding:6px 10px;border-radius:999px;border:1px solid #eee;background:#f7f7fb;font-weight:900;font-size:12px}
-.pill .dot{width:8px;height:8px;border-radius:99px;background:var(--brand)}
-.tabRow{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0 0}
-.tbtn{cursor:pointer;border:1px solid #e6e6ee;background:#fff;border-radius:999px;padding:8px 10px;font-weight:900;font-size:12px}
-.tbtn.active{border-color:rgba(224,32,92,.35);color:var(--brand)}
 </style>
 </head>
 
@@ -139,6 +152,17 @@ code{font-family:ui-monospace,Menlo,Consolas,monospace}
           <div class="label">ETD 到</div>
           <input class="input" type="date" id="q_etd_to" onchange="render()">
         </div>
+
+        <!-- NEW: cutoff range -->
+        <div class="field">
+          <div class="label">截关 从</div>
+          <input class="input" type="date" id="q_cut_from" onchange="render()">
+        </div>
+        <div class="field">
+          <div class="label">截关 到</div>
+          <input class="input" type="date" id="q_cut_to" onchange="render()">
+        </div>
+
         <div class="field">
           <div class="label">状态</div>
           <select class="select" id="q_status" onchange="render()">
@@ -149,7 +173,8 @@ code{font-family:ui-monospace,Menlo,Consolas,monospace}
         </div>
       </div>
       <div class="small" style="margin-top:8px">
-        提示：新增/编辑时，船公司/船舶必须从字典选择；若下拉为空，请先维护 <code>slms_carriers_v1</code> 与 <code>slms_vessels_v1</code>。
+        提示：新增/编辑时，船公司/船舶必须从字典选择；若下拉为空，请先维护
+        <code>slms_carriers_v1</code> 与 <code>slms_vessels_v1</code>。
       </div>
     </div>
 
@@ -163,8 +188,8 @@ code{font-family:ui-monospace,Menlo,Consolas,monospace}
             <th style="min-width:120px">POL</th>
             <th style="min-width:120px">POD</th>
             <th style="min-width:110px">ETD</th>
+            <th style="min-width:150px">截关时间</th>
             <th style="min-width:110px">ETA</th>
-            <th style="min-width:170px">截关时间</th>
             <th style="min-width:110px">状态</th>
             <th style="min-width:160px">更新时间</th>
             <th style="min-width:160px">操作</th>
@@ -205,16 +230,16 @@ code{font-family:ui-monospace,Menlo,Consolas,monospace}
         <div class="k">ETD<span style="color:var(--brand);font-weight:900">*</span></div>
         <div><input class="input" type="date" id="f_etd"></div>
 
-        <div class="k">ETA</div>
-        <div><input class="input" type="date" id="f_eta"></div>
-
-        <div class="k">截关时间（Cutoff）</div>
+        <div class="k">截关时间（可更新）</div>
         <div>
           <input class="input" type="datetime-local" id="f_cutoff">
           <div class="small" style="margin-top:6px">
-            规则：为空时自动估算 <b>ETD-2天 12:00</b>；临近可录入官方准确时间覆盖。
+            默认估算：当 ETD 变化且此字段为空时，自动填 <code>ETD-2天 18:00</code>（可手工改为官方时间）。
           </div>
         </div>
+
+        <div class="k">ETA</div>
+        <div><input class="input" type="date" id="f_eta"></div>
 
         <div class="k">状态</div>
         <div>
@@ -227,6 +252,7 @@ code{font-family:ui-monospace,Menlo,Consolas,monospace}
         <div class="k">备注</div>
         <div><input class="input" id="f_remark" placeholder="可选"></div>
       </div>
+
       <div class="small" style="margin-top:10px">
         唯一性：<code>carrier + vessel + voyageNo + etd</code> 组合唯一（防止重复建航次）。
       </div>
@@ -245,113 +271,131 @@ code{font-family:ui-monospace,Menlo,Consolas,monospace}
       <span class="pill"><span class="dot"></span>三件套（voyage-manage.html / voyage-manage-v2）</span>
       <span style="cursor:pointer;color:var(--muted)" onclick="closeReq()">关闭</span>
     </div>
-    <div class="modalBd">
-      <div class="small">说明：本弹窗内容需与版本号同步维护；用于把“结构/口径/交互”固化。</div>
 
-      <div class="tabRow">
-        <button class="tbtn active" id="t_schema" onclick="showKit('schema')">slms-schema.yaml</button>
-        <button class="tbtn" id="t_dict" onclick="showKit('dict')">slms-data-dict.md</button>
-        <button class="tbtn" id="t_ui" onclick="showKit('ui')">slms-ui-spec.md</button>
+    <div class="modalBd">
+      <div class="small">
+        说明：本弹窗内容需与版本号同步维护；用于把“结构/口径/交互”固化，避免页面改了但约定没更新。
+      </div>
+
+      <div class="kitTop">
+        <div class="tabRow">
+          <button class="tbtn active" id="t_schema" onclick="showKit('schema')">slms-schema.yaml</button>
+          <button class="tbtn" id="t_dict" onclick="showKit('dict')">slms-data-dict.md</button>
+          <button class="tbtn" id="t_ui" onclick="showKit('ui')">slms-ui-spec.md</button>
+        </div>
+
+        <div class="actions">
+          <button class="abtn" type="button" onclick="copyCurrentKit()">复制当前Tab</button>
+          <button class="abtn primary" type="button" onclick="copyAllKits()">复制全部三件套</button>
+        </div>
       </div>
 
       <div id="kit_schema">
-        <h4>slms-schema.yaml（结构唯一真源）</h4>
-        <pre><code># --- Voyage (航次) ---
+        <pre id="txt_schema"><code># --- Voyage (航次) ---
 # 演示版存储映射：localStorage key = slms_voyages_v1
-# 字典引用：
-# - slms_carriers (slms_carriers_v1)
-# - slms_vessels  (slms_vessels_v1)
+# 正式落库建议表名：slms_voyages
 
 tables:
   slms_voyages:
     pk: id
     columns:
-      id: {type: string, required: true, note: "VOY-xxx"}
-      carrierId: {type: string, required: true, fk: slms_carriers.id}
-      vesselId: {type: string, required: true, fk: slms_vessels.id}
-      voyageNo: {type: string, required: true, note: "航次号(大写)"}
-      pol: {type: string, required: true, note: "POL(大写)"}
-      pod: {type: string, required: true, note: "POD(大写)"}
-      etd: {type: date, required: true, note: "ETD 日期"}
-      eta: {type: date, required: false, note: "ETA 日期（可空）"}
-      cutoffAt: {type: datetime, required: false, note: "截关时间；为空时按 ETD-2天 12:00 估算"}
-      status: {type: string, required: true, enum: [active, inactive]}
+      id: {type: string, required: true, note: "主键：VOY-xxx"}
+      carrierId: {type: string, required: true, fk: slms_carriers.id, note: "船公司(字典)"}
+      vesselId: {type: string, required: true, fk: slms_vessels.id, note: "船舶(字典)"}
+      voyageNo: {type: string, required: true, note: "航次号，例如 012W"}
+      pol: {type: string, required: true, note: "起运港"}
+      pod: {type: string, required: true, note: "目的港"}
+      etd: {type: date, required: true, note: "预计开船日(日期)"}
+      cutoffAt: {type: datetime, required: false, note: "截关时间(可录入官方准确时间)"}
+      eta: {type: date, required: false, note: "预计到港日(日期)"}
+      status: {type: string, required: true, enum: [active, inactive], note: "inactive=软删除"}
       remark: {type: string, required: false}
-      createdAt: {type: int64, required: true}
-      updatedAt: {type: int64, required: true}
+      createdAt: {type: int64, required: true, note: "毫秒时间戳"}
+      updatedAt: {type: int64, required: true, note: "毫秒时间戳"}
     uniques:
       - name: uq_slms_voyages_carrier_vessel_voyage_etd
         columns: [carrierId, vesselId, voyageNo, etd]
     indexes:
-      - name: ix_slms_voyages_etd_status
-        columns: [etd, status]
-      - name: ix_slms_voyages_cutoffAt
-        columns: [cutoffAt]
+      - name: ix_slms_voyages_status_etd_cutoff
+        columns: [status, etd, cutoffAt]
 </code></pre>
       </div>
 
       <div id="kit_dict" style="display:none">
-        <h4>slms-data-dict.md（字段/口径说明）</h4>
-        <pre><code># Voyage 字段口径（slms_voyages）
+        <pre id="txt_dict"><code># Voyage 字段口径（slms_voyages）
 
-- carrierId：船公司ID（外键）
-- vesselId：船舶ID（外键）
-- voyageNo：航次号（保存时转大写）
-- pol/pod：港口（保存时转大写）
-- etd/eta：日期（ETA 可空；若填，不能早于 ETD）
-- cutoffAt（截关时间）：
-  - 可空；用于“截关顺序/装箱顺序”管理
-  - 默认估算：ETD-2天 12:00（仅在 cutoffAt 为空时自动生成）
-  - 临近可用官方公布准确时间覆盖（手工录入优先）
+- id：主键
+- carrierId：船公司字典ID（仅允许选择 active）
+- vesselId：船舶字典ID（仅允许选择 active）
+- voyageNo：航次号（建议大写；保存时统一 toUpperCase）
+- pol/pod：港口代码/名称（保存时统一 toUpperCase）
+- etd：ETD 日期（必填）
+- cutoffAt：截关时间（可选）
+  - 初期允许按规则估算：ETD-2天 18:00（便于排序）
+  - 临近可手工更新为官方公布准确时间
+- eta：ETA 日期（可选；若填写不得早于ETD）
 - status：
-  - active：启用（可被 Booking/Stuffing 等引用）
+  - active：启用
   - inactive：停用=软删除（禁止新引用；历史引用保留）
+- createdAt/updatedAt：毫秒时间戳（演示版）
+
+唯一性口径：
+- carrierId + vesselId + voyageNo + etd 组合唯一（不区分 status）
 </code></pre>
       </div>
 
       <div id="kit_ui" style="display:none">
-        <h4>slms-ui-spec.md（页面交互/导出/入口）</h4>
-        <pre><code># voyage-manage.html 交互规范（voyage-manage-v2）
+        <pre id="txt_ui"><code># voyage-manage.html 交互规范（voyage-manage-v2）
 
 入口/导航：
-- Index -> Master -> Voyage Master（航次管理）
+- Index 里归属 Master 一级菜单下的二级菜单：Voyage（航次）
 
-字典选择：
-- 船公司/船舶必须下拉选择
-- 下拉仅展示 active
-- 若为空：先维护 carrier-manage / vessel-manage
+字典依赖：
+- 船公司：localStorage slms_carriers_v1（仅 active 可选）
+- 船舶：localStorage slms_vessels_v1（仅 active 可选）
 
 查询：
-- 关键词：匹配 船公司code + 船名 + 航次号（不区分大小写）
-- 其它条件：carrier / vessel / POD包含 / ETD区间 / 状态
+- 关键词：匹配 船公司代码/船名/航次号（不区分大小写）
+- 条件：carrier / vessel / POD（contains）/ ETD区间 / 截关区间 / 状态
+- 点击行：选中，用于“复制航次”
 
 新增/编辑：
 - 必填：carrierId、vesselId、voyageNo、pol、pod、etd
-- 校验：
-  - ETA 不能早于 ETD
-  - 组合唯一：carrierId + vesselId + voyageNo + etd
-- 截关时间 cutoffAt：
-  - 用户可手工录入 datetime
-  - 若为空：保存时自动填 ETD-2天 12:00
-  - 若用户填了：以用户值为准，不覆盖
+- ETA 校验：若填写，不能早于 ETD
+- 截关时间：
+  - 当 ETD 改变且 cutoffAt 为空：自动填 ETD-2天 18:00
+  - 用户可随时手工更改为官方准确时间
+- 保存唯一性校验：
+  - carrierId + vesselId + voyageNo + etd 组合唯一（排除当前编辑记录）
 
 复制航次：
-- 需先选中列表行
-- 打开“复制航次”弹窗：
-  - 默认带出字段
-  - 提示用户修改 voyageNo / ETD（可选也改截关）
+- 复制需先选中行
+- 打开“新增”弹窗并带入原值
+- 用户修改 voyageNo/etd（建议），并可调整 cutoffAt
 
-导出：
-- 导出当前筛选结果 CSV
-- 字段：carrier, vessel, voyageNo, pol, pod, etd, eta, cutoffAt, status, updatedAt
+停用/启用：
+- 软删除：仅切换 status + updatedAt
+- 停用后不应出现在其它页面“可选字典”中（仅对字典类生效；航次本身是否可选由业务决定）
+
+导出 CSV：
+- 导出当前筛选结果
+- 字段：carrier, vessel, voyageNo, pol, pod, etd, cutoffAt, eta, status, updatedAt
+
+版本维护要求：
+- 每次页面生成/修改：必须同步更新
+  1) 右上角版本号显示
+  2) 版本号弹窗中的“三件套”内容（schema/dict/ui）
 </code></pre>
       </div>
     </div>
+
     <div class="modalFt">
       <button class="btn" type="button" onclick="closeReq()">关闭</button>
     </div>
   </div>
 </div>
+
+<div class="toast" id="toast"></div>
 
 <script>
 const LS_CARRIERS = "slms_carriers_v1";
@@ -361,12 +405,17 @@ const VERSION = "voyage-manage-v2";
 
 /* requirements */
 const reqMask = document.getElementById("reqMask");
-document.getElementById("verBtn").onclick = ()=> reqMask.style.display="flex";
+document.getElementById("verBtn").onclick = ()=> {
+  reqMask.style.display="flex";
+  showKit("schema");
+};
 function closeReq(){ reqMask.style.display="none"; }
 reqMask.onclick = e=>{ if(e.target===reqMask) closeReq(); };
 
-/* 三件套 tabs */
+/* 三件套 tabs（统一模板） */
+let activeKit = "schema";
 function setKitTab(active){
+  activeKit = active;
   ["schema","dict","ui"].forEach(k=>{
     document.getElementById("t_"+k).classList.toggle("active", k===active);
     document.getElementById("kit_"+k).style.display = (k===active) ? "block" : "none";
@@ -374,44 +423,77 @@ function setKitTab(active){
 }
 function showKit(k){ setKitTab(k); }
 
+/* toast */
+const toastEl = document.getElementById("toast");
+let toastTimer = null;
+function toast(msg){
+  toastEl.textContent = msg;
+  toastEl.style.display = "block";
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(()=> toastEl.style.display="none", 1500);
+}
+
+/* copy helpers */
+function getTextFromPre(id){
+  const el = document.getElementById(id);
+  return el ? el.innerText.replace(/\n+$/,"") : "";
+}
+async function copyText(text){
+  try{
+    await navigator.clipboard.writeText(text);
+    toast("已复制到剪贴板");
+  }catch(_){
+    const ta=document.createElement("textarea");
+    ta.value=text;
+    ta.style.position="fixed";
+    ta.style.left="-9999px";
+    document.body.appendChild(ta);
+    ta.select();
+    try{ document.execCommand("copy"); toast("已复制到剪贴板"); }catch(e){ alert("复制失败，请手动复制"); }
+    ta.remove();
+  }
+}
+function copyCurrentKit(){
+  const map = {schema:"txt_schema", dict:"txt_dict", ui:"txt_ui"};
+  const txt = getTextFromPre(map[activeKit]);
+  copyText(txt);
+}
+function copyAllKits(){
+  const all =
+`# ===== slms-schema.yaml =====
+${getTextFromPre("txt_schema")}
+
+# ===== slms-data-dict.md =====
+${getTextFromPre("txt_dict")}
+
+# ===== slms-ui-spec.md =====
+${getTextFromPre("txt_ui")}
+`;
+  copyText(all.trim());
+}
+
+/* utils */
 function esc(s){return String(s??'').replace(/[&<>"']/g,m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[m]));}
 function loadArr(key){
   try{ const s=localStorage.getItem(key); const v=s?JSON.parse(s):[]; return Array.isArray(v)?v:[]; }catch(_){ return []; }
 }
 function saveArr(key, arr){ try{ localStorage.setItem(key, JSON.stringify(arr)); }catch(_){ } }
-
 function pad2(n){ return String(n).padStart(2,'0'); }
 function fmt(ts){
   if(!ts) return "-";
   const d=new Date(ts);
   return `${d.getFullYear()}-${pad2(d.getMonth()+1)}-${pad2(d.getDate())} ${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
 }
-function fmtDTLocal(dt){
-  if(!dt) return "";
-  // dt can be ISO string, or "YYYY-MM-DDTHH:mm"
-  const s=String(dt);
-  // normalize display without seconds
-  if(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(s)) return s.slice(0,16);
-  const d=new Date(dt);
-  if(isNaN(d.getTime())) return "";
-  return `${d.getFullYear()}-${pad2(d.getMonth()+1)}-${pad2(d.getDate())}T${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+function fmtISODate(d){
+  const p=n=>String(n).padStart(2,'0');
+  return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}`;
 }
-function fmtDTReadable(dt){
-  const s=fmtDTLocal(dt);
-  if(!s) return "";
-  return s.replace("T"," ");
-}
-function addDaysISO(isoDate, days){
-  const d=new Date(isoDate+"T00:00:00");
-  d.setDate(d.getDate()+days);
-  return `${d.getFullYear()}-${pad2(d.getMonth()+1)}-${pad2(d.getDate())}`;
-}
-function estimateCutoff(etdISO){
-  // ETD-2 days 12:00
-  const d = addDaysISO(etdISO, -2);
-  return `${d}T12:00`;
+function toISODateTimeLocal(d){
+  const p=n=>String(n).padStart(2,'0');
+  return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
 }
 
+/* page refs */
 const tbody = document.getElementById("tbody");
 const foot = document.getElementById("foot");
 
@@ -421,11 +503,14 @@ const q_vessel = document.getElementById("q_vessel");
 const q_pod = document.getElementById("q_pod");
 const q_etd_from = document.getElementById("q_etd_from");
 const q_etd_to = document.getElementById("q_etd_to");
+const q_cut_from = document.getElementById("q_cut_from");
+const q_cut_to = document.getElementById("q_cut_to");
 const q_status = document.getElementById("q_status");
 
 let selectedId = null;
 let editId = null;
 
+/* dict */
 function ensureCarrierDict(){
   const arr = loadArr(LS_CARRIERS);
   if(arr.length) return;
@@ -457,14 +542,13 @@ function bindSelectOptions(){
   fill(q_carrier, "全部", carriers, r=>r.code, r=>r.id);
   fill(q_vessel,  "全部", vessels,  r=>`${r.name}（IMO ${r.imo}）`, r=>r.id);
 
-  // edit modal selects
   fill(document.getElementById("f_carrier"), "— 请选择 —", carriers, r=>r.code, r=>r.id);
   fill(document.getElementById("f_vessel"),  "— 请选择 —", vessels,  r=>`${r.name}（IMO ${r.imo}）`, r=>r.id);
 }
 
 function resetFilters(){
   q_kw.value=""; q_carrier.value=""; q_vessel.value=""; q_pod.value="";
-  q_etd_from.value=""; q_etd_to.value=""; q_status.value="";
+  q_etd_from.value=""; q_etd_to.value=""; q_cut_from.value=""; q_cut_to.value=""; q_status.value="";
   selectedId=null;
   render();
 }
@@ -482,11 +566,21 @@ function openEdit(row){
   document.getElementById("f_pod").value     = row?.pod || "";
   document.getElementById("f_etd").value     = row?.etd || "";
   document.getElementById("f_eta").value     = row?.eta || "";
-  document.getElementById("f_cutoff").value  = fmtDTLocal(row?.cutoffAt || "");
   document.getElementById("f_status").value  = row?.status || "active";
   document.getElementById("f_remark").value  = row?.remark || "";
+  document.getElementById("f_cutoff").value  = row?.cutoffAt || "";
 
   document.getElementById("editMask").style.display="flex";
+
+  // 绑定 ETD 变化时的默认估算（仅当 cutoffAt 为空）
+  const etdEl = document.getElementById("f_etd");
+  etdEl.onchange = ()=>{
+    const cutoffEl = document.getElementById("f_cutoff");
+    if(!cutoffEl.value) {
+      const guess = guessCutoffFromEtd(etdEl.value);
+      if(guess) cutoffEl.value = guess;
+    }
+  };
 }
 function closeEdit(){ document.getElementById("editMask").style.display="none"; }
 document.getElementById("editMask").onclick = e=>{ if(e.target.id==="editMask") closeEdit(); };
@@ -500,6 +594,16 @@ function getVesselName(id){
   return v ? v.name : "";
 }
 
+/* cutoff helper: ETD-2天 18:00 */
+function guessCutoffFromEtd(etdISO){
+  if(!etdISO) return "";
+  const d = new Date(etdISO+"T00:00:00");
+  if(isNaN(d.getTime())) return "";
+  d.setDate(d.getDate()-2);
+  d.setHours(18,0,0,0);
+  return toISODateTimeLocal(d);
+}
+
 function save(){
   const carrierId = document.getElementById("f_carrier").value;
   const vesselId  = document.getElementById("f_vessel").value;
@@ -507,8 +611,8 @@ function save(){
   const pol       = document.getElementById("f_pol").value.trim().toUpperCase();
   const pod       = document.getElementById("f_pod").value.trim().toUpperCase();
   const etd       = document.getElementById("f_etd").value;
+  const cutoffAt  = document.getElementById("f_cutoff").value; // datetime-local (string)
   const eta       = document.getElementById("f_eta").value;
-  let cutoffAt    = document.getElementById("f_cutoff").value; // "YYYY-MM-DDTHH:mm" or ""
   const status    = document.getElementById("f_status").value;
   const remark    = document.getElementById("f_remark").value.trim();
 
@@ -520,17 +624,6 @@ function save(){
   if(!etd)       return alert("ETD 不能为空");
   if(eta && eta < etd) return alert("ETA 不能早于 ETD");
 
-  // cutoff estimate if empty
-  if(!cutoffAt){
-    cutoffAt = estimateCutoff(etd);
-  }else{
-    // normalize to 16 length
-    cutoffAt = fmtDTLocal(cutoffAt);
-  }
-
-  // basic cutoff sanity (optional): cutoff should be <= etd+1 day (not strict, just warn)
-  // keep it simple: no blocking
-
   const arr = loadArr(LS_VOYAGES);
 
   // unique: carrierId + vesselId + voyageNo + etd
@@ -541,12 +634,15 @@ function save(){
     return alert(`保存失败：已存在相同航次（${getCarrierCode(dup.carrierId)} / ${getVesselName(dup.vesselId)} ${dup.voyageNo} / ETD ${dup.etd}）`);
   }
 
+  // 如果用户未填 cutoffAt，则自动按规则估算
+  const finalCutoff = cutoffAt || guessCutoffFromEtd(etd);
+
   if(editId){
     const idx=arr.findIndex(x=>x.id===editId);
     if(idx<0) return alert("记录不存在");
-    arr[idx] = Object.assign({}, arr[idx], { carrierId,vesselId,voyageNo,pol,pod,etd,eta,cutoffAt,status,remark, updatedAt:Date.now() });
+    arr[idx] = Object.assign({}, arr[idx], { carrierId,vesselId,voyageNo,pol,pod,etd,cutoffAt:finalCutoff,eta,status,remark, updatedAt:Date.now() });
   }else{
-    arr.unshift({ id:"VOY-"+Date.now(), carrierId,vesselId,voyageNo,pol,pod,etd,eta,cutoffAt,status,remark, createdAt:Date.now(), updatedAt:Date.now() });
+    arr.unshift({ id:"VOY-"+Date.now(), carrierId,vesselId,voyageNo,pol,pod,etd,cutoffAt:finalCutoff,eta,status,remark, createdAt:Date.now(), updatedAt:Date.now() });
   }
   saveArr(LS_VOYAGES, arr);
   closeEdit();
@@ -566,6 +662,16 @@ function toggleStatus(id){
   render();
 }
 
+function inDateRange(isoDateOrDT, fromDate, toDate){
+  // from/to are "YYYY-MM-DD"
+  if(!fromDate && !toDate) return true;
+  if(!isoDateOrDT) return false;
+  const d = String(isoDateOrDT).slice(0,10); // works for date or datetime-local
+  if(fromDate && d < fromDate) return false;
+  if(toDate && d > toDate) return false;
+  return true;
+}
+
 function buildView(){
   const kw = q_kw.value.trim().toLowerCase();
   const carrierId = q_carrier.value;
@@ -573,6 +679,8 @@ function buildView(){
   const pod       = q_pod.value.trim().toUpperCase();
   const from      = q_etd_from.value;
   const to        = q_etd_to.value;
+  const cutFrom   = q_cut_from.value;
+  const cutTo     = q_cut_to.value;
   const st        = q_status.value;
 
   let list = loadArr(LS_VOYAGES).slice().sort((a,b)=>(b.updatedAt||0)-(a.updatedAt||0));
@@ -586,8 +694,8 @@ function buildView(){
   if(carrierId) list = list.filter(x=>x.carrierId===carrierId);
   if(vesselId)  list = list.filter(x=>x.vesselId===vesselId);
   if(pod)       list = list.filter(x=>String(x.pod||"").toUpperCase().includes(pod));
-  if(from)      list = list.filter(x=>String(x.etd||"") >= from);
-  if(to)        list = list.filter(x=>String(x.etd||"") <= to);
+  if(from || to) list = list.filter(x=>inDateRange(x.etd, from, to));
+  if(cutFrom || cutTo) list = list.filter(x=>inDateRange(x.cutoffAt, cutFrom, cutTo));
   if(st)        list = list.filter(x=>x.status===st);
 
   return list;
@@ -620,8 +728,8 @@ function render(){
       <td>${esc(x.pol||"")}</td>
       <td>${esc(x.pod||"")}</td>
       <td>${esc(x.etd||"")}</td>
+      <td>${esc(x.cutoffAt||"")}</td>
       <td>${esc(x.eta||"")}</td>
-      <td>${esc(fmtDTReadable(x.cutoffAt||""))}</td>
       <td>${st}</td>
       <td>${esc(fmt(x.updatedAt))}</td>
       <td>
@@ -645,7 +753,7 @@ function copySelected(){
   if(!src) return alert("选中记录不存在");
 
   // 打开新增窗口，带默认值（voyageNo/etd 让用户修改）
-  openEdit(Object.assign({}, src, { id:null }));
+  openEdit(Object.assign({}, src, { id:null, voyageNo: src.voyageNo, etd: src.etd, cutoffAt: src.cutoffAt }));
   editId = null;
   document.getElementById("editTitle").textContent = "复制航次（请修改航次号/ETD）";
 }
@@ -665,11 +773,11 @@ function downloadCsv(filename, rows){
 }
 function exportCsv(){
   const list = buildView();
-  const head = ["carrier","vessel","voyageNo","pol","pod","etd","eta","cutoffAt","status","updatedAt"].join(",");
+  const head = ["carrier","vessel","voyageNo","pol","pod","etd","cutoffAt","eta","status","updatedAt"].join(",");
   const lines=[head];
   list.forEach(x=>{
     lines.push([
-      getCarrierCode(x.carrierId), getVesselName(x.vesselId), x.voyageNo, x.pol, x.pod, x.etd, x.eta, fmtDTReadable(x.cutoffAt||""), x.status, fmt(x.updatedAt)
+      getCarrierCode(x.carrierId), getVesselName(x.vesselId), x.voyageNo, x.pol, x.pod, x.etd, x.cutoffAt, x.eta, x.status, fmt(x.updatedAt)
     ].map(csvEscape).join(","));
   });
   downloadCsv(`voyages_${new Date().toISOString().slice(0,10)}.csv`, lines);
@@ -681,10 +789,9 @@ function seedDemo(){
 
   ensureCarrierDict();
 
-  // 如果船舶为空，提示先去 vessel-manage 建
   const vessels = loadArr(LS_VESSELS);
   if(!vessels.length){
-    alert("当前没有船舶主档，请先打开 master/vessel-manage.html 维护船舶（至少一条），再回来生成航次。");
+    alert("当前没有船舶主档，请先打开 vessel-manage.html 维护船舶（至少一条），再回来生成航次。");
     return;
   }
 
@@ -692,13 +799,11 @@ function seedDemo(){
   const arr = loadArr(LS_VOYAGES);
 
   function todayISO(){
-    const d=new Date(); const p=n=>String(n).padStart(2,'0');
-    return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}`;
+    const d=new Date(); return fmtISODate(d);
   }
   function addDays(baseISO, n){
     const d=new Date(baseISO+"T00:00:00"); d.setDate(d.getDate()+n);
-    const p=n=>String(n).padStart(2,'0');
-    return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}`;
+    return fmtISODate(d);
   }
 
   const base = todayISO();
@@ -710,6 +815,7 @@ function seedDemo(){
     const carrier = carriers[i%carriers.length];
     const vessel = vessels[i%vessels.length];
     const etd = addDays(base, i*2);
+    const cutoffAt = guessCutoffFromEtd(etd);
     const row = {
       id:"VOY-"+Date.now()+"-"+Math.random().toString(16).slice(2),
       carrierId: carrier.id,
@@ -718,8 +824,8 @@ function seedDemo(){
       pol: pols[i%pols.length],
       pod: pods[i%pods.length],
       etd,
+      cutoffAt,
       eta: addDays(etd, 10),
-      cutoffAt: estimateCutoff(etd),
       status:"active",
       remark:"",
       createdAt:Date.now(),
