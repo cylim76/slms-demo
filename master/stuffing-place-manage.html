@@ -1,0 +1,889 @@
+<!--
+File: master/stuffing-place-manage.html
+Version: stuffing-place-manage-v1
+Date: 2025-12-29
+
+更新点（v1，新建页面）：
+1) 新增【作业地管理】页面：维护作业地基础信息（测试数据内置，可本地存储）。
+2) 字段（当前版本）：
+   - 作业地ID（placeId）
+   - 名称（下划线后面部分，如 A3仓库）
+   - 代码（前三位数字，如 011）
+   - 仓库名称（下划线后两个字符，如 A3 / B1 / C2；若不足两位则取现有字符）
+   - 可摆放的箱量（capacity）
+   - 使用与否状态（enabled）
+3) 顶部右上角版本号显示 + 点击版本号弹窗内容同步维护：
+   - 功能要求（requirements）
+   - 三件套（schema/dict/ui-spec）采用固定样式 SLMS-ThreeKitStyle（左侧导航 3 按钮 + 右侧单文档内容区，超出自动滚动）
+-->
+
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>作业地管理</title>
+<style>
+  :root{
+    --brand:#e0205c; --bg:#f1f2f5; --card:#fff; --text:#222; --muted:#6b7280;
+    --line:#e5e7eb; --shadow:0 10px 30px rgba(0,0,0,.10);
+    --ok:#16a34a; --bad:#ef4444; --warn:#f59e0b;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:Arial,"Microsoft YaHei";background:var(--bg);color:var(--text)}
+  a{color:inherit}
+  .topbar{
+    height:56px;background:#fff;border-bottom:1px solid var(--line);
+    display:flex;align-items:center;justify-content:space-between;padding:0 14px;gap:10px;
+    position:sticky;top:0;z-index:50;
+  }
+  .title{display:flex;align-items:center;gap:10px;font-weight:900}
+  .badge{
+    font-size:12px;color:#fff;background:var(--brand);border-radius:999px;padding:3px 10px;
+  }
+  .actions{display:flex;align-items:center;gap:10px}
+  .ver{
+    cursor:pointer;background:#f6f6f6;border:1px solid #eee;border-radius:999px;
+    padding:6px 10px;font-size:12px;
+    font-family:ui-monospace,Menlo,Consolas,monospace;
+    display:flex;align-items:center;gap:6px;
+  }
+  .ver .dot{width:8px;height:8px;border-radius:99px;background:var(--brand)}
+  .btn{
+    cursor:pointer;border:1px solid var(--line);background:#fff;border-radius:10px;
+    padding:9px 12px;font-weight:900;font-size:13px;
+  }
+  .btn.primary{background:var(--brand);border-color:var(--brand);color:#fff}
+  .btn:active{transform:translateY(1px)}
+  .wrap{max-width:1180px;margin:14px auto;padding:0 14px;display:flex;flex-direction:column;gap:12px}
+
+  .card{
+    background:var(--card);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);
+  }
+  .cardHd{
+    padding:12px 14px;border-bottom:1px solid var(--line);
+    display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;
+  }
+  .cardHd .left{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+  .hint{color:var(--muted);font-size:12px}
+  .filters{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+  .inp, .sel{
+    border:1px solid var(--line);border-radius:10px;padding:9px 10px;font-weight:700;
+    background:#fff;outline:none;font-size:13px;min-width:160px;
+  }
+  .inp.small{min-width:120px}
+  .sel.small{min-width:120px}
+  .kpi{
+    display:flex;gap:10px;flex-wrap:wrap;align-items:center;
+    color:var(--muted);font-size:12px;font-weight:800;
+  }
+  .pill{
+    background:#f7f7f8;border:1px solid var(--line);border-radius:999px;padding:6px 10px;
+    display:flex;align-items:center;gap:8px;
+  }
+  .dotOk,.dotBad{width:8px;height:8px;border-radius:99px}
+  .dotOk{background:var(--ok)}
+  .dotBad{background:var(--bad)}
+
+  /* 表格区域：自适应滚动（纵向优先，宽表支持横向） */
+  .tableWrap{
+    padding:10px 12px;
+    overflow:auto;
+    max-height:calc(100vh - 56px - 14px - 14px - 110px);
+  }
+  table{border-collapse:separate;border-spacing:0;min-width:980px;width:100%}
+  th,td{border-bottom:1px solid var(--line);padding:10px 10px;text-align:left;font-size:13px;vertical-align:middle;white-space:nowrap}
+  th{
+    position:sticky;top:0;background:#fafafa;z-index:2;
+    font-weight:900;color:#374151;border-bottom:1px solid var(--line);
+  }
+  tr:hover td{background:#fcfcfd}
+  .muted{color:var(--muted)}
+  .mono{font-family:ui-monospace,Menlo,Consolas,monospace}
+  .tag{
+    display:inline-flex;align-items:center;gap:6px;
+    border:1px solid var(--line);background:#fff;border-radius:999px;padding:4px 10px;
+    font-size:12px;font-weight:900;
+  }
+  .tag.on{border-color:rgba(22,163,74,.35);background:rgba(22,163,74,.06);color:#14532d}
+  .tag.off{border-color:rgba(239,68,68,.35);background:rgba(239,68,68,.06);color:#7f1d1d}
+  .rowBtns{display:flex;gap:8px}
+  .miniBtn{
+    cursor:pointer;border:1px solid var(--line);background:#fff;border-radius:10px;
+    padding:6px 10px;font-size:12px;font-weight:900;
+  }
+  .miniBtn.danger{border-color:rgba(239,68,68,.35);color:#7f1d1d;background:rgba(239,68,68,.06)}
+  .miniBtn.ok{border-color:rgba(22,163,74,.35);color:#14532d;background:rgba(22,163,74,.06)}
+
+  /* 弹窗 */
+  .mask{position:fixed;inset:0;background:rgba(0,0,0,.35);display:none;align-items:center;justify-content:center;z-index:9999}
+  .modal{
+    width:980px;max-width:96vw;background:#fff;border-radius:14px;box-shadow:0 20px 60px rgba(0,0,0,.32);
+    display:flex;flex-direction:column;overflow:hidden;
+  }
+  .modalHd{
+    padding:12px 14px;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;gap:10px;
+  }
+  .modalTitle{font-weight:1000}
+  .closeX{cursor:pointer;font-weight:1000;color:#666}
+  .modalBd{padding:0}
+
+  /* 版本弹窗：Tab */
+  .vTabs{
+    display:flex;gap:8px;padding:10px 12px;border-bottom:1px solid var(--line);background:#fafafa;flex-wrap:wrap;
+  }
+  .vTab{
+    cursor:pointer;border:1px solid var(--line);background:#fff;border-radius:999px;padding:7px 12px;
+    font-weight:1000;font-size:12px;color:#374151;
+  }
+  .vTab.active{border-color:var(--brand);color:var(--brand)}
+  .vPanel{display:none}
+  .vPanel.active{display:block}
+
+  /* requirements 面板 */
+  .reqBody{
+    padding:14px 16px;max-height:72vh;overflow:auto;font-size:13px;line-height:1.65;
+  }
+  .reqBody h4{margin:14px 0 6px}
+  .reqBody ol{margin:6px 0 0 18px}
+  .reqBody code{background:#f6f6f6;border:1px solid #eee;border-radius:6px;padding:1px 6px}
+
+  /* SLMS-ThreeKitStyle：左侧导航（3按钮）+右侧单文档内容区（docCard+copy+pre） */
+  .threeKit{
+    display:flex;gap:0;min-height:72vh;max-height:72vh;
+  }
+  .tkNav{
+    width:220px;min-width:220px;border-right:1px solid var(--line);background:#fafafa;
+    padding:10px;display:flex;flex-direction:column;gap:8px;overflow:auto;
+  }
+  .tkBtn{
+    cursor:pointer;border:1px solid var(--line);background:#fff;border-radius:12px;
+    padding:10px 10px;font-weight:1000;font-size:12px;color:#374151;text-align:left;
+  }
+  .tkBtn.active{border-color:var(--brand);color:var(--brand)}
+  .tkMain{
+    flex:1;min-width:0;
+    padding:12px;overflow:auto; /* 右侧内容区优先纵向滚动 */
+    background:#fff;
+  }
+  .docCard{
+    border:1px solid var(--line);border-radius:14px;background:#fff;box-shadow:var(--shadow);
+    overflow:hidden;
+  }
+  .docHd{
+    padding:10px 12px;border-bottom:1px solid var(--line);
+    display:flex;align-items:center;justify-content:space-between;gap:10px;
+    background:#fafafa;
+  }
+  .docTitle{font-weight:1000;font-size:13px}
+  .copyBtn{
+    cursor:pointer;border:1px solid var(--line);background:#fff;border-radius:10px;
+    padding:7px 10px;font-weight:1000;font-size:12px;
+  }
+  pre{
+    margin:0;padding:12px;max-width:100%;
+    overflow:auto; /* 代码块/长行支持横向滚动 */
+    font-size:12px;line-height:1.55;background:#fff;
+    font-family:ui-monospace,Menlo,Consolas,monospace;
+  }
+
+  /* 编辑弹窗 */
+  .form{padding:14px 16px;display:grid;grid-template-columns:repeat(2, minmax(0, 1fr));gap:12px}
+  .field{display:flex;flex-direction:column;gap:6px}
+  .lab{font-size:12px;color:#374151;font-weight:1000}
+  .help{font-size:12px;color:var(--muted)}
+  .err{color:var(--bad);font-size:12px;font-weight:900;display:none}
+  .form .inp, .form .sel{min-width:0}
+  .form .full{grid-column:1 / -1}
+  .modalFt{
+    padding:12px 16px;border-top:1px solid var(--line);
+    display:flex;justify-content:flex-end;gap:10px;flex-wrap:wrap;background:#fafafa;
+  }
+  @media (max-width:860px){
+    .form{grid-template-columns:1fr}
+    table{min-width:860px}
+  }
+</style>
+</head>
+
+<body>
+  <div class="topbar">
+    <div class="title">
+      <span class="badge">Master</span>
+      <span>作业地管理</span>
+      <span class="hint">（Stuffing Place Manage）</span>
+    </div>
+    <div class="actions">
+      <button class="btn" id="btnReset">恢复默认测试数据</button>
+      <button class="btn primary" id="btnAdd">新增作业地</button>
+      <div class="ver" id="verBtn" title="点击查看页面功能要求 / 三件套">
+        <span class="dot"></span>
+        <span>stuffing-place-manage-v1</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="wrap">
+    <div class="card">
+      <div class="cardHd">
+        <div class="left">
+          <div class="filters">
+            <input class="inp" id="qText" placeholder="搜索：ID/名称/仓库/代码" />
+            <select class="sel small" id="qEnabled">
+              <option value="">使用状态：全部</option>
+              <option value="1">仅使用中</option>
+              <option value="0">仅停用</option>
+            </select>
+            <input class="inp small" id="qWarehouse" placeholder="仓库：如 A3 / B1" />
+            <button class="btn" id="btnClear">清空筛选</button>
+          </div>
+          <div class="kpi">
+            <span class="pill"><span class="dotOk"></span><span>使用中：<b id="kOn">0</b></span></span>
+            <span class="pill"><span class="dotBad"></span><span>停用：<b id="kOff">0</b></span></span>
+            <span class="pill"><span>总计：<b id="kAll">0</b></span></span>
+          </div>
+        </div>
+        <div class="hint">
+          规则：代码=前三位数字；名称=下划线后面部分；仓库名称=下划线后两个字符（不足两位则取现有）。
+        </div>
+      </div>
+
+      <div class="tableWrap">
+        <table>
+          <thead>
+            <tr>
+              <th style="width:140px">作业地ID</th>
+              <th style="width:220px">名称</th>
+              <th style="width:120px">代码(前三位)</th>
+              <th style="width:140px">仓库名称(2位)</th>
+              <th style="width:150px">可摆放箱量</th>
+              <th style="width:140px">使用状态</th>
+              <th style="width:220px">操作</th>
+            </tr>
+          </thead>
+          <tbody id="tbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- 版本弹窗（requirements + 三件套） -->
+  <div class="mask" id="verMask">
+    <div class="modal">
+      <div class="modalHd">
+        <div class="modalTitle">版本信息（stuffing-place-manage-v1）</div>
+        <div class="closeX" onclick="closeVer()">关闭</div>
+      </div>
+
+      <div class="vTabs">
+        <div class="vTab active" data-tab="req">功能要求（requirements）</div>
+        <div class="vTab" data-tab="kit">三件套（schema/dict/ui-spec）</div>
+      </div>
+
+      <div class="modalBd">
+        <!-- requirements -->
+        <div class="vPanel active" id="panel-req">
+          <div class="reqBody">
+            <h4>一、页面定位（stuffing-place-manage-v1）</h4>
+            <ol>
+              <li>本页面用于维护【作业地（Stuffing Place）】基础信息，供装箱/计划等模块引用。</li>
+              <li>页面目录：<code>master/stuffing-place-manage.html</code></li>
+              <li>演示阶段数据可本地保存（LocalStorage），也可一键恢复默认测试数据。</li>
+            </ol>
+
+            <h4>二、字段定义（当前版本）</h4>
+            <ol>
+              <li><b>作业地ID（placeId）</b>：形如 <code>011_A3仓库</code>；推荐唯一。</li>
+              <li><b>代码（code）</b>：取作业地ID 前三位数字（如 <code>011</code>）。</li>
+              <li><b>名称（name）</b>：取下划线后面部分（如 <code>A3仓库</code>）。</li>
+              <li><b>仓库名称（warehouse）</b>：取名称前两位字符（如 <code>A3</code>/<code>B1</code>/<code>C2</code>；不足两位则取现有）。</li>
+              <li><b>可摆放箱量（capacity）</b>：整数，>=0。</li>
+              <li><b>使用状态（enabled）</b>：使用中/停用。</li>
+            </ol>
+
+            <h4>三、列表与滚动条规范（默认规则）</h4>
+            <ol>
+              <li>列表区域根据画面大小自适应：内容溢出时自动出现滚动条（优先纵向；宽表支持横向）。</li>
+              <li>表头固定（sticky header），便于长列表浏览。</li>
+            </ol>
+
+            <h4>四、操作规范</h4>
+            <ol>
+              <li>支持：新增 / 编辑 / 删除（本页实现为“软删除”：仅从列表移除，数据仍保存在本地）。</li>
+              <li>支持：使用/停用快速切换。</li>
+              <li>支持：按 ID/名称/仓库/代码 关键字搜索；按使用状态筛选；按仓库筛选。</li>
+            </ol>
+
+            <h4>五、版本维护规则（重要）</h4>
+            <ol>
+              <li>右上角版本号与本弹窗内容同步维护。</li>
+              <li>三件套区域采用固定样式 <b>SLMS-ThreeKitStyle</b>（左侧导航 3 按钮 + 右侧单文档内容区，超出自动滚动）。</li>
+            </ol>
+          </div>
+        </div>
+
+        <!-- three-kit -->
+        <div class="vPanel" id="panel-kit">
+          <div class="threeKit">
+            <div class="tkNav">
+              <button class="tkBtn active" data-doc="schema">slms-schema.yaml</button>
+              <button class="tkBtn" data-doc="dict">slms-data-dict.md</button>
+              <button class="tkBtn" data-doc="ui">slms-ui-spec.md</button>
+            </div>
+            <div class="tkMain">
+              <div class="docCard">
+                <div class="docHd">
+                  <div class="docTitle" id="docTitle">slms-schema.yaml</div>
+                  <button class="copyBtn" id="btnCopyDoc">复制</button>
+                </div>
+                <pre id="docPre"></pre>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- 新增/编辑弹窗 -->
+  <div class="mask" id="editMask">
+    <div class="modal" style="width:860px">
+      <div class="modalHd">
+        <div class="modalTitle" id="editTitle">新增作业地</div>
+        <div class="closeX" onclick="closeEdit()">关闭</div>
+      </div>
+      <div class="modalBd">
+        <div class="form">
+          <div class="field full">
+            <div class="lab">作业地ID（例如：011_A3仓库）</div>
+            <input class="inp" id="fPlaceId" placeholder="如：011_A3仓库" />
+            <div class="help">将自动解析：代码=前三位数字；名称=下划线后；仓库=名称前两位。</div>
+            <div class="err" id="ePlaceId">作业地ID 必填，且建议包含下划线（例如 011_A3仓库）。</div>
+          </div>
+
+          <div class="field">
+            <div class="lab">代码（前三位数字）</div>
+            <input class="inp mono" id="fCode" placeholder="011" disabled />
+            <div class="help">根据作业地ID 自动生成。</div>
+          </div>
+
+          <div class="field">
+            <div class="lab">仓库名称（下划线后两位）</div>
+            <input class="inp mono" id="fWarehouse" placeholder="A3" disabled />
+            <div class="help">根据名称前两位自动生成。</div>
+          </div>
+
+          <div class="field full">
+            <div class="lab">名称（下划线后面部分）</div>
+            <input class="inp" id="fName" placeholder="如：A3仓库 / B1东侧" disabled />
+            <div class="help">根据作业地ID 自动生成。</div>
+          </div>
+
+          <div class="field">
+            <div class="lab">可摆放箱量</div>
+            <input class="inp" id="fCap" type="number" min="0" step="1" placeholder="如：18" />
+            <div class="err" id="eCap">箱量需为整数且 >= 0。</div>
+          </div>
+
+          <div class="field">
+            <div class="lab">使用状态</div>
+            <select class="sel" id="fEnabled">
+              <option value="1">使用中</option>
+              <option value="0">停用</option>
+            </select>
+          </div>
+
+          <div class="field full">
+            <div class="hint">提示：后续你要加字段时，我会基于该版本主线（v1）继续升级，并同步更新右上角版本号与本弹窗内容。</div>
+          </div>
+        </div>
+      </div>
+      <div class="modalFt">
+        <button class="btn" onclick="closeEdit()">取消</button>
+        <button class="btn primary" id="btnSave">保存</button>
+      </div>
+    </div>
+  </div>
+
+<script>
+/* =========================
+   版本与存储
+========================= */
+const PAGE_VERSION = 'stuffing-place-manage-v1';
+const LS_KEY = 'slms.master.stuffingPlace.v1';
+
+const seedLines = [
+  '011_A3仓库',
+  '012_A3平台',
+  '021_B1东侧',
+  '022_B1西侧',
+  '031_B2仓库',
+  '041_B3东侧',
+  '042_B3西侧',
+  '061_C2南侧',
+  '071_外部'
+];
+
+function parsePlaceId(placeId){
+  const raw = String(placeId||'').trim();
+  const parts = raw.split('_');
+  const code = (raw.match(/^(\d{3})/)||[])[1] || (parts[0] && parts[0].match(/^\d{3}$/) ? parts[0] : '');
+  const name = parts.length >= 2 ? parts.slice(1).join('_') : '';
+  let warehouse = '';
+  if(name){
+    warehouse = name.slice(0,2);
+  }
+  return { code, name, warehouse };
+}
+
+function pickCapacityByName(name){
+  // 简单做个“看起来合理”的容量：仓库/平台稍大，外部略小
+  const base = /仓库/.test(name) ? 28 : /平台/.test(name) ? 22 : /外部/.test(name) ? 12 : 18;
+  const jitter = Math.floor(Math.random()*9); // 0..8
+  return base + jitter;
+}
+
+function makeDefaultData(){
+  // 生成测试数据（带 enabled / capacity）
+  return seedLines.map((id, idx)=>{
+    const p = parsePlaceId(id);
+    const enabled = id.includes('071_外部') ? 0 : 1;
+    return {
+      uid: cryptoRandomId(),
+      placeId: id,
+      code: p.code,
+      name: p.name,
+      warehouse: p.warehouse,
+      capacity: pickCapacityByName(p.name),
+      enabled: enabled
+    };
+  });
+}
+
+function loadData(){
+  try{
+    const s = localStorage.getItem(LS_KEY);
+    if(!s) return makeDefaultData();
+    const arr = JSON.parse(s);
+    if(!Array.isArray(arr) || !arr.length) return makeDefaultData();
+    return arr;
+  }catch(e){
+    return makeDefaultData();
+  }
+}
+function saveData(){
+  localStorage.setItem(LS_KEY, JSON.stringify(DATA));
+}
+
+function cryptoRandomId(){
+  try{
+    const a = new Uint32Array(2);
+    crypto.getRandomValues(a);
+    return 'P' + a[0].toString(16) + a[1].toString(16);
+  }catch(e){
+    return 'P' + Math.random().toString(16).slice(2) + Date.now().toString(16);
+  }
+}
+
+let DATA = loadData();
+
+/* =========================
+   列表渲染 & 筛选
+========================= */
+const tbody = document.getElementById('tbody');
+const qText = document.getElementById('qText');
+const qEnabled = document.getElementById('qEnabled');
+const qWarehouse = document.getElementById('qWarehouse');
+
+const kOn = document.getElementById('kOn');
+const kOff = document.getElementById('kOff');
+const kAll = document.getElementById('kAll');
+
+function norm(s){ return String(s||'').toLowerCase().trim(); }
+
+function filtered(){
+  const t = norm(qText.value);
+  const e = qEnabled.value; // '', '1', '0'
+  const w = norm(qWarehouse.value);
+
+  return DATA.filter(r=>{
+    if(t){
+      const hay = norm([r.placeId, r.name, r.warehouse, r.code].join(' '));
+      if(!hay.includes(t)) return false;
+    }
+    if(e !== ''){
+      if(String(r.enabled) !== e) return false;
+    }
+    if(w){
+      if(!norm(r.warehouse).includes(w)) return false;
+    }
+    return true;
+  });
+}
+
+function render(){
+  const rows = filtered();
+
+  // KPI
+  const all = DATA.length;
+  const on = DATA.filter(x=>x.enabled==1).length;
+  const off = DATA.filter(x=>x.enabled==0).length;
+  kAll.textContent = all;
+  kOn.textContent = on;
+  kOff.textContent = off;
+
+  tbody.innerHTML = rows.map(r=>{
+    const st = r.enabled==1
+      ? `<span class="tag on"><span class="dotOk" style="width:7px;height:7px"></span>使用中</span>`
+      : `<span class="tag off"><span class="dotBad" style="width:7px;height:7px"></span>停用</span>`;
+
+    return `
+      <tr>
+        <td class="mono"><b>${escapeHtml(r.placeId)}</b></td>
+        <td>${escapeHtml(r.name||'-')}</td>
+        <td class="mono">${escapeHtml(r.code||'-')}</td>
+        <td class="mono">${escapeHtml(r.warehouse||'-')}</td>
+        <td class="mono">${Number.isFinite(r.capacity)? r.capacity : '-'}</td>
+        <td>${st}</td>
+        <td>
+          <div class="rowBtns">
+            <button class="miniBtn" onclick="editRow('${r.uid}')">编辑</button>
+            ${
+              r.enabled==1
+                ? `<button class="miniBtn danger" onclick="toggleEnable('${r.uid}',0)">停用</button>`
+                : `<button class="miniBtn ok" onclick="toggleEnable('${r.uid}',1)">启用</button>`
+            }
+            <button class="miniBtn danger" onclick="removeRow('${r.uid}')">删除</button>
+          </div>
+        </td>
+      </tr>
+    `;
+  }).join('') || `
+    <tr><td colspan="7" class="muted" style="padding:16px 10px">无匹配记录</td></tr>
+  `;
+}
+
+function escapeHtml(s){
+  return String(s??'')
+    .replaceAll('&','&amp;')
+    .replaceAll('<','&lt;')
+    .replaceAll('>','&gt;')
+    .replaceAll('"','&quot;')
+    .replaceAll("'","&#039;");
+}
+
+[qText,qEnabled,qWarehouse].forEach(el=>el.addEventListener('input', render));
+qEnabled.addEventListener('change', render);
+
+document.getElementById('btnClear').onclick=()=>{
+  qText.value=''; qEnabled.value=''; qWarehouse.value='';
+  render();
+};
+
+document.getElementById('btnReset').onclick=()=>{
+  DATA = makeDefaultData();
+  saveData();
+  render();
+  toast('已恢复默认测试数据');
+};
+
+/* =========================
+   新增/编辑
+========================= */
+const editMask = document.getElementById('editMask');
+const editTitle = document.getElementById('editTitle');
+const btnAdd = document.getElementById('btnAdd');
+const btnSave = document.getElementById('btnSave');
+
+const fPlaceId = document.getElementById('fPlaceId');
+const fCode = document.getElementById('fCode');
+const fName = document.getElementById('fName');
+const fWarehouse = document.getElementById('fWarehouse');
+const fCap = document.getElementById('fCap');
+const fEnabled = document.getElementById('fEnabled');
+
+const ePlaceId = document.getElementById('ePlaceId');
+const eCap = document.getElementById('eCap');
+
+let editingUid = null;
+
+function openEdit(mode, row){
+  editingUid = row ? row.uid : null;
+  editTitle.textContent = mode==='add' ? '新增作业地' : '编辑作业地';
+
+  ePlaceId.style.display='none';
+  eCap.style.display='none';
+
+  fPlaceId.value = row ? row.placeId : '';
+  fCap.value = row ? String(row.capacity ?? '') : '';
+  fEnabled.value = row ? String(row.enabled) : '1';
+
+  syncDerived();
+  editMask.style.display='flex';
+  setTimeout(()=>fPlaceId.focus(), 10);
+}
+
+function closeEdit(){ editMask.style.display='none'; }
+editMask.onclick = (e)=>{ if(e.target===editMask) closeEdit(); };
+
+btnAdd.onclick = ()=>openEdit('add', null);
+
+function syncDerived(){
+  const p = parsePlaceId(fPlaceId.value);
+  fCode.value = p.code || '';
+  fName.value = p.name || '';
+  fWarehouse.value = p.warehouse || '';
+}
+fPlaceId.addEventListener('input', syncDerived);
+
+function validInt(v){
+  if(v === '' || v === null || v === undefined) return false;
+  const n = Number(v);
+  return Number.isInteger(n) && n >= 0;
+}
+
+btnSave.onclick = ()=>{
+  const placeId = String(fPlaceId.value||'').trim();
+  const parsed = parsePlaceId(placeId);
+
+  // placeId 校验：必填，且建议含下划线；若没下划线，名称会为空，后续难用
+  let ok = true;
+  if(!placeId || !placeId.includes('_') || !parsed.code || !parsed.name){
+    ePlaceId.style.display='block';
+    ok = false;
+  }else{
+    ePlaceId.style.display='none';
+  }
+
+  const capRaw = String(fCap.value||'').trim();
+  if(!validInt(capRaw)){
+    eCap.style.display='block';
+    ok = false;
+  }else{
+    eCap.style.display='none';
+  }
+
+  if(!ok) return;
+
+  // 唯一性：新增时 placeId 不可重复
+  if(!editingUid){
+    const dup = DATA.some(x=>x.placeId === placeId);
+    if(dup){
+      toast('作业地ID 已存在，请换一个');
+      return;
+    }
+  }else{
+    const dup = DATA.some(x=>x.placeId === placeId && x.uid !== editingUid);
+    if(dup){
+      toast('作业地ID 与其他记录重复，请调整');
+      return;
+    }
+  }
+
+  const row = {
+    uid: editingUid || cryptoRandomId(),
+    placeId,
+    code: parsed.code,
+    name: parsed.name,
+    warehouse: parsed.warehouse,
+    capacity: Number(capRaw),
+    enabled: Number(fEnabled.value) === 1 ? 1 : 0
+  };
+
+  if(editingUid){
+    const idx = DATA.findIndex(x=>x.uid===editingUid);
+    if(idx>=0) DATA[idx]=row;
+  }else{
+    DATA.unshift(row);
+  }
+
+  saveData();
+  closeEdit();
+  render();
+  toast('已保存');
+};
+
+function editRow(uid){
+  const row = DATA.find(x=>x.uid===uid);
+  if(!row) return;
+  openEdit('edit', row);
+}
+
+function toggleEnable(uid, val){
+  const idx = DATA.findIndex(x=>x.uid===uid);
+  if(idx<0) return;
+  DATA[idx].enabled = val;
+  saveData();
+  render();
+}
+
+function removeRow(uid){
+  const row = DATA.find(x=>x.uid===uid);
+  if(!row) return;
+  const ok = confirm(`确认删除作业地？\n\n${row.placeId}\n${row.name||''}`);
+  if(!ok) return;
+  // 软删除：直接从数组移除（本地仍可通过“恢复默认数据”回到初始）
+  DATA = DATA.filter(x=>x.uid!==uid);
+  saveData();
+  render();
+}
+
+/* =========================
+   版本弹窗 + 三件套（SLMS-ThreeKitStyle）
+========================= */
+const verBtn = document.getElementById('verBtn');
+const verMask = document.getElementById('verMask');
+
+verBtn.onclick = ()=>{ verMask.style.display='flex'; };
+function closeVer(){ verMask.style.display='none'; }
+verMask.onclick = (e)=>{ if(e.target===verMask) closeVer(); };
+
+// tabs
+document.querySelectorAll('.vTab').forEach(t=>{
+  t.onclick = ()=>{
+    document.querySelectorAll('.vTab').forEach(x=>x.classList.remove('active'));
+    t.classList.add('active');
+    const tab = t.getAttribute('data-tab');
+    document.getElementById('panel-req').classList.toggle('active', tab==='req');
+    document.getElementById('panel-kit').classList.toggle('active', tab==='kit');
+  };
+});
+
+// three-kit docs content
+const docTitle = document.getElementById('docTitle');
+const docPre = document.getElementById('docPre');
+const btnCopyDoc = document.getElementById('btnCopyDoc');
+
+const DOCS = {
+  schema:
+`# slms-schema.yaml (示意)
+version: ${PAGE_VERSION}
+module: master
+entity: stuffing_place
+primary_key: uid
+
+tables:
+  stuffing_place:
+    columns:
+      uid: { type: string, desc: "内部唯一ID" }
+      placeId: { type: string, desc: "作业地ID，如 011_A3仓库", unique: true }
+      code: { type: string, desc: "前三位数字代码，如 011" }
+      name: { type: string, desc: "下划线后名称，如 A3仓库" }
+      warehouse: { type: string, desc: "仓库名称（名称前2位），如 A3/B1/C2" }
+      capacity: { type: int, desc: "可摆放箱量" }
+      enabled: { type: int, desc: "使用状态：1使用中/0停用" }
+    indexes:
+      - [placeId]
+      - [code]
+      - [warehouse]
+`,
+
+  dict:
+`# slms-data-dict.md (字段口径说明)
+- uid
+  - 说明：页面内部生成的唯一键（演示用），真实系统可由数据库生成
+- placeId（作业地ID）
+  - 例：011_A3仓库 / 041_B3东侧
+  - 口径：建议全局唯一，作为业务识别键
+- code（前三位数字）
+  - 口径：取 placeId 前三位数字；若不满足，视为输入不合规
+- name（名称）
+  - 口径：取 placeId 下划线 '_' 之后的字符串（可包含中文）
+- warehouse（仓库名称，2位）
+  - 口径：取 name 前两位字符；不足两位则取现有字符
+- capacity（可摆放箱量）
+  - 口径：整数 >= 0
+- enabled（使用状态）
+  - 口径：1=使用中；0=停用
+`,
+
+  ui:
+`# slms-ui-spec.md (页面交互/运算/入口)
+页面：master/stuffing-place-manage.html
+版本：${PAGE_VERSION}
+
+1) 列表
+- 支持关键字搜索：ID/名称/仓库/代码
+- 支持筛选：使用状态、仓库
+- 表头固定；内容溢出自动滚动（纵向优先；宽表支持横向）
+
+2) 新增/编辑
+- 输入 placeId（必填，且必须含 '_' 以便解析 name）
+- 自动解析并展示：code / name / warehouse（只读）
+- 输入 capacity（整数>=0）
+- 选择 enabled（使用中/停用）
+
+3) 操作
+- 启用/停用：列表行按钮快速切换
+- 删除：确认后从列表移除（演示：软删除策略可按后续规范调整）
+
+4) 数据
+- 演示阶段：LocalStorage 保存
+- “恢复默认测试数据”：重置为内置的 9 条示例
+`
+};
+
+let currentDocKey = 'schema';
+function renderDoc(key){
+  currentDocKey = key;
+  const map = {schema:'slms-schema.yaml', dict:'slms-data-dict.md', ui:'slms-ui-spec.md'};
+  docTitle.textContent = map[key] || 'document';
+  docPre.textContent = DOCS[key] || '';
+}
+renderDoc('schema');
+
+document.querySelectorAll('.tkBtn').forEach(btn=>{
+  btn.onclick = ()=>{
+    document.querySelectorAll('.tkBtn').forEach(x=>x.classList.remove('active'));
+    btn.classList.add('active');
+    renderDoc(btn.getAttribute('data-doc'));
+  };
+});
+
+btnCopyDoc.onclick = async ()=>{
+  try{
+    await navigator.clipboard.writeText(DOCS[currentDocKey] || '');
+    toast('已复制');
+  }catch(e){
+    toast('复制失败（浏览器限制）');
+  }
+};
+
+/* =========================
+   Toast（轻提示）
+========================= */
+let toastTimer=null;
+function toast(msg){
+  let el = document.getElementById('toast');
+  if(!el){
+    el = document.createElement('div');
+    el.id = 'toast';
+    el.style.position='fixed';
+    el.style.left='50%';
+    el.style.bottom='18px';
+    el.style.transform='translateX(-50%)';
+    el.style.padding='10px 12px';
+    el.style.background='rgba(17,24,39,.92)';
+    el.style.color='#fff';
+    el.style.borderRadius='12px';
+    el.style.fontWeight='900';
+    el.style.fontSize='12px';
+    el.style.zIndex='10000';
+    el.style.boxShadow='0 10px 30px rgba(0,0,0,.25)';
+    document.body.appendChild(el);
+  }
+  el.textContent=msg;
+  el.style.display='block';
+  clearTimeout(toastTimer);
+  toastTimer=setTimeout(()=>{ el.style.display='none'; }, 1600);
+}
+
+/* =========================
+   初始化
+========================= */
+render();
+document.getElementById('btnReset').title = `LocalStorage Key: ${LS_KEY}`;
+</script>
+</body>
+</html>
