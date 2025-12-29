@@ -1,14 +1,13 @@
-<!--
+<!-- 
 File: crp/crp-entry.html
-Version: crp-entry-v17
+Version: crp-entry-v22
 Date: 2025-12-29
 
-v17 变更点（在 v16 基础上，确保不丢失任何功能）：
-1) 航次选择改为读取 master/voyage-manage 的主数据：localStorage['slms_voyages_v1']
-2) 船公司/船舶从字典表取显示值：carriers=slms_carriers_v1(code), vessels=slms_vessels_v1(name)
-3) 本页“新建航次”兜底改为：下拉选船公司/船舶（不允许自由输入），并写入 slms_voyages_v1
-4) 文件名从 crp-management.html 改为 crp-entry.html（录入语义）
-5) 右上角版本号显示与“三件套”弹窗标题同步更新为 v17
+v22 变更点（基于 v21 最新主线）：
+1) 右侧 CRP 列表：选中记录显示的【修改】按钮调整到【发送/再发送】按钮右侧
+   - 目的：发送/再发送按钮始终在同一列位置，更美观
+2) 三件套（schema/dict/ui-spec）同步更新：UI Spec 增加按钮顺序说明
+3) 三件套弹窗样式继续固定为 SLMS-ThreeKitStyle（左侧导航 + 右侧单文档内容区，超出自动滚动）
 -->
 
 <!doctype html>
@@ -59,6 +58,10 @@ body{margin:0;font-family:Arial,"Microsoft YaHei";background:var(--bg);color:var
 .pill .dot{width:8px;height:8px;border-radius:99px;background:#bbb}
 .pill.draft .dot{background:var(--warn)}
 .pill.submitted .dot{background:var(--ok)}
+.pill.modified{border-color:rgba(181,71,8,.25);background:rgba(181,71,8,.06);color:#7a3a06}
+.pill.modified .dot{background:var(--warn)}
+.pill.editing{border-color:rgba(224,32,92,.25);background:rgba(224,32,92,.06);color:#8a0f33}
+.pill.editing .dot{background:var(--brand)}
 
 .label{font-size:12px;color:var(--muted)}
 .req{color:var(--brand);font-weight:900;margin-left:4px}
@@ -83,31 +86,9 @@ body{margin:0;font-family:Arial,"Microsoft YaHei";background:var(--bg);color:var
 .tbl th,.tbl td{border-bottom:1px solid var(--line);padding:8px;font-size:12px;white-space:nowrap}
 .tbl th{background:#fafafa;color:var(--muted);text-align:left;font-weight:900}
 .tbl td{background:#fff}
-
-/* 去掉 width:100% 否则永远铺满单元格 */
-.tbl input{
-  border:1px solid #ddd;
-  border-radius:10px;
-  padding:8px 8px;
-  font-size:12px;
-  outline:none;
-}
-
-/* Booking 输入框：适中，不要撑满（可按需调） */
-.tbl input.booking{
-  width:170px;
-  max-width:100%;
-}
-
-/* 数字输入框：两位数空间 */
-.tbl input.qty{
-  width:52px;
-  text-align:center;
-  padding-left:6px;
-  padding-right:6px;
-  font-variant-numeric: tabular-nums;
-  font-family: ui-monospace, Menlo, Consolas, monospace;
-}
+.tbl input{border:1px solid #ddd;border-radius:10px;padding:8px 8px;font-size:12px;outline:none}
+.tbl input.booking{width:170px;max-width:100%}
+.tbl input.qty{width:52px;text-align:center;padding-left:6px;padding-right:6px;font-variant-numeric: tabular-nums;font-family: ui-monospace, Menlo, Consolas, monospace;}
 
 .drop{border:1.5px dashed #d6d6de;border-radius:12px;padding:12px;background:#fbfbfd;margin-top:10px}
 .fileList{margin:6px 0 0;padding-left:18px;font-size:12px;color:var(--muted);line-height:1.7}
@@ -126,7 +107,7 @@ body{margin:0;font-family:Arial,"Microsoft YaHei";background:var(--bg);color:var
 .tableOuter{flex:1 1 auto;min-height:0}
 .tableScroll{height:100%;overflow:auto;border-top:1px solid var(--line)}
 
-table{width:100%;border-collapse:collapse;min-width:1550px}
+table{width:100%;border-collapse:collapse;min-width:1900px}
 th,td{border-bottom:1px solid var(--line);padding:8px 10px;font-size:12px;white-space:nowrap}
 th{background:#fafafa;color:var(--muted);text-align:left;font-weight:900}
 tr:hover td{background:#fff7fb}
@@ -135,7 +116,7 @@ tr.selected td{outline:2px solid rgba(224,32,92,.25);background:#fff7fb}
 .ellip.sm{max-width:160px}
 .num{text-align:center;font-variant-numeric:tabular-nums;font-family:ui-monospace,Menlo,Consolas,monospace;width:62px}
 
-/* 状态胶囊（简洁版：不显示运输公司） */
+/* 状态胶囊（仅发送维度） */
 .action{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 .stPill{
   display:inline-flex;align-items:center;gap:6px;
@@ -148,13 +129,14 @@ tr.selected td{outline:2px solid rgba(224,32,92,.25);background:#fff7fb}
 .stPill.sent{border-color:rgba(26,127,55,.25);background:rgba(26,127,55,.06);color:#135d2a}
 .stPill.sent .dot{background:var(--ok)}
 
-/* 行内按钮：发送/再发送 */
+/* 行内按钮：发送/再发送/修改 */
 .miniBtn{
   padding:6px 10px;border-radius:999px;border:1px solid #ddd;background:#fff;
   font-size:12px;font-weight:900;cursor:pointer
 }
 .miniBtn.primary{background:var(--brand);border-color:var(--brand);color:#fff}
 .miniBtn.re{border-color:rgba(26,127,55,.35);background:rgba(26,127,55,.06);color:#135d2a}
+.miniBtn.edit{border-color:rgba(224,32,92,.35);background:rgba(224,32,92,.06);color:#8a0f33}
 .miniBtn:active{transform:translateY(1px)}
 .miniBtn.dis{opacity:.45;cursor:not-allowed}
 
@@ -163,32 +145,51 @@ tr.selected td{outline:2px solid rgba(224,32,92,.25);background:#fff7fb}
 .modalHd{padding:12px 16px;border-bottom:1px solid #eee;font-weight:900;display:flex;justify-content:space-between;align-items:center}
 .modalBd{padding:14px 16px;max-height:72vh;overflow:auto;font-size:13px;line-height:1.7}
 .modalFt{padding:12px 16px;border-top:1px solid #eee;display:flex;justify-content:flex-end;gap:10px}
+
 .vTableWrap{border:1px solid var(--line);border-radius:12px;overflow:hidden}
 .vTableScroll{max-height:360px;overflow:auto}
-.vTbl{width:100%;border-collapse:collapse;min-width:820px}
+.vTbl{width:100%;border-collapse:collapse;min-width:980px}
 .vTbl th,.vTbl td{border-bottom:1px solid var(--line);padding:10px;font-size:12px;white-space:nowrap}
 .vTbl th{background:#fafafa;color:var(--muted);text-align:left;font-weight:900}
 .vRow:hover td{background:#fff7fb}
 .vRow.selected td{outline:2px solid rgba(224,32,92,.25);background:#fff7fb}
 
-/* ===== v16: 三件套展示样式 ===== */
-.docBlock{border:1px solid var(--line);border-radius:12px;overflow:hidden;margin:12px 0;background:#fff}
-.docHd{padding:10px 12px;background:#fafafa;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;gap:10px}
-.docHd b{font-size:13px}
-.docBd{padding:12px}
-pre.code{
-  margin:0;
+/* ===== 三件套弹窗（SLMS-ThreeKitStyle） ===== */
+.reqModal{width:1180px;max-width:96vw}
+.reqBody{padding:0;max-height:78vh;overflow:hidden}
+.reqWrap{display:flex;min-height:70vh}
+.reqNav{
+  width:260px;flex:0 0 auto;
+  border-right:1px solid #eee;
+  background:#fbfbfd;
   padding:12px;
+}
+.reqNav .h{font-size:12px;color:var(--muted);margin:2px 0 10px}
+.reqNavBtn{
+  width:100%;
+  text-align:left;
+  padding:10px 12px;
   border-radius:10px;
   border:1px solid #eee;
-  background:#fbfbfd;
-  overflow:auto;
-  font-size:12px;
-  line-height:1.6;
-  font-family: ui-monospace, Menlo, Consolas, monospace;
-  white-space:pre;
+  background:#fff;
+  cursor:pointer;
+  font-weight:900;
+  font-size:13px;
+  margin-bottom:10px;
 }
+.reqNavBtn.active{
+  border-color:rgba(224,32,92,.35);
+  background:rgba(224,32,92,.06);
+  color:#8a0f33;
+}
+.reqMain{flex:1 1 auto;min-width:0;padding:14px 16px;overflow:auto}
+.docCard{border:1px solid var(--line);border-radius:12px;overflow:hidden;background:#fff}
+.docCardHd{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 12px;background:#fafafa;border-bottom:1px solid var(--line)}
+.docCardHd b{font-size:13px}
 .badge{font-size:12px;color:var(--muted);border:1px solid #eee;background:#fff;border-radius:999px;padding:4px 10px}
+.copyBtn{padding:6px 10px;border-radius:999px;border:1px solid #ddd;background:#fff;font-size:12px;font-weight:900;cursor:pointer}
+pre.code{margin:0;padding:12px;font-size:12px;line-height:1.6;font-family: ui-monospace, Menlo, Consolas, monospace;white-space:pre;overflow:auto;background:#fbfbfd}
+.hidden{display:none}
 </style>
 </head>
 
@@ -202,7 +203,7 @@ pre.code{
     </label>
     <div class="ver" id="verBtn" title="点击查看三件套（schema / dict / ui spec）">
       <span class="dot"></span>
-      <span>crp-entry-v17</span>
+      <span>crp-entry-v22</span>
     </div>
   </div>
 </div>
@@ -213,7 +214,7 @@ pre.code{
     <!-- 左：录入 -->
     <div class="card" id="leftCard">
       <div class="cardHd">
-        <span>录入（一次仅 1 个 Booking No）</span>
+        <span id="leftTitle">录入（一次仅 1 个 Booking No）</span>
         <span class="pill draft" id="statePill"><span class="dot"></span>草稿</span>
       </div>
 
@@ -226,7 +227,7 @@ pre.code{
             </div>
           </div>
           <div class="tblBd">
-            <div class="small">提交后会清空 Booking/箱量/附件，保留航次方便连续录入。</div>
+            <div class="small" id="leftHint">提交后会清空 Booking/箱量/附件，保留航次方便连续录入。</div>
             <div style="overflow:auto;margin-top:8px">
               <table class="tbl">
                 <thead>
@@ -274,6 +275,12 @@ pre.code{
             <input class="input readonly" id="voyage" readonly placeholder="必须从系统选择">
           </div>
 
+          <div class="field full">
+            <div class="label">截关时间<span class="req">*</span></div>
+            <input class="input" id="cutoffAt" type="datetime-local" placeholder="请选择/录入截关时间">
+            <div class="small">选择航次时会自动回填（若主数据维护了截关时间）。</div>
+          </div>
+
           <div class="field">
             <div class="label">FF担当<span class="req">*</span></div>
             <input class="input" id="ffOwner" placeholder="例如：张三 / Kim">
@@ -291,15 +298,16 @@ pre.code{
 
         <div class="drop">
           <b>CRP 文件（附件）</b>
-          <div class="small" style="margin-top:6px">演示：仅统计文件数量并显示文件名。</div>
+          <div class="small" style="margin-top:6px" id="fileHint">演示：仅统计文件数量并显示文件名。</div>
           <input type="file" id="fileInput" multiple>
           <ol class="fileList" id="fileList"><li>未选择文件</li></ol>
         </div>
 
         <div class="row" style="margin-top:12px">
-          <button class="btn" onclick="clearFormAll()">新建</button>
-          <button class="btn" onclick="saveOne('草稿')">保存草稿</button>
-          <button class="btn primary" onclick="saveOne('已提交')">提交</button>
+          <button class="btn" id="btnNew" onclick="clearFormAll()">新建</button>
+          <!-- v21：保存草稿删除，替换为复制 -->
+          <button class="btn" id="btnCopyVoy" onclick="copyVoyageFromSelected()">复制</button>
+          <button class="btn primary" id="btnSubmit" onclick="onSubmitMain()">提交</button>
         </div>
 
         <div class="toast" id="toast"></div>
@@ -341,12 +349,31 @@ pre.code{
               <option value="已发送">已发送</option>
             </select>
           </div>
+
+          <!-- v21：日期类型 + 日期范围 -->
+          <div class="field" style="min-width:150px">
+            <div class="label">日期类型</div>
+            <select class="select" id="f_dateType" onchange="onDateTypeChange()">
+              <option value="createdAt">录入时间</option>
+              <option value="etd">ETD</option>
+            </select>
+          </div>
+          <div class="field" style="min-width:150px">
+            <div class="label">开始日期</div>
+            <input class="input" id="f_dateFrom" type="date" onchange="render()">
+          </div>
+          <div class="field" style="min-width:150px">
+            <div class="label">结束日期</div>
+            <input class="input" id="f_dateTo" type="date" onchange="render()">
+          </div>
+
           <div class="field" style="min-width:110px;align-self:flex-end">
             <button class="btn" type="button" onclick="resetFilters()">重置</button>
           </div>
         </div>
+
         <div class="small" style="margin-top:8px">
-          勾选顶部“发送CRP”后，行内仅显示：未发送=发送；已发送=再发送（embed 仅显示发送面板）。
+          行内发送按钮规则：<b>未发送=发送；已发送 或 已修改=再发送</b>（需勾选顶部“发送CRP”）。
         </div>
       </div>
 
@@ -356,11 +383,12 @@ pre.code{
             <thead>
               <tr>
                 <th style="min-width:140px">录入时间</th>
-                <th style="min-width:160px">Booking</th>
+                <th style="min-width:160px">Booking No</th>
                 <th style="min-width:90px">船公司</th>
                 <th style="min-width:220px">船名</th>
                 <th style="min-width:90px">航次</th>
                 <th style="min-width:110px">ETD</th>
+                <th style="min-width:160px">截关时间</th>
                 <th style="min-width:90px">FF</th>
                 <th style="min-width:90px">CL</th>
 
@@ -371,7 +399,7 @@ pre.code{
 
                 <th class="num" style="width:70px">文件</th>
                 <th style="min-width:90px">运输公司</th>
-                <th style="min-width:230px">状态 / 操作</th>
+                <th style="min-width:260px">状态 / 操作</th>
               </tr>
             </thead>
             <tbody id="tbody"></tbody>
@@ -380,7 +408,7 @@ pre.code{
       </div>
 
       <div class="cardBd">
-        <div class="small">说明：行内按钮仅做演示；真实系统会走权限+发送日志。</div>
+        <div class="small">说明：演示版使用 localStorage；真实系统需权限/审计/日志。</div>
       </div>
     </div>
 
@@ -389,7 +417,7 @@ pre.code{
 
 <!-- 航次选择弹窗 -->
 <div class="modalMask" id="voyMask">
-  <div class="modal">
+  <div class="modal" style="width:1120px;max-width:96vw">
     <div class="modalHd">
       <span>选择航次（系统主数据）</span>
       <span style="cursor:pointer;color:var(--muted)" onclick="closeVoyageModal()">关闭</span>
@@ -397,8 +425,8 @@ pre.code{
     <div class="modalBd">
       <div class="row" style="justify-content:space-between">
         <div class="field" style="flex:1;min-width:320px">
-          <div class="label">搜索（船公司/船名/航次/ETD）</div>
-          <input class="input" id="voySearch" placeholder="例如：MSK / ARINA / 552S / 2025-12" oninput="renderVoyages()">
+          <div class="label">搜索（船公司/船名/航次/ETD/截关）</div>
+          <input class="input" id="voySearch" placeholder="例如：MSK / ARINA / 552S / 2025-12 / 2025-12-29T18:00" oninput="renderVoyages()">
         </div>
         <div class="row" style="align-items:flex-end">
           <button class="btn" type="button" onclick="openNewVoyage()">+ 新建航次</button>
@@ -408,19 +436,18 @@ pre.code{
       <div class="vTableWrap" style="margin-top:12px">
         <div class="vTableScroll">
           <table class="vTbl">
-            <thead><tr><th>船公司</th><th>船名</th><th>航次</th><th>ETD</th><th>操作</th></tr></thead>
+            <thead><tr><th>船公司</th><th>船名</th><th>航次</th><th>ETD</th><th>截关时间</th><th>操作</th></tr></thead>
             <tbody id="voyTbody"></tbody>
           </table>
         </div>
       </div>
 
       <div class="small" style="margin-top:10px">
-        规则：主页面字段只读；必须在此处选择（或新建）后回填。
+        规则：主页面字段只读；必须在此处选择（或新建）后回填。截关时间会一并回填到主页面（可再手动调整）。
       </div>
 
       <div style="height:1px;background:var(--line);margin:12px 0"></div>
 
-      <!-- v17: 新建航次（兜底：下拉选择船公司/船舶，不允许自由输入） -->
       <div id="newVoyBox" style="display:none">
         <b>新建航次（兜底演示：写入主数据）</b>
         <div class="formGrid" style="margin-top:10px">
@@ -440,6 +467,10 @@ pre.code{
             <div class="label">航次<span class="req">*</span></div>
             <input class="input" id="newVoyage" placeholder="例如：552S">
           </div>
+          <div class="field full">
+            <div class="label">截关时间<span class="req">*</span></div>
+            <input class="input" id="newCutoffAt" type="datetime-local">
+          </div>
         </div>
         <div class="small" style="margin-top:8px">
           说明：为保证受控，本页新建时不允许手输船公司/船舶；若下拉为空，请先维护 master 字典。
@@ -456,7 +487,7 @@ pre.code{
   </div>
 </div>
 
-<!-- embed 发送面板：iframe（只显示发送面板，不显示发送页列表） -->
+<!-- embed 发送面板：iframe -->
 <div class="modalMask" id="sendMask">
   <div class="modal" style="width:1100px;max-width:96vw">
     <div class="modalHd">
@@ -473,23 +504,37 @@ pre.code{
   </div>
 </div>
 
-<!-- 三件套（替换 requirements 弹窗内容） -->
+<!-- 三件套（SLMS-ThreeKitStyle） -->
 <div class="modalMask" id="reqMask">
-  <div class="modal" style="width:1060px;max-width:96vw">
+  <div class="modal reqModal">
     <div class="modalHd">
-      <span>三件套（CRP 录入 / crp-entry-v17）</span>
+      <span>三件套（CRP 录入 / crp-entry-v22）</span>
       <span style="cursor:pointer;color:var(--muted)" onclick="closeReq()">关闭</span>
     </div>
-    <div class="modalBd">
 
-      <!-- slms-schema.yaml -->
-      <div class="docBlock">
-        <div class="docHd">
-          <b>slms-schema.yaml</b>
-          <span class="badge">结构唯一真源（Schema）</span>
+    <div class="modalBd reqBody">
+      <div class="reqWrap">
+        <div class="reqNav">
+          <div class="h">导航</div>
+          <button class="reqNavBtn active" id="navSchema" onclick="showDoc('schema')">slms-schema.yaml</button>
+          <button class="reqNavBtn" id="navDict" onclick="showDoc('dict')">slms-data-dict.md</button>
+          <button class="reqNavBtn" id="navUi" onclick="showDoc('ui')">slms-ui-spec.md</button>
+          <div class="small" style="margin-top:8px">
+            提示：本弹窗内容与版本号同步维护（v22）。
+          </div>
         </div>
-        <div class="docBd">
-<pre class="code">version: slms-crp-schema-v1
+
+        <div class="reqMain">
+          <!-- schema -->
+          <div id="docSchema" class="docCard">
+            <div class="docCardHd">
+              <b>slms-schema.yaml</b>
+              <div class="row">
+                <span class="badge">结构唯一真源（Schema）</span>
+                <button class="copyBtn" type="button" onclick="copyText('schemaText')">复制</button>
+              </div>
+            </div>
+<pre class="code" id="schemaText">version: slms-crp-schema-v4
 domain: slms
 module: crp
 
@@ -499,245 +544,173 @@ entities:
     description: "航次主数据（系统受控）。主页面只读，必须从弹窗选择/新建后回填。"
     primary_key: id
     fields:
-      id:        { type: string, required: true, example: "V002" }
+      id:        { type: string, required: true, example: "VOY-1735..." }
       carrier:   { type: string, required: true, example: "MSC" }
       vessel:    { type: string, required: true, example: "MSC ARINA" }
       voyage:    { type: string, required: true, example: "552S" }
       etd:       { type: date,   required: true, example: "2025-12-29" }
-      createdAt: { type: int64,  required: false, description: "毫秒时间戳（演示可无）" }
+      cutoffAt:  { type: datetime, required: false, example: "2025-12-29T18:00", note: "截关时间；若主数据维护则回填" }
 
     constraints:
       - name: uq_voyage_master_exact
         type: unique
         fields: [carrier, vessel, voyage, etd]
-        note: "完全相同的航次不得重复"
+        note: "完全相同的航次不得重复（截关时间可不同但通常应一致）"
 
   crp_booking:
     description: "CRP 录入记录（按 Booking No 汇总）。本页一次仅录入 1 个 Booking No。"
     primary_key: bookingNo
     fields:
-      bookingNo: { type: string, required: true, example: "BK20251224-01" }
+      bookingNo: { type: string, required: true }
 
-      # 4 类箱量（0~99；可空；至少有一项 &gt; 0）
       gp20: { type: int, required: false, min: 0, max: 99 }
       gp40: { type: int, required: false, min: 0, max: 99 }
       hc40: { type: int, required: false, min: 0, max: 99 }
       rh40: { type: int, required: false, min: 0, max: 99 }
 
-      # 航次信息（来自 voyage_master 回填，页面字段只读）
       voyageId: { type: string, required: true, fk: voyage_master.id }
       carrier:  { type: string, required: true }
       vessel:   { type: string, required: true }
       voyage:   { type: string, required: true }
       etd:      { type: date,   required: true }
+      cutoffAt: { type: datetime, required: true, note: "截关时间：选择航次回填；也允许手动调整" }
 
-      # 负责人
-      ffOwner:  { type: string, required: true, description: "FF担当（自由输入）" }
-      clOwner:  { type: string, required: true, description: "CL担当（自由输入）" }
-
+      ffOwner:  { type: string, required: true }
+      clOwner:  { type: string, required: true }
       remark:   { type: string, required: false }
 
-      # 附件（演示：仅保存数量；真实系统应保存文件元数据/存储引用）
       fileCount:{ type: int, required: true, min: 0, default: 0 }
 
-      # 发送相关（本页展示：状态胶囊不展示运输公司名称；运输公司单独列）
       sendState:{ type: enum, required: true, values: ["未发送","已发送"], default: "未发送" }
-      vendor:   { type: string, required: false, description: "运输公司（仅已发送时显示；未发送留空）" }
+      vendor:   { type: string, required: false, note: "运输公司，仅已发送时有值；未发送清空" }
 
-      # 记录元信息
-      createdAt:{ type: int64, required: true, description: "录入时间（毫秒时间戳）" }
-      entryState:{ type: enum, required: true, values: ["草稿","已提交"] }
+      entryState:{ type: enum, required: true, values: ["草稿","已提交","已修改"] }
 
-    constraints:
-      - name: pk_crp_booking
-        type: unique
-        fields: [bookingNo]
-        note: "同一 Booking No 覆盖更新（upsert）"
-
-      - name: ck_qty_at_least_one
-        type: check
-        note: "gp20/gp40/hc40/rh40 至少 1 项 &gt; 0"
-
-      - name: ck_qty_0_99
-        type: check
-        note: "每个箱量字段范围 0~99（页面输入最多 2 位）"
-
-integration_notes:
-  local_storage_keys:
-    crp_rows: "slms_crp_bookings_v1"
-    splitter: "slms_crp_split_leftW_v1"
+      createdAt:{ type: int64, required: true, note: "首次创建时间戳；修改不刷新" }
 
 ui_contract:
-  send_embed_url: "send-crp.html?embed=1&amp;booking={bookingNo}&amp;mode={send|resend}"
-  post_message_close: "type=SLMS_CLOSE_SEND_PANEL"
-</pre>
+  send_embed_url: "send-crp.html?embed=1&booking={bookingNo}&mode={send|resend}"
+
+state_rules:
+  - name: modify_after_sent
+    when: "保存修改 && 原 sendState=已发送"
+    then:
+      entryState: "已修改"
+      sendState: "未发送"
+      vendor: ""
+
+  - name: send_button_rule_v21
+    when: "右侧列表行内渲染发送按钮"
+    then:
+      ui:
+        if: "sendState=未发送 AND entryState!=已修改"
+        button: "发送"
+        else_button: "再发送"
+      note: "已发送或已修改都显示再发送"
+
+  - name: copy_voyage_from_selected_v21
+    when: "左侧点击复制"
+    then:
+      ui:
+        require: "右侧必须选中某条 CRP"
+        action: "把选中记录的 voyageId + 航次字段(船公司/船名/航次/ETD/截关)回填到左侧录入面板"
+        keep: "Booking/箱量/附件不自动填"</pre>
+          </div>
+
+          <!-- dict -->
+          <div id="docDict" class="docCard hidden">
+            <div class="docCardHd">
+              <b>slms-data-dict.md</b>
+              <div class="row">
+                <span class="badge">字段/口径说明（Data Dictionary）</span>
+                <button class="copyBtn" type="button" onclick="copyText('dictText')">复制</button>
+              </div>
+            </div>
+<pre class="code" id="dictText"># SLMS - CRP 录入（crp-entry）数据字典（v22）
+
+## 1) crp_booking（按 Booking No 汇总）
+| 字段 | 类型 | 必填 | 口径/说明 |
+|---|---|---:|---|
+| bookingNo | string | Y | Booking No（业务主键；同 booking 覆盖 upsert） |
+| gp20/gp40/hc40/rh40 | int(0~99) | N | 四类箱量；至少 1 项 > 0 |
+| voyageId | string | Y | 航次主数据 id（主页面只读回填） |
+| carrier/vessel/voyage/etd | string/date | Y | 航次信息回填字段 |
+| cutoffAt | datetime | Y | 截关时间：选择航次回填；允许手动调整（必填） |
+| ffOwner/clOwner | string | Y | 负责人（必填） |
+| remark | string | N | 备注（可空） |
+| fileCount | int | Y | 附件数量（演示口径） |
+| sendState | enum | Y | 未发送 / 已发送 |
+| vendor | string | N | 运输公司：仅 sendState=已发送 时有效；未发送应为空 |
+| entryState | enum | Y | 草稿 / 已提交 / 已修改（列表不展示，但用于联动与按钮判定） |
+| createdAt | int64(ms) | Y | 首次创建时间戳（修改不刷新） |
+
+## v21 关键口径（延续）
+### A) 发送/再发送按钮判定
+- 未发送（sendState=未发送 且 entryState!=已修改） -> 显示【发送】
+- 已发送 或 已修改 -> 显示【再发送】
+
+### B) 左侧“复制”按钮（替代保存草稿）
+- 若右侧未选中记录：提示用户先从列表选择
+- 若已选中记录：仅复制航次信息（voyageId + 航次字段 + 截关时间）回填到左侧
+  - 不自动填 Booking/箱量/附件
+
+### C) 右侧列表日期范围过滤
+- 日期类型：录入时间(createdAt) / ETD(etd)
+- 默认范围：
+  - createdAt：过去7天到今天
+  - etd：今天到未来14天
+
+## v22 UI 细节
+- “状态/操作”列内按钮顺序调整：发送/再发送在前，修改在后（仅选中行显示修改）</pre>
+          </div>
+
+          <!-- ui -->
+          <div id="docUi" class="docCard hidden">
+            <div class="docCardHd">
+              <b>slms-ui-spec.md</b>
+              <div class="row">
+                <span class="badge">页面交互/校验/入口（UI Spec）</span>
+                <button class="copyBtn" type="button" onclick="copyText('uiText')">复制</button>
+              </div>
+            </div>
+<pre class="code" id="uiText"># SLMS - CRP 录入页（crp-entry）UI Spec（v22）
+
+## 1) 左侧录入区
+### 1.1 操作按钮
+- 新建：清空录入（保留/清空规则按实现）
+- 复制（v21新增，替代保存草稿）：
+  - 若未选中右侧 CRP：提示“请先从列表选择”
+  - 若已选中：把选中记录的航次信息回填到左侧（voyageId + carrier/vessel/voyage/etd/cutoffAt）
+  - 不复制 Booking/箱量/附件
+- 提交：保存录入
+
+## 2) 右侧列表
+### 2.1 发送/再发送按钮（v21）
+- 显示前提：用户勾选顶部“发送CRP”
+- 判定：
+  - sendState=未发送 且 entryState!=已修改 -> 发送
+  - 否则（已发送 或 已修改）-> 再发送
+
+### 2.1.1 状态/操作列按钮顺序（v22）
+- 为保证视觉一致性，“状态 / 操作”列内的按钮从左到右顺序固定为：
+  1) 发送 / 再发送（若有权限显示）
+  2) 修改（仅当该行被选中时显示）
+- 目标：发送/再发送按钮始终位于同一列位置
+
+### 2.2 查询条件：日期范围过滤（v21）
+- 日期类型下拉：
+  - 录入时间：按 createdAt 过滤（日期粒度）
+    - 默认：过去7天到今天
+  - ETD：按 etd 过滤（日期粒度）
+    - 默认：今天到未来14天
+- 日期范围为空时：
+  - 仍允许查询（实现中可自动回填默认值）</pre>
+          </div>
+
         </div>
-      </div>
-
-      <!-- slms-data-dict.md -->
-      <div class="docBlock">
-        <div class="docHd">
-          <b>slms-data-dict.md</b>
-          <span class="badge">字段/口径说明（Data Dictionary）</span>
-        </div>
-        <div class="docBd">
-<pre class="code"># SLMS - CRP 录入（crp-entry）数据字典
-
-## 1) voyage_master（航次主数据）
-| 字段 | 类型 | 必填 | 口径/说明 | 规则/校验 |
-|---|---|---:|---|---|
-| id | string | Y | 航次主键（系统生成/维护） | 主键唯一 |
-| carrier | string | Y | 船公司（系统受控） | 选择/新建产生，禁止主页面手输 |
-| vessel | string | Y | 船名（系统受控） | 同上 |
-| voyage | string | Y | 航次（系统受控） | 同上 |
-| etd | date | Y | 开船日（ETD） | 同上 |
-| createdAt | int64(ms) | N | 创建时间戳（演示可无） | - |
-> 唯一约束：carrier + vessel + voyage + etd 完全相同不可重复。
-
-## 2) crp_booking（按 Booking No 汇总的 CRP 录入记录）
-| 字段 | 类型 | 必填 | 口径/说明 | 规则/校验 |
-|---|---|---:|---|---|
-| bookingNo | string | Y | Booking No（业务主键） | 不能为空；同 booking 覆盖更新（upsert） |
-| gp20 | int(0~99) | N | 20GP 箱量 | 仅数字；页面最多 2 位；可空（等价 0） |
-| gp40 | int(0~99) | N | 40GP 箱量 | 同上 |
-| hc40 | int(0~99) | N | 40HC 箱量 | 同上 |
-| rh40 | int(0~99) | N | 40RH 箱量 | 同上 |
-| voyageId | string | Y | 航次主数据 id | 必须先选择航次（主页面字段只读回填） |
-| carrier | string | Y | 船公司 | 从航次回填；禁止主页面编辑 |
-| vessel | string | Y | 船名 | 从航次回填；禁止主页面编辑 |
-| voyage | string | Y | 航次 | 从航次回填；禁止主页面编辑 |
-| etd | date | Y | ETD | 从航次回填；禁止主页面编辑 |
-| ffOwner | string | Y | FF担当 | 自由输入；必填 |
-| clOwner | string | Y | CL担当 | 自由输入；必填 |
-| remark | string | N | 备注 | 可空 |
-| fileCount | int | Y | 附件数量（演示口径） | 真实系统应为附件清单/引用；本页仅存数量 |
-| sendState | enum | Y | 发送状态 | 未发送 / 已发送 |
-| vendor | string | N | 运输公司 | 仅 sendState=已发送 时有值；未发送显示空白 |
-| createdAt | int64(ms) | Y | 录入时间 | 用于列表排序与展示 |
-| entryState | enum | Y | 录入状态 | 草稿 / 已提交 |
-
-### 关键口径
-- “至少 1 个箱型箱量”：gp20/gp40/hc40/rh40 中，至少一项 &gt; 0。
-- “未发送/已发送”是发送结果维度；“草稿/已提交”是录入提交维度。
-- 列表状态胶囊不显示运输公司名称：运输公司单独列展示（仅已发送显示）。
-</pre>
-        </div>
-      </div>
-
-      <!-- slms-ui-spec.md -->
-      <div class="docBlock">
-        <div class="docHd">
-          <b>slms-ui-spec.md</b>
-          <span class="badge">页面交互/校验/入口（UI Spec）</span>
-        </div>
-        <div class="docBd">
-<pre class="code"># SLMS - CRP 录入页（crp-entry）UI Spec
-
-## 0. 页面定位
-- 用途：录入 CRP（按 Booking No 汇总）并在右侧列表检索/触发发送。
-- 一次录入：仅 1 个 Booking No（单行输入模型）。
-- 入口：crp/crp-entry.html
-
-## 1. 布局与自适应
-- 顶部：标题 + 权限模拟开关（发送CRP） + 版本号（点击打开三件套弹窗）。
-- 主体：左右两栏（左录入/右列表），中间 splitter 支持拖拽。
-- splitter：
-  - 拖拽改变左侧宽度 --leftW
-  - 持久化：localStorage['slms_crp_split_leftW_v1']
-- 小屏（&lt;=1300px）：变为单列；splitter 隐藏。
-
-## 2. 左侧录入区（一次 1 个 Booking）
-### 2.1 Booking & 箱量表
-- 字段：
-  - Booking No（必填）
-  - 20GP / 40GP / 40HC / 40RH（最多 2 位，仅数字，可空）
-- 输入限制：
-  - oninput：去非数字 + 截断 2 位（123 -&gt; 12）
-  - inputmode=numeric，maxlength=2（移动端友好）
-- 业务校验：
-  - Booking No 不能为空
-  - 四个箱量至少 1 项 &gt; 0
-  - 箱量必须为数字（空视为未填/0）
-
-### 2.2 航次信息（系统受控）
-- 主页面字段只读：船公司/船名/航次/ETD
-- 操作：
-  - 选择航次：打开“航次选择弹窗”
-  - 清空航次：清空回填字段 + selectedVoyageIdMain
-- 校验：提交/保存前必须已选择航次（voyageId 必填）
-
-### 2.3 负责人 & 备注 & 附件
-- FF担当（必填，自由输入）
-- CL担当（必填，自由输入）
-- 备注（可空）
-- 附件（演示）：
-  - 仅统计数量 fileCount
-  - UI 展示文件名列表
-  - 提交成功后清空附件选择
-
-### 2.4 按钮行为
-- 新建：清空录入区 + 附件 + 航次 + 负责人/备注；右侧选中清空；录入状态回到“草稿”
-- 保存草稿：
-  - 走同样校验（航次 + FF/CL + Booking + 至少 1 箱量）
-  - entryState=草稿
-  - 本页实现为 upsert（同 Booking 覆盖）
-- 提交：
-  - 校验同上
-  - entryState=已提交
-  - 成功后清空：Booking/箱量/附件（保留航次不清空，便于连续录入）
-- Toast：成功/失败给出提示（2.6s 自动收起）
-
-## 3. 航次选择弹窗（系统主数据）
-- 列表：支持按 “船公司/船名/航次/ETD” 模糊搜索
-- 选择：点击“选择”回填主页面并关闭弹窗
-- 新建航次（兜底）：
-  - 点击“+ 新建航次”展开表单
-  - 必填：船公司（下拉）、船舶（下拉）、航次、ETD
-  - 规则：完全相同（carrierId+vesselId+voyageNo+etd）不允许重复
-  - 保存后：写入主数据 slms_voyages_v1 并自动回填主页面
-- 推荐：日常维护应在 master/voyage-manage.html 统一维护（本页新建仅作兜底演示）
-
-## 4. 右侧 CRP 列表（按 Booking 汇总）
-- 数据源：localStorage['slms_crp_bookings_v1']（演示）
-- 列表过滤：
-  - Booking / 船公司 / 船名 / 航次：模糊匹配
-  - 状态：全部 / 未发送 / 已发送（精确）
-- 行选择：点击行高亮，并更新“已选：Booking”
-- 列展示：
-  - 录入时间（createdAt 格式化）
-  - Booking/船公司/船名/航次/ETD/FF/CL
-  - 四类箱量、文件数量
-  - 运输公司（仅已发送显示；未发送显示空）
-  - 状态胶囊（未发送/已发送）
-
-## 5. 发送权限与发送面板（embed）
-- 顶部勾选“发送CRP”：
-  - canSend=true：列表行内显示按钮
-  - canSend=false：不显示发送/再发送按钮
-- 行内按钮规则（只出现 1 个按钮）：
-  - 未发送 =&gt; 显示“发送”
-  - 已发送 =&gt; 显示“再发送”
-- 打开方式：
-  - iframe 打开 send-crp.html?embed=1&amp;booking={bookingNo}&amp;mode={send|resend}
-  - embed 模式：仅展示发送面板，不展示发送页列表
-  - 弹窗提供“打开完整发送页面”（新窗口打开 send-crp.html）
-- 关闭逻辑：
-  - 关闭发送弹窗后：回读 localStorage 刷新列表（以反映发送状态变化）
-  - 支持 postMessage：type=SLMS_CLOSE_SEND_PANEL 触发关闭
-
-## 6. 数据保存策略（演示实现）
-- upsert：以 bookingNo 为 key；同 booking 覆盖更新（不创建重复行）
-- createdAt：首次创建保留；再次 upsert 不改 createdAt（本页实现即如此）
-- sendState/vendor：默认继承旧值（若该 booking 已存在）
-- 真实系统：应接入后端表 + 审计日志 + 权限体系
-</pre>
-        </div>
-      </div>
-
-      <div class="small" style="margin-top:10px">
-        提示：本弹窗内容与版本号同步维护（v17）。
       </div>
     </div>
+
     <div class="modalFt">
       <button class="btn" type="button" onclick="closeReq()">关闭</button>
     </div>
@@ -749,14 +722,12 @@ ui_contract:
 const LS_KEY = 'slms_crp_bookings_v1';
 const LS_SPLIT = 'slms_crp_split_leftW_v1';
 const SEND_PAGE = 'send-crp.html';
-const VENDORS_SENT = ['中集','顺航'];
 
-/* ========= Master Data Keys（对齐 master/vessel-manage & voyage-manage） ========= */
+/* ========= Master Data Keys ========= */
 const LS_CARRIERS = 'slms_carriers_v1';
 const LS_VESSELS  = 'slms_vessels_v1';
 const LS_VOYAGES  = 'slms_voyages_v1';
 
-/* ========= Master Data Loaders ========= */
 function loadArr(key){
   try{
     const s = localStorage.getItem(key);
@@ -772,12 +743,10 @@ function getVesselNameById(id){
   const v = loadArr(LS_VESSELS).find(x=>x.id===id);
   return v?.name || '';
 }
-
-/* 将 voyage-manage 的结构映射为本页显示结构 */
 function mapVoyageRow(x){
-  // voyage-manage: {id, carrierId, vesselId, voyageNo, etd, status, ...}
   const carrier = getCarrierCodeById(x.carrierId);
   const vessel  = getVesselNameById(x.vesselId);
+  const cutoffAt = (x.cutoffAt || x.cutoff || x.cutoffTime || x.closingAt || '').trim();
   return {
     id: x.id,
     carrierId: x.carrierId,
@@ -786,22 +755,37 @@ function mapVoyageRow(x){
     vessel,
     voyage: (x.voyageNo || ''),
     etd: (x.etd || ''),
+    cutoffAt,
     status: (x.status || 'active'),
     _raw: x
   };
 }
-
-/* 读取可用航次：只取 active */
 function loadVoyageMasters(){
   const rows = loadArr(LS_VOYAGES).filter(x=>x && x.status !== 'inactive');
   return rows.map(mapVoyageRow);
 }
 
-/* req */
+/* ====== 三件套弹窗 ====== */
 const reqMask = document.getElementById('reqMask');
 document.getElementById('verBtn').onclick = ()=> reqMask.style.display='flex';
 function closeReq(){ reqMask.style.display='none'; }
 reqMask.onclick = e=>{ if(e.target===reqMask) closeReq(); };
+
+function showDoc(which){
+  const map = { schema: ['docSchema','navSchema'], dict: ['docDict','navDict'], ui: ['docUi','navUi'] };
+  Object.keys(map).forEach(k=>{
+    const [docId, navId] = map[k];
+    document.getElementById(docId).classList.toggle('hidden', k!==which);
+    document.getElementById(navId).classList.toggle('active', k===which);
+  });
+}
+function copyText(id){
+  const el = document.getElementById(id);
+  const txt = el ? el.textContent : '';
+  if(!txt) return;
+  try{ navigator.clipboard.writeText(txt); showToast('已复制到剪贴板', true); }
+  catch(e){ alert('复制失败：请手动选择文本复制'); }
+}
 
 /* Toast */
 const toast = document.getElementById('toast');
@@ -827,10 +811,8 @@ fileInput.onchange = ()=>{
 };
 function clearFiles(){ pickedFiles=[]; fileInput.value=''; fileList.innerHTML='<li>未选择文件</li>'; }
 
-/* 数字限制工具函数（最多两位、只保留数字） */
-function limit2Digits(v){
-  return String(v ?? '').replace(/\D/g,'').slice(0,2);
-}
+/* 数字限制 */
+function limit2Digits(v){ return String(v ?? '').replace(/\D/g,'').slice(0,2); }
 
 /* 单行录入 */
 const entryTbody = document.getElementById('entryTbody');
@@ -849,50 +831,10 @@ function renderEntry(){
         placeholder="BK..."
       />
     </td>
-
-    <td>
-      <input
-        class="qty"
-        inputmode="numeric"
-        maxlength="2"
-        value="${escAttr(entry.gp20)}"
-        oninput="setEntry('gp20', limit2Digits(this.value))"
-        placeholder="0"
-      />
-    </td>
-
-    <td>
-      <input
-        class="qty"
-        inputmode="numeric"
-        maxlength="2"
-        value="${escAttr(entry.gp40)}"
-        oninput="setEntry('gp40', limit2Digits(this.value))"
-        placeholder="0"
-      />
-    </td>
-
-    <td>
-      <input
-        class="qty"
-        inputmode="numeric"
-        maxlength="2"
-        value="${escAttr(entry.hc40)}"
-        oninput="setEntry('hc40', limit2Digits(this.value))"
-        placeholder="0"
-      />
-    </td>
-
-    <td>
-      <input
-        class="qty"
-        inputmode="numeric"
-        maxlength="2"
-        value="${escAttr(entry.rh40)}"
-        oninput="setEntry('rh40', limit2Digits(this.value))"
-        placeholder="0"
-      />
-    </td>
+    <td><input class="qty" inputmode="numeric" maxlength="2" value="${escAttr(entry.gp20)}" oninput="setEntry('gp20', limit2Digits(this.value))" placeholder="0" /></td>
+    <td><input class="qty" inputmode="numeric" maxlength="2" value="${escAttr(entry.gp40)}" oninput="setEntry('gp40', limit2Digits(this.value))" placeholder="0" /></td>
+    <td><input class="qty" inputmode="numeric" maxlength="2" value="${escAttr(entry.hc40)}" oninput="setEntry('hc40', limit2Digits(this.value))" placeholder="0" /></td>
+    <td><input class="qty" inputmode="numeric" maxlength="2" value="${escAttr(entry.rh40)}" oninput="setEntry('rh40', limit2Digits(this.value))" placeholder="0" /></td>
   `;
   entryTbody.appendChild(tr);
 }
@@ -909,26 +851,26 @@ function normalizeQty(v){
 /* 航次选择 -> 回填主页面 */
 let selectedVoyageIdMain = '';
 function applyVoyageToMain(v){
-  // v 为 mapVoyageRow 结构
   selectedVoyageIdMain = v.id;
   carrier.value = v.carrier || '';
   vessel.value  = v.vessel || '';
   voyage.value  = v.voyage || '';
   etd.value     = v.etd || '';
+  cutoffAt.value = (v.cutoffAt || '');
+
   voyHint.textContent = v.id
-    ? `已选择：${carrier.value} / ${vessel.value} / ${voyage.value} / ETD ${etd.value}`
+    ? `已选择：${carrier.value} / ${vessel.value} / ${voyage.value} / ETD ${etd.value}${cutoffAt.value ? (' / 截关 ' + cutoffAt.value) : ''}`
     : '未选择航次';
 }
 function clearVoyageMain(){
   selectedVoyageIdMain=''; carrier.value=''; vessel.value=''; voyage.value=''; etd.value='';
+  cutoffAt.value='';
   voyHint.textContent='未选择航次';
 }
 
 /* 航次弹窗 */
 const voyMask = document.getElementById('voyMask');
 const voyTbody = document.getElementById('voyTbody');
-
-/* 兼容按钮传参（有人传 'main'） */
 function openVoyageModal(_target){
   voySearch.value='';
   cancelNewVoyage();
@@ -941,20 +883,19 @@ voyMask.onclick = e=>{ if(e.target===voyMask) closeVoyageModal(); };
 function renderVoyages(){
   const q = (voySearch.value||'').trim().toLowerCase();
   const masters = loadVoyageMasters();
-
   voyTbody.innerHTML='';
 
   const list = masters.filter(v=>{
     if(!q) return true;
-    return (`${v.carrier} ${v.vessel} ${v.voyage} ${v.etd}`.toLowerCase()).includes(q);
+    return (`${v.carrier} ${v.vessel} ${v.voyage} ${v.etd} ${v.cutoffAt||''}`.toLowerCase()).includes(q);
   });
 
   if(!masters.length){
     const tr=document.createElement('tr');
     tr.innerHTML = `
-      <td colspan="5" style="color:var(--muted);padding:16px">
+      <td colspan="6" style="color:var(--muted);padding:16px">
         当前系统没有可用航次主数据。请先到 <b>master/voyage-manage.html</b> 维护航次（并确保状态=启用）。
-        <div style="margin-top:8px" class="small">也可点击右上角 <b>+ 新建航次</b>（兜底演示，会写入主数据 slms_voyages_v1）。</div>
+        <div style="margin-top:8px" class="small">也可点击右上角 <b>+ 新建航次</b>（兜底演示，会写入主数据 ${esc(LS_VOYAGES)}）。</div>
       </td>`;
     voyTbody.appendChild(tr);
     return;
@@ -962,7 +903,7 @@ function renderVoyages(){
 
   if(!list.length){
     const tr=document.createElement('tr');
-    tr.innerHTML = `<td colspan="5" style="color:var(--muted);padding:16px">未找到匹配航次（可尝试搜索船公司/船名/航次/ETD）。</td>`;
+    tr.innerHTML = `<td colspan="6" style="color:var(--muted);padding:16px">未找到匹配航次（可尝试搜索船公司/船名/航次/ETD/截关）。</td>`;
     voyTbody.appendChild(tr);
     return;
   }
@@ -975,6 +916,7 @@ function renderVoyages(){
       <td>${esc(v.vessel)}</td>
       <td><b>${esc(v.voyage)}</b></td>
       <td>${esc(v.etd)}</td>
+      <td>${esc(v.cutoffAt||'-')}</td>
       <td><button class="btn" style="padding:8px 10px;font-size:12px" type="button" onclick="chooseVoyage('${escJs(v.id)}')">选择</button></td>`;
     voyTbody.appendChild(tr);
   });
@@ -985,10 +927,10 @@ function chooseVoyage(id){
   if(!v) return;
   applyVoyageToMain(v);
   closeVoyageModal();
-  showToast('已回填航次信息（来自主数据）', true);
+  showToast('已回填航次信息（含截关时间，如主数据已维护）', true);
 }
 
-/* v17: 新建航次（兜底：下拉选船公司/船舶） */
+/* 新建航次（兜底：下拉选船公司/船舶） */
 function fillSelect(sel, placeholder, rows, getLabel, getVal){
   sel.innerHTML = '';
   const o0=document.createElement('option');
@@ -1001,7 +943,6 @@ function fillSelect(sel, placeholder, rows, getLabel, getVal){
     sel.appendChild(o);
   });
 }
-
 function openNewVoyage(){
   newVoyBox.style.display='block';
 
@@ -1013,6 +954,7 @@ function openNewVoyage(){
 
   document.getElementById('newEtd').value = '';
   document.getElementById('newVoyage').value = '';
+  document.getElementById('newCutoffAt').value = '';
 }
 function cancelNewVoyage(){ newVoyBox.style.display='none'; }
 function createVoyage(){
@@ -1020,15 +962,14 @@ function createVoyage(){
   const vesselId  = document.getElementById('newVesselId').value;
   const etd = (document.getElementById('newEtd').value||'').trim();
   const voyageNo = (document.getElementById('newVoyage').value||'').trim().toUpperCase();
+  const cutoff = (document.getElementById('newCutoffAt').value||'').trim();
 
-  if(!carrierId || !vesselId || !voyageNo || !etd){
-    alert('请填写：船公司、船舶、航次、ETD');
+  if(!carrierId || !vesselId || !voyageNo || !etd || !cutoff){
+    alert('请填写：船公司、船舶、航次、ETD、截关时间');
     return;
   }
 
   const all = loadArr(LS_VOYAGES);
-
-  // 唯一：carrierId + vesselId + voyageNo + etd
   const dup = all.find(x =>
     x && x.carrierId===carrierId && x.vesselId===vesselId &&
     String(x.voyageNo||'')===voyageNo && String(x.etd||'')===etd &&
@@ -1045,6 +986,7 @@ function createVoyage(){
     voyageNo,
     pol: '', pod: '',
     etd,
+    cutoffAt: cutoff,
     eta: '',
     status: 'active',
     remark: 'created from crp-entry fallback',
@@ -1054,7 +996,6 @@ function createVoyage(){
   all.unshift(row);
   try{ localStorage.setItem(LS_VOYAGES, JSON.stringify(all)); }catch(e){}
 
-  // 回填
   const v = mapVoyageRow(row);
   cancelNewVoyage();
   applyVoyageToMain(v);
@@ -1066,6 +1007,7 @@ function createVoyage(){
 let rows = loadRowsFromLS();
 let selectedKey = '';
 let canSend=false;
+
 function saveRowsToLS(){ try{ localStorage.setItem(LS_KEY, JSON.stringify(rows)); }catch(e){} }
 function loadRowsFromLS(){
   try{ const s=localStorage.getItem(LS_KEY); const arr=s?JSON.parse(s):[]; return Array.isArray(arr)?arr:[]; }catch(e){ return []; }
@@ -1081,37 +1023,132 @@ function upsert(rec){
 /* 校验/保存 */
 function getCommonFromMain(){
   return {
-    carrier: carrier.value.trim(), vessel: vessel.value.trim(), voyage: voyage.value.trim(), etd: etd.value.trim(),
-    ffOwner: ffOwner.value.trim(), clOwner: clOwner.value.trim(), remark: remark.value.trim(),
-    fileCount: pickedFiles.length, voyageId: selectedVoyageIdMain
+    carrier: carrier.value.trim(),
+    vessel: vessel.value.trim(),
+    voyage: voyage.value.trim(),
+    etd: etd.value.trim(),
+    cutoffAt: (cutoffAt.value||'').trim(),
+    ffOwner: ffOwner.value.trim(),
+    clOwner: clOwner.value.trim(),
+    remark: remark.value.trim(),
+    voyageId: selectedVoyageIdMain
   };
 }
 function validateCommonMain(c){
   if(!c.voyageId) return '请先【选择航次】（系统受控）';
+  if(!c.cutoffAt) return '请填写 截关时间';
   if(!c.ffOwner) return '请填写 FF担当';
   if(!c.clOwner) return '请填写 CL担当';
   return '';
 }
-function validateEntry(){
-  const bk=(entry.bookingNo||'').trim(); if(!bk) return {ok:false,msg:'请填写 Booking No.'};
-  const gp20=normalizeQty(entry.gp20), gp40=normalizeQty(entry.gp40), hc40=normalizeQty(entry.hc40), rh40=normalizeQty(entry.rh40);
+function validateEntryObj(e){
+  const bk=(e.bookingNo||'').trim(); if(!bk) return {ok:false,msg:'请填写 Booking No.'};
+  const gp20=normalizeQty(e.gp20), gp40=normalizeQty(e.gp40), hc40=normalizeQty(e.hc40), rh40=normalizeQty(e.rh40);
   if(gp20===null||gp40===null||hc40===null||rh40===null) return {ok:false,msg:'箱量必须是数字（可为空）'};
   const sum=[gp20,gp40,hc40,rh40].reduce((a,x)=>a+(x?parseInt(x,10):0),0);
   if(sum===0) return {ok:false,msg:'至少填写 1 个箱型箱量'};
   return {ok:true,bookingNo:bk,gp20,gp40,hc40,rh40};
 }
+
 const statePill = document.getElementById('statePill');
+const leftTitle = document.getElementById('leftTitle');
+const leftHint  = document.getElementById('leftHint');
+const fileHint  = document.getElementById('fileHint');
+const btnSubmit = document.getElementById('btnSubmit');
+
+/* 编辑模式状态（沿用 v20） */
+let editMode = { on:false, key:'', snapshot:null, baseFileCount:0 };
+
+function setLeftPill(state){
+  if(editMode.on){
+    statePill.className='pill editing';
+    statePill.innerHTML=`<span class="dot"></span>编辑中`;
+    return;
+  }
+  if(state==='已提交'){
+    statePill.className='pill submitted';
+    statePill.innerHTML=`<span class="dot"></span>已提交`;
+    return;
+  }
+  if(state==='已修改'){
+    statePill.className='pill modified';
+    statePill.innerHTML=`<span class="dot"></span>已修改`;
+    return;
+  }
+  statePill.className='pill draft';
+  statePill.innerHTML=`<span class="dot"></span>草稿`;
+}
+
+function enterEditModeByKey(key){
+  const r = rows.find(x=>x.key===key);
+  if(!r){ alert('记录不存在'); return; }
+
+  editMode.on = true;
+  editMode.key = key;
+  editMode.snapshot = JSON.parse(JSON.stringify(r));
+  editMode.baseFileCount = Number(r.fileCount ?? 0);
+
+  entry = { bookingNo:r.bookingNo||'', gp20:r.gp20||'', gp40:r.gp40||'', hc40:r.hc40||'', rh40:r.rh40||'' };
+  renderEntry();
+
+  selectedVoyageIdMain = r.voyageId || '';
+  carrier.value = r.carrier || '';
+  vessel.value  = r.vessel  || '';
+  voyage.value  = r.voyage  || '';
+  etd.value     = r.etd     || '';
+  cutoffAt.value= r.cutoffAt|| '';
+
+  voyHint.textContent = selectedVoyageIdMain
+    ? `已选择：${carrier.value} / ${vessel.value} / ${voyage.value} / ETD ${etd.value}${cutoffAt.value ? (' / 截关 ' + cutoffAt.value) : ''}`
+    : '未选择航次';
+
+  ffOwner.value = r.ffOwner || '';
+  clOwner.value = r.clOwner || '';
+  remark.value  = r.remark  || '';
+
+  clearFiles();
+  fileHint.textContent = `编辑模式：历史附件无法回填。若不重新选择文件，附件数量将保持原值（原 fileCount=${editMode.baseFileCount}）。`;
+
+  leftTitle.textContent = `修改（${r.bookingNo}）`;
+  leftHint.textContent = '保存修改不会刷新“录入时间”；若该记录原为已发送，保存后会自动变为未发送并标记已修改。';
+  btnSubmit.textContent = '保存修改';
+
+  setLeftPill(r.entryState || '草稿');
+  showToast('已进入编辑模式（左侧已回填）', true);
+}
+
+function exitEditMode(){
+  editMode.on = false;
+  editMode.key = '';
+  editMode.snapshot = null;
+  editMode.baseFileCount = 0;
+
+  leftTitle.textContent = '录入（一次仅 1 个 Booking No）';
+  leftHint.textContent = '提交后会清空 Booking/箱量/附件，保留航次方便连续录入。';
+  fileHint.textContent = '演示：仅统计文件数量并显示文件名。';
+
+  btnSubmit.textContent = '提交';
+  setLeftPill('草稿');
+}
+
+function onSubmitMain(){
+  if(editMode.on){ saveEditMain(); }
+  else{ saveOne('已提交'); }
+}
+
 function saveOne(state){
   const c=getCommonFromMain(); const e=validateCommonMain(c); if(e){showToast(e,false);return;}
-  const ve=validateEntry(); if(!ve.ok){showToast(ve.msg,false);return;}
+  const ve=validateEntryObj(entry); if(!ve.ok){showToast(ve.msg,false);return;}
 
   const existing = rows.find(x=>x.key===makeKey(ve.bookingNo));
   const rec = {
     bookingNo: ve.bookingNo,
     gp20: ve.gp20||'', gp40: ve.gp40||'', hc40: ve.hc40||'', rh40: ve.rh40||'',
     carrier: c.carrier, vessel: c.vessel, voyage: c.voyage, etd: c.etd,
+    cutoffAt: c.cutoffAt,
     ffOwner: c.ffOwner, clOwner: c.clOwner, remark: c.remark,
-    fileCount: c.fileCount, voyageId: c.voyageId,
+    fileCount: pickedFiles.length,
+    voyageId: c.voyageId,
     sendState: existing?.sendState || '未发送',
     vendor: existing?.vendor || '',
     createdAt: existing?.createdAt || Date.now(),
@@ -1121,31 +1158,175 @@ function saveOne(state){
   upsert(rec);
   selectedKey = rec.key;
   selHint.textContent = `已选：${rec.bookingNo}`;
-
-  statePill.className = 'pill ' + (state==='已提交'?'submitted':'draft');
-  statePill.innerHTML = `<span class="dot"></span>${state==='已提交'?'已提交':'草稿'}`;
+  setLeftPill(state);
 
   render();
-  showToast(`已${state==='已提交'?'提交':'保存'}：${rec.bookingNo}`, true);
+  showToast(`已提交：${rec.bookingNo}`, true);
 
-  if(state==='已提交'){
-    entry={bookingNo:'',gp20:'',gp40:'',hc40:'',rh40:''};
-    renderEntry();
-    clearFiles();
-  }
+  entry={bookingNo:'',gp20:'',gp40:'',hc40:'',rh40:''};
+  renderEntry();
+  clearFiles();
 }
 
-/* 右侧渲染 */
+function saveEditMain(){
+  const base = rows.find(x=>x.key===editMode.key);
+  if(!base){ showToast('记录不存在（可能被删除）', false); exitEditMode(); return; }
+
+  const c=getCommonFromMain();
+  const e=validateCommonMain(c);
+  if(e){ showToast(e,false); return; }
+
+  const ve=validateEntryObj(entry);
+  if(!ve.ok){ showToast(ve.msg,false); return; }
+
+  const newBookingNo = ve.bookingNo;
+  const newKey = makeKey(newBookingNo);
+  if(newKey !== base.key){
+    const dup = rows.find(x=>x.key===newKey);
+    if(dup){ showToast(`保存失败：目标 Booking No 已存在（${dup.bookingNo}）`, false); return; }
+  }
+
+  const originallySent = (editMode.snapshot?.sendState === '已发送');
+  const nextFileCount = pickedFiles.length ? pickedFiles.length : (Number(editMode.baseFileCount) || 0);
+
+  const next = Object.assign({}, base, {
+    bookingNo: newBookingNo,
+    gp20: ve.gp20||'', gp40: ve.gp40||'', hc40: ve.hc40||'', rh40: ve.rh40||'',
+    voyageId: c.voyageId,
+    carrier: c.carrier, vessel: c.vessel, voyage: c.voyage, etd: c.etd,
+    cutoffAt: c.cutoffAt,
+    ffOwner: c.ffOwner,
+    clOwner: c.clOwner,
+    remark: c.remark,
+    fileCount: nextFileCount
+  });
+
+  if(originallySent){
+    next.entryState = '已修改';
+    next.sendState = '未发送';
+    next.vendor = '';
+  }else{
+    next.entryState = base.entryState || '草稿';
+  }
+
+  if(newKey !== base.key){
+    rows = rows.filter(x=>x.key!==base.key);
+    next.key = newKey;
+    rows.unshift(next);
+  }else{
+    next.key = base.key;
+    const idx = rows.findIndex(x=>x.key===base.key);
+    rows[idx] = next;
+  }
+
+  saveRowsToLS();
+  selectedKey = next.key;
+  selHint.textContent = `已选：${next.bookingNo}`;
+
+  exitEditMode();
+  entry={bookingNo:'',gp20:'',gp40:'',hc40:'',rh40:''};
+  renderEntry();
+  clearFiles();
+
+  render();
+  showToast(originallySent ? '修改已保存：已发送记录已回退为未发送（需重发）' : '修改已保存', true);
+}
+
+/* v21：复制航次信息（从右侧选中记录） */
+function copyVoyageFromSelected(){
+  if(editMode.on){
+    showToast('编辑模式下不建议复制航次（请先完成保存或退出编辑）', false);
+    return;
+  }
+  if(!selectedKey){
+    showToast('请先从右侧列表选择一条 CRP 记录', false);
+    return;
+  }
+  const r = rows.find(x=>x.key===selectedKey);
+  if(!r){
+    showToast('选中记录不存在（可能已被删除）', false);
+    return;
+  }
+
+  // 只复制航次信息（不动 Booking/箱量/附件）
+  selectedVoyageIdMain = r.voyageId || '';
+  carrier.value = r.carrier || '';
+  vessel.value  = r.vessel  || '';
+  voyage.value  = r.voyage  || '';
+  etd.value     = r.etd     || '';
+  cutoffAt.value= r.cutoffAt|| '';
+
+  voyHint.textContent = selectedVoyageIdMain
+    ? `已复制：${carrier.value} / ${vessel.value} / ${voyage.value} / ETD ${etd.value}${cutoffAt.value ? (' / 截关 ' + cutoffAt.value) : ''}`
+    : '未选择航次';
+
+  showToast('已复制选中 CRP 的航次信息到左侧录入面板', true);
+}
+
+/* 右侧渲染 + 日期过滤 */
 const tbody=document.getElementById('tbody');
+
 function pad2(n){ return String(n).padStart(2,'0'); }
 function fmtTime(ts){
   const d=new Date(ts);
   return `${d.getFullYear()}-${pad2(d.getMonth()+1)}-${pad2(d.getDate())} ${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
 }
+function toYMD(d){
+  const dt = new Date(d);
+  return `${dt.getFullYear()}-${pad2(dt.getMonth()+1)}-${pad2(dt.getDate())}`;
+}
+function addDaysYMD(ymd, days){
+  const [y,m,dd] = ymd.split('-').map(x=>parseInt(x,10));
+  const dt = new Date(y, m-1, dd);
+  dt.setDate(dt.getDate()+days);
+  return toYMD(dt);
+}
+function todayYMD(){ return toYMD(new Date()); }
+
 function resetFilters(){
   f_booking.value=''; f_carrier.value=''; f_vessel.value=''; f_voyage.value=''; f_status.value='';
+  f_dateType.value='createdAt';
+  applyDateDefaults('createdAt');
   render();
 }
+
+function applyDateDefaults(type){
+  const t = todayYMD();
+  if(type==='createdAt'){
+    // 过去7天到今天
+    f_dateFrom.value = addDaysYMD(t, -7);
+    f_dateTo.value   = t;
+  }else{
+    // 今天到未来14天
+    f_dateFrom.value = t;
+    f_dateTo.value   = addDaysYMD(t, 14);
+  }
+}
+function onDateTypeChange(){
+  applyDateDefaults(f_dateType.value);
+  render();
+}
+
+function filterByDateRange(r){
+  const type = (f_dateType.value||'createdAt');
+  const from = (f_dateFrom.value||'').trim();
+  const to   = (f_dateTo.value||'').trim();
+  if(!from && !to) return true;
+
+  if(type==='createdAt'){
+    const ymd = toYMD(r.createdAt || Date.now());
+    if(from && ymd < from) return false;
+    if(to && ymd > to) return false;
+    return true;
+  }else{
+    const ymd = String(r.etd||'').slice(0,10);
+    if(!ymd) return false; // 没有ETD则不匹配
+    if(from && ymd < from) return false;
+    if(to && ymd > to) return false;
+    return true;
+  }
+}
+
 function filterList(list){
   const fbk=(f_booking.value||'').trim().toLowerCase();
   const fcar=(f_carrier.value||'').trim().toLowerCase();
@@ -1158,13 +1339,23 @@ function filterList(list){
     if(fves && !String(r.vessel||'').toLowerCase().includes(fves)) return false;
     if(fvoy && !String(r.voyage||'').toLowerCase().includes(fvoy)) return false;
     if(fst && String(r.sendState||'未发送')!==fst) return false;
+    if(!filterByDateRange(r)) return false;
     return true;
   });
 }
+
 function statePillHtml(st){
   if(st==='已发送') return `<span class="stPill sent"><span class="dot"></span>已发送</span>`;
   return `<span class="stPill unsent"><span class="dot"></span>未发送</span>`;
 }
+
+/* v21：发送/再发送判定（未发送=发送；已修改/已发送=再发送） */
+function shouldResend(r){
+  if(r.sendState === '已发送') return true;
+  if(r.entryState === '已修改') return true;
+  return false;
+}
+
 function render(){
   tbody.innerHTML='';
   let list = rows.slice().sort((a,b)=>(b.createdAt||0)-(a.createdAt||0));
@@ -1172,25 +1363,37 @@ function render(){
 
   if(!list.length){
     const tr=document.createElement('tr');
-    tr.innerHTML=`<td colspan="15" style="color:var(--muted);padding:18px">暂无数据</td>`;
+    tr.innerHTML=`<td colspan="16" style="color:var(--muted);padding:18px">暂无数据</td>`;
     tbody.appendChild(tr); return;
   }
 
   list.forEach(r=>{
     const tr=document.createElement('tr');
     if(r.key===selectedKey) tr.classList.add('selected');
-    tr.onclick=()=>{ selectedKey=r.key; selHint.textContent=`已选：${r.bookingNo}`; render(); };
+
+    tr.onclick=()=>{
+      selectedKey=r.key;
+      selHint.textContent=`已选：${r.bookingNo}`;
+      render();
+    };
 
     const sent = (r.sendState==='已发送');
+    const needResend = shouldResend(r);
 
-    // 只显示一个按钮：未发送=发送；已发送=再发送
+    const editBtn = (r.key===selectedKey)
+      ? `<button class="miniBtn edit" onclick="event.stopPropagation();enterEditModeByKey('${escJs(r.key)}')">修改</button>`
+      : '';
+
     let opBtn = '';
     if(canSend){
-      opBtn = sent
+      opBtn = needResend
         ? `<button class="miniBtn re" onclick="event.stopPropagation();openSendPanel('${escJs(r.bookingNo)}','resend')">再发送</button>`
         : `<button class="miniBtn primary" onclick="event.stopPropagation();openSendPanel('${escJs(r.bookingNo)}','send')">发送</button>`;
     }
 
+    const stateText = `${statePillHtml(sent?'已发送':'未发送')}`;
+
+    /* ✅ v22：按钮顺序调整为：状态 + 发送/再发送 + 修改 */
     tr.innerHTML = `
       <td>${fmtTime(r.createdAt||Date.now())}</td>
       <td><b>${esc(r.bookingNo)}</b></td>
@@ -1198,6 +1401,7 @@ function render(){
       <td class="ellip" title="${escAttr(r.vessel)}">${esc(r.vessel)}</td>
       <td>${esc(r.voyage)}</td>
       <td>${esc(r.etd||'-')}</td>
+      <td>${esc(r.cutoffAt||'-')}</td>
       <td class="ellip sm" title="${escAttr(r.ffOwner||'')}">${esc(r.ffOwner||'')}</td>
       <td class="ellip sm" title="${escAttr(r.clOwner||'')}">${esc(r.clOwner||'')}</td>
 
@@ -1208,7 +1412,7 @@ function render(){
 
       <td class="num">${esc(String(r.fileCount ?? 0))}</td>
       <td>${esc(sent ? (r.vendor||'') : '')}</td>
-      <td><span class="action">${statePillHtml(sent?'已发送':'未发送')}${opBtn}</span></td>
+      <td><span class="action">${stateText}${opBtn}${editBtn}</span></td>
     `;
     tbody.appendChild(tr);
   });
@@ -1232,7 +1436,6 @@ function openSendPanel(bookingNo, mode){
 function closeSendPanel(){
   sendMask.style.display='none';
   sendFrame.src='';
-  // 关闭后回读 localStorage，刷新发送状态
   rows=loadRowsFromLS();
   render();
 }
@@ -1277,6 +1480,7 @@ window.addEventListener('message', (ev)=>{ if(ev?.data?.type==='SLMS_CLOSE_SEND_
 /* 演示数据 */
 function rnd(arr){ return arr[Math.floor(Math.random()*arr.length)]; }
 function rndInt(a,b){ return a + Math.floor(Math.random()*(b-a+1)); }
+
 function seedDemoIfEmpty(){
   if(rows && rows.length) return;
 
@@ -1294,24 +1498,27 @@ function seedDemoIfEmpty(){
     const c=rnd(carriers);
     const vessel=rnd(c.vessels);
     const voyage=rnd(c.voyages);
-    const etdDay=26+(i%6);
+    const etdDay=26+(i%10);
     const etd=`2025-12-${pad2(etdDay)}`;
     const bookingNo=`BK202512${pad2(rndInt(10,24))}-${pad2(i+1)}`;
+    const cutoff = `2025-12-${pad2(etdDay)}T18:00`;
 
     let gp20=String(rndInt(0,3)), gp40=String(rndInt(0,3)), hc40=String(rndInt(0,3)), rh40=String(rndInt(0,2));
     if((+gp20 + +gp40 + +hc40 + +rh40)===0) hc40='1';
 
     const sent=Math.random()<0.4;
+    const modified = (!sent) && (Math.random()<0.18); // 未发送但已修改 -> 再发送
     list.push({
       key:makeKey(bookingNo), bookingNo,
       gp20:gp20==='0'?'':gp20, gp40:gp40==='0'?'':gp40, hc40:hc40==='0'?'':hc40, rh40:rh40==='0'?'':rh40,
       carrier:c.carrier, vessel, voyage, etd,
+      cutoffAt: cutoff,
       ffOwner:rnd(ffs), clOwner:rnd(cls),
-      remark:'', fileCount:rndInt(0,4), voyageId:'V'+String(100+i),
+      remark:'', fileCount:rndInt(0,4), voyageId:'VOY-'+String(100+i),
       sendState: sent?'已发送':'未发送',
-      vendor: sent?rnd(VENDORS_SENT):'',
+      vendor: sent?rnd(['中集','顺航']):'',
       createdAt: now - i*1000*60*23,
-      entryState:'已提交'
+      entryState: modified ? '已修改' : '已提交'
     });
   }
   rows=list; saveRowsToLS();
@@ -1324,15 +1531,22 @@ function fillDemo(){
 
   const ms = loadVoyageMasters();
   if(ms.length) applyVoyageToMain(ms[0]);
+  if(!cutoffAt.value && etd.value) cutoffAt.value = `${etd.value}T18:00`;
 
   ffOwner.value='FF-A'; clOwner.value='CL-B';
 }
+
 function clearFormAll(){
+  if(editMode.on) exitEditMode();
+
   entry={bookingNo:'',gp20:'',gp40:'',hc40:'',rh40:''};
-  renderEntry(); clearFiles(); clearVoyageMain();
+  renderEntry();
+  clearFiles();
+  clearVoyageMain();
   ffOwner.value=''; clOwner.value=''; remark.value='';
-  selectedKey=''; selHint.textContent='未选择记录';
-  statePill.className='pill draft'; statePill.innerHTML='<span class="dot"></span>草稿';
+  selectedKey='';
+  selHint.textContent='未选择记录';
+  setLeftPill('草稿');
   showToast('已进入新建模式', true);
 }
 
@@ -1343,6 +1557,9 @@ function escJs(s){return String(s??'').replace(/\\/g,'\\\\').replace(/'/g,"\\'")
 
 /* init */
 seedDemoIfEmpty();
+
+/* v21：初始化日期默认值（录入时间：过去7天到今天） */
+applyDateDefaults('createdAt');
 render();
 </script>
 </body>
