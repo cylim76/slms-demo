@@ -1,996 +1,909 @@
 <!--
-File: crp/rpt-crp-trans-status.html
-Version: rpt-crp-trans-status-v2
+File: container/container-claim-with-bl.html
+Version: container-claim-with-bl-v7
 Date: 2025-12-29
 
-v2 变更点（在 v1 基础上，确保不丢失任何功能）：
-1) ✅ 版本号同步升级：v1 -> v2（右上角显示 + 点击版本号弹窗内容同步）
-2) ✅ 将 requirements 弹窗替换为三件套：slms-schema.yaml / slms-data-dict.md / slms-ui-spec.md（按“标准”）
-3) ✅ 不改动原有功能点：筛选条件、日期默认、状态计算、统计条、矩阵弹窗、导出 CSV 均保持
-4) ✅ 三件套中明确：状态计算口径、矩阵口径、导出字段、演示数据（LS_PICK）仅为 demo
+v7 变更点（相对 v6）：
+1) ✅ 版本号同步升级：v6 -> v7（右上角显示 + 弹窗内容同步）
+2) ✅ 将“页面功能要求”弹窗按最新标准改为“三件套”：
+   - slms-schema.yaml（结构唯一真源）
+   - slms-data-dict.md（字段/口径说明）
+   - slms-ui-spec.md（页面交互/运算/约束）
+3) ✅ 术语统一：页面内“提箱单号（提单号）”保持兼容显示，但三件套与口径统一使用 Booking No（即提箱单号字段）
+4) ✅ 不改变 v6 任何现有功能：可拖动分割、横纵滚动、多选、定位、原子配箱、解绑、编辑回传、Tab 标题同步等保持
 -->
 
 <!doctype html>
 <html lang="zh-CN">
 <head>
-<meta charset="utf-8"/>
-<meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>CRP提箱现况RPT</title>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>提箱单（CRP）配箱</title>
+  <style>
+    :root{--brand:#e0205c; --bg:#f1f2f5; --card:#fff; --text:#222; --muted:#666; --line:#e6e6e6;}
+    *{box-sizing:border-box}
+    body{margin:0;font-family:Arial,"Microsoft YaHei";background:var(--bg);color:var(--text)}
+    .topbar{background:#fff;border-bottom:1px solid #eee;padding:10px 14px;display:flex;align-items:center;justify-content:space-between;gap:10px}
+    .topbar .left{display:flex;gap:10px;align-items:baseline;flex-wrap:wrap}
+    .topbar b{font-size:14px}
+    .meta{font-size:12px;color:var(--muted)}
+    .ver{cursor:pointer; user-select:none;background:#f6f6f6;border:1px solid #eee;border-radius:999px;padding:4px 10px;font-size:12px;color:#333;font-family:ui-monospace,Menlo,Consolas,monospace;display:inline-flex;align-items:center;gap:8px;}
+    .ver .dot{width:8px;height:8px;border-radius:99px;background:var(--brand)}
+    .wrap{height:calc(100vh - 46px);padding:12px;max-width:1750px;margin:0 auto}
 
-<style>
-:root{
-  --brand:#e0205c;--bg:#f1f2f5;--card:#fff;--text:#222;--muted:#666;--line:#e9e9ee;
-  --ok:#1a7f37;--warn:#b54708;--bad:#b42318;
-}
-*{box-sizing:border-box}
-body{margin:0;font-family:Arial,"Microsoft YaHei";background:var(--bg);color:var(--text)}
-.topbar{height:56px;background:#fff;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;padding:0 16px;}
-.left{font-weight:900;font-size:16px}
-.right{display:flex;align-items:center;gap:12px}
-.ver{
-  cursor:pointer;background:#f6f6f6;border:1px solid #eee;border-radius:999px;
-  padding:6px 10px;font-size:12px;font-family:ui-monospace,Menlo,Consolas,monospace;
-  display:flex;align-items:center;gap:6px
-}
-.ver .dot{width:8px;height:8px;border-radius:99px;background:var(--brand)}
+    /* ====== 可拖动分割布局 ====== */
+    .layout{
+      display:flex;
+      gap:0;
+      height:100%;
+      align-items:stretch;
+      min-width:0;
+    }
+    .pane{
+      min-width:280px;
+      min-height:0;
+      display:flex;
+    }
+    .divider{
+      width:10px;
+      cursor:col-resize;
+      position:relative;
+      flex:0 0 10px;
+      user-select:none;
+      touch-action:none;
+    }
+    .divider:before{
+      content:"";
+      position:absolute;
+      left:50%;
+      top:10px;
+      bottom:10px;
+      width:2px;
+      transform:translateX(-50%);
+      background:#ddd;
+      border-radius:99px;
+    }
+    .divider:hover:before{ background:var(--brand); opacity:.8; }
+    .divider .grab{
+      position:absolute;
+      left:50%;
+      top:50%;
+      transform:translate(-50%,-50%);
+      width:6px;height:40px;border-radius:99px;
+      background:#cfcfcf;
+      opacity:.55;
+    }
+    .divider:hover .grab{ background:var(--brand); opacity:.8; }
 
-.wrap{max-width:none;margin:16px 0;padding:0 12px;}
-.card{
-  background:#fff;border:1px solid var(--line);
-  border-radius:12px;box-shadow:0 6px 18px rgba(0,0,0,.04);
-  overflow:hidden;
-}
-.cardHd{
-  padding:12px 14px;border-bottom:1px solid var(--line);
-  display:flex;align-items:center;justify-content:space-between;gap:10px;font-weight:900;
-}
-.small{font-size:12px;color:var(--muted)}
-.btn{
-  border:1px solid #ddd;background:#fff;border-radius:10px;
-  padding:10px 14px;font-weight:900;font-size:13px;cursor:pointer
-}
-.btn.primary{background:var(--brand);border-color:var(--brand);color:#fff}
-.btn:active{transform:translateY(1px)}
-.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
-.field{display:flex;flex-direction:column;gap:6px}
-.label{font-size:12px;color:var(--muted)}
-.input,.select{
-  border:1px solid #ddd;border-radius:10px;padding:10px;font-size:13px;background:#fff;outline:none
-}
+    .card{
+      background:var(--card);
+      border-radius:8px;
+      box-shadow:0 2px 10px rgba(0,0,0,.08);
+      padding:12px;
+      display:flex;
+      flex-direction:column;
+      min-width:0;
+      width:100%;
+    }
+    h3{margin:0 0 8px;font-size:15px}
+    label{font-size:12px;color:var(--muted);font-weight:800}
+    input,select{width:100%;padding:7px 8px;border:1px solid #ccc;border-radius:6px}
+    .grid6{display:grid;grid-template-columns:repeat(6,1fr);gap:8px}
+    .grid4{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+    .actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:8px}
+    .btn{padding:7px 14px;border-radius:999px;border:1px solid #aaa;background:#fff;font-weight:900;cursor:pointer;font-size:12px}
+    .btn.primary{background:var(--brand);border-color:var(--brand);color:#fff}
+    .btn.danger{border-color:var(--brand);color:var(--brand)}
+    .hint{font-size:12px;color:var(--muted)}
 
-.tableOuter{height:calc(100vh - 56px - 16px - 16px - 68px - 70px);
-  min-height:360px;
-}
-@media (max-width: 1100px){
-  .tableOuter{height:auto}
-}
-.tableScroll{height:100%;overflow:auto;border-top:1px solid var(--line)}
-table{width:100%;border-collapse:collapse;min-width:1750px}
-th,td{border-bottom:1px solid var(--line);padding:8px 10px;font-size:12px;white-space:nowrap}
-th{background:#fafafa;color:var(--muted);text-align:left;font-weight:900}
-tr:hover td{background:#fff7fb}
+    /* ====== 明细滚动：支持横向 + 纵向 ====== */
+    .scroll{
+      flex:1;
+      overflow:auto;
+      border:1px solid #eee;
+      border-radius:8px;
+      margin-top:10px;
+      min-height:0;
+      background:#fff;
+    }
+    table{
+      width:max-content;
+      min-width:100%;
+      border-collapse:collapse;
+      font-size:13px;
+    }
+    th,td{border-bottom:1px solid #ddd;padding:7px;text-align:center;white-space:nowrap}
+    th{background:#f6f6f6;position:sticky;top:0;z-index:1}
 
-.num{text-align:center;font-variant-numeric:tabular-nums;font-family:ui-monospace,Menlo,Consolas,monospace;width:72px}
-.ellip{max-width:240px;overflow:hidden;text-overflow:ellipsis}
+    tr.unclaimed td{background:#fff0f0}
+    tr.rowSelected{outline:2px solid var(--brand)}
+    .tag{padding:2px 10px;border-radius:999px;font-size:12px;font-weight:900}
+    .tag.ok{background:#eefaf2;color:#1e7f3b}
+    .tag.warn{background:#fff0f0;color:#d4003a}
+    .ops{display:flex;gap:6px;justify-content:center}
+    .linkbtn{padding:5px 10px;border-radius:999px;border:1px solid #ddd;background:#fff;cursor:pointer;font-weight:800;font-size:12px}
+    .detail{background:#fafafa;border:1px solid #eee;border-radius:8px;padding:10px;margin-top:8px;font-size:12px;color:#444;line-height:1.6}
+    .log{height:160px;overflow:auto;border:1px solid #eee;border-radius:8px;padding:8px;font-size:12px;color:#444;margin-top:10px}
+    .log .t{color:#999;font-family:ui-monospace,Menlo,Consolas,monospace}
 
-.stPill{
-  display:inline-flex;align-items:center;gap:6px;
-  padding:6px 10px;border-radius:999px;border:1px solid var(--line);
-  font-size:12px;font-weight:900;background:#fff;user-select:none
-}
-.stPill .dot{width:8px;height:8px;border-radius:99px;background:#bbb}
-.stPill.unsent{border-color:rgba(181,71,8,.25);background:rgba(181,71,8,.06);color:#7a3a06}
-.stPill.unsent .dot{background:var(--warn)}
-.stPill.sent{border-color:rgba(26,127,55,.25);background:rgba(26,127,55,.06);color:#135d2a}
-.stPill.sent .dot{background:var(--ok)}
-.stPill.transit{border-color:rgba(224,32,92,.22);background:rgba(224,32,92,.07);color:#8b0d34}
-.stPill.transit .dot{background:var(--brand)}
-.stPill.done{border-color:rgba(0,0,0,.12);background:rgba(0,0,0,.04);color:#333}
-.stPill.done .dot{background:#333}
+    /* modal */
+    .modalMask{position:fixed;inset:0;background:rgba(0,0,0,.35);display:none;align-items:center;justify-content:center;padding:14px;z-index:9999}
+    .modal{width:min(980px,96vw);background:#fff;border-radius:12px;box-shadow:0 20px 60px rgba(0,0,0,.28);overflow:hidden;display:flex;flex-direction:column}
+    .modalHd{display:flex;justify-content:space-between;gap:10px;align-items:center;padding:12px 14px;border-bottom:1px solid #eee}
+    .modalHd b{font-size:14px}
+    .modalBd{padding:12px 14px;max-height:74vh;overflow:auto}
+    .close{border:1px solid #ddd;background:#fff;border-radius:999px;padding:6px 12px;cursor:pointer;font-weight:900}
 
-.statBar{
-  border-top:1px solid var(--line);
-  background:#fff;
-  padding:10px 14px;
-  display:flex;align-items:center;justify-content:space-between;gap:10px;
-}
-.statItems{
-  display:flex;gap:10px;flex-wrap:wrap;align-items:center;
-  font-size:12px;color:var(--muted)
-}
-.badge{
-  display:inline-flex;align-items:center;gap:6px;
-  padding:6px 10px;border-radius:999px;border:1px solid var(--line);
-  background:#fafafa;color:#333;font-weight:900
-}
-.badge .k{color:var(--muted);font-weight:700}
-.badge .v{font-variant-numeric:tabular-nums;font-family:ui-monospace,Menlo,Consolas,monospace}
+    /* v7: 三件套样式 */
+    .kitNote{font-size:12px;color:var(--muted);margin-top:6px}
+    .docBlock{border:1px solid #eee;border-radius:12px;overflow:hidden;margin:12px 0;background:#fff}
+    .docHd{padding:10px 12px;background:#fafafa;border-bottom:1px solid #eee;display:flex;align-items:center;justify-content:space-between;gap:10px}
+    .docHd b{font-size:13px}
+    .badge2{font-size:12px;color:var(--muted);border:1px solid #eee;background:#fff;border-radius:999px;padding:4px 10px}
+    pre.code{
+      margin:0;
+      padding:12px;
+      border:1px solid #f0f0f0;
+      border-radius:10px;
+      background:#fbfbfd;
+      overflow:auto;
+      font-size:12px;
+      line-height:1.6;
+      font-family:ui-monospace,Menlo,Consolas,monospace;
+      white-space:pre;
+    }
+    code{font-family:ui-monospace,Menlo,Consolas,monospace}
 
-/* modal */
-.modalMask{position:fixed;inset:0;background:rgba(0,0,0,.35);display:none;align-items:center;justify-content:center;z-index:9999}
-.modal{width:1100px;max-width:96vw;background:#fff;border-radius:12px;box-shadow:0 20px 60px rgba(0,0,0,.3);display:flex;flex-direction:column;overflow:hidden}
-.modalHd{padding:12px 16px;border-bottom:1px solid #eee;font-weight:900;display:flex;justify-content:space-between;align-items:center}
-.modalBd{padding:14px 16px;max-height:72vh;overflow:auto}
-.modalFt{padding:12px 16px;border-top:1px solid #eee;display:flex;justify-content:flex-end;gap:10px}
-
-.matrixWrap{border:1px solid var(--line);border-radius:12px;overflow:hidden}
-.matrixScroll{max-height:48vh;overflow:auto}
-.mTbl{width:100%;border-collapse:collapse;min-width:900px}
-.mTbl th,.mTbl td{border-bottom:1px solid var(--line);padding:8px 10px;font-size:12px;white-space:nowrap}
-.mTbl th{background:#fafafa;color:var(--muted);text-align:left;font-weight:900}
-.mTbl td.num{text-align:center}
-.mTbl tr:hover td{background:#fff7fb}
-
-/* ===== v2: 三件套弹窗样式（替换 requirements） ===== */
-.kitModal .modal{width:1060px}
-.kitModal .modalBd{font-size:13px;line-height:1.7}
-.docBlock{border:1px solid var(--line);border-radius:12px;overflow:hidden;margin:12px 0;background:#fff}
-.docHd{padding:10px 12px;background:#fafafa;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;gap:10px}
-.docHd b{font-size:13px}
-.badge2{font-size:12px;color:var(--muted);border:1px solid #eee;background:#fff;border-radius:999px;padding:4px 10px}
-pre.code{
-  margin:0;
-  padding:12px;
-  border-radius:10px;
-  border:1px solid #eee;
-  background:#fbfbfd;
-  overflow:auto;
-  font-size:12px;
-  line-height:1.6;
-  font-family:ui-monospace,Menlo,Consolas,monospace;
-  white-space:pre;
-}
-code{font-family:ui-monospace,Menlo,Consolas,monospace}
-</style>
+    /* 拖动时防止选中文本 */
+    .dragging, .dragging *{ cursor:col-resize !important; user-select:none !important; }
+  </style>
 </head>
 
 <body>
-<div class="topbar">
-  <div class="left">CRP 提箱现况 RPT</div>
-  <div class="right">
-    <button class="btn" type="button" onclick="exportMainCSV()">导出CSV</button>
+  <div class="topbar">
+    <div class="left">
+      <b>SLMS Demo</b>
+      <span class="meta">提箱单（CRP）配箱</span>
+    </div>
     <div class="ver" id="verBtn" title="点击查看三件套（schema / dict / ui spec）">
       <span class="dot"></span>
-      <span>rpt-crp-trans-status-v2</span>
+      <span id="verText"></span>
     </div>
   </div>
-</div>
 
-<div class="wrap">
+  <div class="wrap">
+    <div class="layout" id="layout">
+      <!-- Left: BLs -->
+      <div class="pane" id="leftPane" style="flex: 0 0 40%;">
+        <div class="card">
+          <h3>提箱单（CRP）管理</h3>
 
-  <!-- 查询条件 -->
-  <div class="card">
-    <div class="cardHd">
-      <span>查询条件</span>
-      <div class="row">
-        <button class="btn" type="button" onclick="resetFilters()">重置</button>
-        <button class="btn primary" type="button" onclick="render()">查询</button>
-      </div>
-    </div>
+          <div class="grid6">
+            <div><label>提箱单号（提单号）</label><input id="bBL" placeholder="模糊匹配"/></div>
+            <div>
+              <label>船公司</label>
+              <select id="bShip">
+                <option value="">全部</option>
+                <option value="OOCL">OOCL</option>
+                <option value="MAERSK">MAERSK</option>
+              </select>
+            </div>
+            <div><label>ETD开始</label><input type="date" id="bEtdStart"/></div>
+            <div><label>ETD结束</label><input type="date" id="bEtdEnd"/></div>
+            <div>
+              <label>运输公司</label>
+              <select id="bTrans">
+                <option value="">全部</option>
+                <option value="中集">中集</option>
+                <option value="顺航">顺航</option>
+              </select>
+            </div>
+            <div>
+              <label>目的港</label>
+              <select id="bPod">
+                <option value="">全部</option>
+                <option value="LOS ANGELES">LOS ANGELES</option>
+                <option value="HAMBURG">HAMBURG</option>
+                <option value="BUSAN">BUSAN</option>
+              </select>
+            </div>
+          </div>
 
-    <div style="padding:14px">
-      <div class="row">
-        <div class="field" style="min-width:220px;flex:1">
-          <div class="label">Booking No</div>
-          <input class="input" id="f_booking" placeholder="BK..." oninput="render()">
-        </div>
+          <div class="actions">
+            <button class="btn primary" onclick="renderBLs()">查询</button>
+            <button class="btn primary" onclick="bindAtomic()">配箱并绑定</button>
+          </div>
 
-        <div class="field" style="min-width:140px">
-          <div class="label">船公司</div>
-          <input class="input" id="f_carrier" placeholder="MSK/MSC..." oninput="render()">
-        </div>
+          <div class="detail" id="blDetail">请先选择提箱单（点击下方明细行）</div>
 
-        <div class="field" style="min-width:260px;flex:1">
-          <div class="label">船名航次</div>
-          <input class="input" id="f_vv" placeholder="例如：ARINA 552S" oninput="render()">
-        </div>
-
-        <div class="field" style="min-width:160px">
-          <div class="label">状态</div>
-          <select class="select" id="f_status" onchange="render()">
-            <option value="">全部</option>
-            <option value="未发送">未发送</option>
-            <option value="已发送">已发送</option>
-            <option value="运输中">运输中</option>
-            <option value="已完成">已完成</option>
-          </select>
-        </div>
-
-        <div class="field" style="min-width:190px">
-          <div class="label">箱号</div>
-          <input class="input" id="f_cntr" placeholder="MSKU1234567..." oninput="render()">
-        </div>
-
-        <div class="field" style="min-width:160px">
-          <div class="label">运输公司</div>
-          <input class="input" id="f_vendor" placeholder="中集/顺航..." oninput="render()">
-        </div>
-      </div>
-
-      <div class="row" style="margin-top:10px">
-        <div class="field" style="min-width:200px">
-          <div class="label">日期类型</div>
-          <select class="select" id="f_dateType" onchange="applyDateDefaults(true)">
-            <option value="send">发送CRP日期（默认）</option>
-            <option value="etd">ETD</option>
-          </select>
-        </div>
-
-        <div class="field" style="min-width:180px">
-          <div class="label">开始日期</div>
-          <input class="input" id="f_dateFrom" type="date" onchange="render()">
-        </div>
-
-        <div class="field" style="min-width:180px">
-          <div class="label">结束日期</div>
-          <input class="input" id="f_dateTo" type="date" onchange="render()">
-        </div>
-
-        <div class="small" style="align-self:flex-end;padding-bottom:10px">
-          提示：切换日期类型会自动重置默认范围（可再手动调整）。
+          <div class="scroll" id="blScroll">
+            <table>
+              <thead>
+                <tr>
+                  <th>提箱单号</th>
+                  <th>船公司</th>
+                  <th>航次</th>
+                  <th>ETD</th>
+                  <th>运输公司</th>
+                  <th>目的国家</th>
+                  <th>目的港</th>
+                  <th>20GP</th>
+                  <th>40GP</th>
+                  <th>40HQ</th>
+                </tr>
+              </thead>
+              <tbody id="blBody"></tbody>
+            </table>
+          </div>
         </div>
       </div>
-    </div>
 
-    <!-- 列表 -->
-    <div class="tableOuter">
-      <div class="tableScroll">
-        <table>
-          <thead>
-            <tr>
-              <th style="min-width:140px">录入时间</th>
-              <th style="min-width:160px">Booking</th>
-              <th style="min-width:90px">船公司</th>
-              <th style="min-width:240px">船名</th>
-              <th style="min-width:90px">航次</th>
-              <th style="min-width:110px">ETD</th>
-              <th style="min-width:120px">发送CRP</th>
-              <th style="min-width:120px">运输公司</th>
-
-              <th class="num">20GP</th>
-              <th class="num">40GP</th>
-              <th class="num">40HC</th>
-              <th class="num">40RH</th>
-
-              <th class="num" style="min-width:90px">未完成</th>
-              <th style="min-width:140px">状态</th>
-            </tr>
-          </thead>
-          <tbody id="tbody"></tbody>
-        </table>
+      <!-- draggable divider -->
+      <div class="divider" id="divider" title="拖动调整左右宽度">
+        <div class="grab"></div>
       </div>
-    </div>
 
-    <!-- 统计条 -->
-    <div class="statBar">
-      <div class="statItems" id="statItems">暂无统计</div>
-      <div class="row">
-        <button class="btn" type="button" onclick="openDetail()">查看详细内容</button>
+      <!-- Right: Containers -->
+      <div class="pane" id="rightPane" style="flex: 1 1 60%;">
+        <div class="card">
+          <h3>箱号明细（配箱对象）</h3>
+          <div class="grid4">
+            <div><label>箱号</label><input id="qBox" placeholder="模糊匹配"/></div>
+            <div><label>提箱单号</label><input id="qBL" placeholder="已配箱才有"/></div>
+            <div>
+              <label>配箱状态</label>
+              <select id="qStatus">
+                <option value="">全部</option>
+                <option value="unclaimed">未配箱</option>
+                <option value="claimed">已配箱</option>
+              </select>
+            </div>
+            <div>
+              <label>运输公司</label>
+              <select id="qTrans">
+                <option value="">全部</option>
+                <option value="中集">中集</option>
+                <option value="顺航">顺航</option>
+              </select>
+            </div>
+
+            <div><label>提箱日期开始</label><input type="date" id="qDateStart"/></div>
+            <div><label>提箱日期结束</label><input type="date" id="qDateEnd"/></div>
+          </div>
+
+          <div class="actions">
+            <button class="btn primary" onclick="renderContainers()">查询</button>
+            <button class="btn" onclick="resetContainerQuery()">重置</button>
+            <button class="btn danger" onclick="unbindConfirm()">解绑</button>
+            <span class="hint" id="selHint">已选 0</span>
+          </div>
+
+          <div class="scroll" id="containerScroll">
+            <table>
+              <thead>
+                <tr>
+                  <th style="width:46px"><input type="checkbox" id="chkAll" onclick="toggleAll(this.checked)"></th>
+                  <th>箱号</th>
+                  <th>提箱日期</th>
+                  <th>运输公司</th>
+                  <th>船公司</th>
+                  <th>目的港</th>
+                  <th>箱型</th>
+                  <th>提箱单号</th>
+                  <th>状态</th>
+                  <th style="width:90px">操作</th>
+                </tr>
+              </thead>
+              <tbody id="containerBody"></tbody>
+            </table>
+          </div>
+
+          <div class="log" id="log"></div>
+        </div>
       </div>
     </div>
   </div>
-</div>
 
-<!-- 详细弹窗 -->
-<div class="modalMask" id="detailMask">
-  <div class="modal">
-    <div class="modalHd">
-      <span>未完成提箱统计（运输公司 × 日期）</span>
-      <span style="cursor:pointer;color:var(--muted)" onclick="closeDetail()">关闭</span>
-    </div>
-
-    <div class="modalBd">
-      <div class="row">
-        <div class="field" style="min-width:220px">
-          <div class="label">日期类型</div>
-          <select class="select" id="d_dateType" onchange="applyDetailDateDefaults(true)">
-            <option value="send">发送CRP日期</option>
-            <option value="etd">ETD</option>
-          </select>
-        </div>
-        <div class="field" style="min-width:180px">
-          <div class="label">开始日期</div>
-          <input class="input" id="d_from" type="date">
-        </div>
-        <div class="field" style="min-width:180px">
-          <div class="label">结束日期</div>
-          <input class="input" id="d_to" type="date">
-        </div>
-        <div class="row" style="align-items:flex-end">
-          <button class="btn primary" type="button" onclick="renderMatrix()">查询</button>
-          <button class="btn" type="button" onclick="exportMatrixCSV()">导出CSV</button>
-        </div>
+  <!-- v7: 三件套 Modal（替换旧“页面功能要求”） -->
+  <div class="modalMask" id="reqMask">
+    <div class="modal">
+      <div class="modalHd">
+        <b>三件套（container-claim-with-bl.html / <span id="reqVer"></span>）</b>
+        <button class="close" onclick="closeReq()">关闭</button>
       </div>
-
-      <div class="matrixWrap" style="margin-top:12px">
-        <div class="matrixScroll">
-          <table class="mTbl" id="matrixTbl"></table>
+      <div class="modalBd">
+        <div class="kitNote">
+          说明：右上角版本号与本弹窗内容必须随版本同步维护（当前：<code>container-claim-with-bl-v7</code>）。
         </div>
-      </div>
 
-      <div class="small" style="margin-top:10px">
-        口径：按日期范围内的 CRP（按所选日期类型过滤），汇总“未完成箱量 = 计划 - 已完成”，行=运输公司，列=日期（YYYY-MM-DD）。
-      </div>
-    </div>
-
-    <div class="modalFt">
-      <button class="btn" type="button" onclick="closeDetail()">关闭</button>
-    </div>
-  </div>
-</div>
-
-<!-- 三件套（替换旧 requirements） -->
-<div class="modalMask kitModal" id="reqMask">
-  <div class="modal">
-    <div class="modalHd">
-      <span>三件套（CRP 提箱现况 RPT / rpt-crp-trans-status-v2）</span>
-      <span style="cursor:pointer;color:var(--muted)" onclick="closeReq()">关闭</span>
-    </div>
-    <div class="modalBd">
-
-      <!-- slms-schema.yaml -->
-      <div class="docBlock">
-        <div class="docHd">
-          <b>slms-schema.yaml</b>
-          <span class="badge2">结构唯一真源（Schema）</span>
-        </div>
-        <div class="docBd">
-<pre class="code">version: slms-crp-trans-status-schema-v1
+        <!-- slms-schema.yaml -->
+        <div class="docBlock">
+          <div class="docHd">
+            <b>slms-schema.yaml</b>
+            <span class="badge2">结构唯一真源（Schema）</span>
+          </div>
+          <div class="docBd">
+<pre class="code">version: slms-claim-with-bl-schema-v1
 domain: slms
-module: crp_trans_status_rpt
-
-storage:
-  crp_booking:
-    type: localStorage_demo
-    key: slms_crp_bookings_v1
-  pickup_demo:
-    type: localStorage_demo
-    key: slms_crp_pickups_v1
-    note: "演示用：用于模拟箱号/完成情况。正式系统应来自提箱/运输任务表。"
+module: container_claim_with_booking
 
 entities:
-
-  crp_booking:
+  booking_crp:
+    note: "本页左侧“提箱单（CRP）”。历史页面显示“提箱单号/提单号”，口径统一为 bookingNo。"
     primary_key: bookingNo
     fields:
-      bookingNo: { type: string, required: true }
-      carrier:   { type: string, required: true }
-      vessel:    { type: string, required: true }
-      voyage:    { type: string, required: true }
+      bookingNo: { type: string, required: true }   # 页面显示：提箱单号（提单号）
+      carrier:   { type: string, required: true }   # 船公司
+      vesselVoy: { type: string, required: true }   # 航次（示例中是 vessel 字段）
       etd:       { type: date,   required: true }
-      gp20:      { type: int, required: false, min: 0, max: 99 }
-      gp40:      { type: int, required: false, min: 0, max: 99 }
-      hc40:      { type: int, required: false, min: 0, max: 99 }
-      rh40:      { type: int, required: false, min: 0, max: 99 }
-      createdAt: { type: int64, required: true }
+      vendor:    { type: string, required: true }   # 运输公司
+      pod:       { type: string, required: true }
+      country:   { type: string, required: true }
+      quota:
+        gp20: { type: int, min: 0 }
+        gp40: { type: int, min: 0 }
+        hq40: { type: int, min: 0 }
+      claimed:
+        gp20: { type: int, min: 0 }
+        gp40: { type: int, min: 0 }
+        hq40: { type: int, min: 0 }
 
-      sendState: { type: enum, required: true, values: ["未发送","已发送"], default: "未发送" }
-      vendor:    { type: string, required: false }
-      sendAt:    { type: int64, required: false, note: "演示：若缺失则用 createdAt 兜底生成" }
-
-  pickup_demo:
+  container:
+    note: "本页右侧“箱号明细”。"
     primary_key: containerNo
     fields:
-      bookingNo:   { type: string, required: true }
-      vendor:      { type: string, required: false }
       containerNo: { type: string, required: true }
-      boxType:     { type: enum, required: true, values: ["20GP","40GP","40HC","40RH"] }
-      status:      { type: enum, required: true, values: ["未完成","已完成"] }
-      createdAt:   { type: int64, required: true }
-      doneAt:      { type: int64, required: false }
+      releaseDate: { type: date, required: true }   # 提箱日期
+      vendor:      { type: string, required: true } # 运输公司
+      carrier:     { type: string, required: true } # 船公司
+      pod:         { type: string, required: true }
+      boxType:     { type: enum, required: true, values: ["20GP","40GP","40HQ"] }
+      bookingNo:   { type: string, required: false } # 已配箱才有
+      claimState:  { type: enum, required: true, values: ["unclaimed","claimed"], default: "unclaimed" }
 
-derived:
-  computed_columns:
-    doneQtyByType: "count(pickup_demo where bookingNo &amp; boxType &amp; status=已完成)"
-    unFinishedQty: "sum(max(0, plan - done) by type)"
-    transStatus:
-      rule:
-        - if any(done&gt;0) =&gt; 运输中
-        - else if totalPlan&gt;0 and all(planned types done==plan) =&gt; 已完成
-        - else =&gt; (sendState==已发送 ? 已发送 : 未发送)</pre>
+rules:
+  atomic_bind:
+    all_or_nothing: true
+    validations:
+      - "selected containers must all be unclaimed"
+      - "container.carrier == booking.carrier"
+      - "container.pod == booking.pod"
+      - "booking.claimed[type] + need[type] <= booking.quota[type]"
+  unbind:
+    effect:
+      - "container.claimState=unclaimed, container.bookingNo=''"
+      - "booking.claimed[type] -= 1 (min 0)"</pre>
+          </div>
         </div>
+
+        <!-- slms-data-dict.md -->
+        <div class="docBlock">
+          <div class="docHd">
+            <b>slms-data-dict.md</b>
+            <span class="badge2">字段/口径说明（Data Dictionary）</span>
+          </div>
+          <div class="docBd">
+<pre class="code"># SLMS - 提箱单（CRP）配箱（container-claim-with-bl）
+
+## 术语
+- “配箱”= 给提箱单（CRP/Booking）绑定箱号（containerNo）
+- 状态：
+  - unclaimed = 未配箱
+  - claimed   = 已配箱
+- 提箱单号/提单号：页面历史显示“提箱单号（提单号）”，口径统一为 bookingNo
+
+## 关键字段口径
+### 左侧：提箱单（Booking/CRP）
+- quota：计划箱量配额（按箱型）
+- claimed：已配箱数量（按箱型）
+- 显示：claimed/quota（例：1/3）
+
+### 右侧：箱号明细（Container）
+- bookingNo：已配箱时绑定的提箱单号；未配箱为空
+- claimState：配箱状态（claimed/unclaimed）
+
+## 计数回退规则
+- 解绑时：按箱号的 boxType 对应 booking.claimed[type] -1（最小为 0）
+- 配箱时：按选中箱号数量对 booking.claimed[type] +1
+
+## Tab 标题同步
+- 选中提箱单后：Tab 标题变更为 “提箱单（CRP）配箱 - {bookingNo}”
+- 未选中：Tab 标题为 “提箱单（CRP）配箱”</pre>
+          </div>
+        </div>
+
+        <!-- slms-ui-spec.md -->
+        <div class="docBlock">
+          <div class="docHd">
+            <b>slms-ui-spec.md</b>
+            <span class="badge2">页面交互/约束（UI Spec）</span>
+          </div>
+          <div class="docBd">
+<pre class="code"># SLMS - 提箱单（CRP）配箱 UI Spec
+
+## 1) 布局
+- 左侧：提箱单（CRP）查询 + 明细列表 + 抬头详情
+- 右侧：箱号明细（配箱对象）查询 + 列表 + 日志
+- 中间分割线支持拖动调整左右宽度；记住上次比例（localStorage）
+
+## 2) 列表滚动
+- 左侧、右侧列表都必须支持：纵向滚动 + 横向滚动（列多时可左右滑动）
+
+## 3) 选中联动
+- 右侧点击某一箱号行：
+  - 行高亮
+  - 若该箱号已配箱，则自动定位并高亮左侧对应提箱单
+
+## 4) 配箱并绑定（原子操作）
+- 前置条件：
+  - 必须先选中一个提箱单
+  - 必须勾选一个或多个箱号
+- 校验（收集全部错误，一次性提示；任何失败则全部不操作）：
+  1) 所选箱号均为未配箱（claimed 必须先解绑）
+  2) 船公司一致（箱号.carrier == 提箱单.carrier）
+  3) 目的港一致（箱号.pod == 提箱单.pod）
+  4) 箱型配额足够（claimed + need <= quota）
+- 成功：
+  - 逐箱号写入 bookingNo，并将状态置为 claimed
+  - 同步增加提箱单 claimed 计数
+  - 刷新左右列表与抬头详情
+
+## 5) 解绑
+- 入口：右侧按钮区“解绑”
+- 弹窗确认：列出将解绑的箱号清单（含原提箱单号）
+- 成功：
+  - 清空箱号 bookingNo，状态改为 unclaimed
+  - 回退提箱单 claimed 计数（最小 0）
+
+## 6) 编辑
+- 每行“编辑”按钮打开 container-edit.html
+- 编辑保存后：本页自动刷新并高亮该箱号（支持 postMessage / storage 事件回传）
+
+## 7) 版本与规范
+- 右上角版本号与“三件套弹窗”内容必须同步维护（本页 v7）</pre>
+          </div>
+        </div>
+
       </div>
-
-      <!-- slms-data-dict.md -->
-      <div class="docBlock">
-        <div class="docHd">
-          <b>slms-data-dict.md</b>
-          <span class="badge2">字段/口径说明（Data Dictionary）</span>
-        </div>
-        <div class="docBd">
-<pre class="code"># SLMS - CRP 提箱现况 RPT（rpt-crp-trans-status）数据字典
-
-## 数据来源
-- CRP 录入数据：localStorage['slms_crp_bookings_v1']
-- 提箱/完成数据：localStorage['slms_crp_pickups_v1']（仅演示）
-  - 正式系统应替换为“提箱任务/箱号明细/运输状态表”。
-
-## 关键口径
-1) 计划箱量（plan）
-- 来自 CRP：gp20/gp40/hc40/rh40（空按 0）
-
-2) 已完成箱量（done）
-- 按 bookingNo + boxType 统计 pickup_demo.status=已完成 的数量
-
-3) 未完成箱量（unfinished）
-- sum(max(0, plan - done)) 逐箱型相加
-
-4) 状态（transStatus）
-- 任一箱型 done&gt;0 =&gt; 运输中
-- 若 totalPlan&gt;0 且所有计划箱型 done==plan =&gt; 已完成
-- 否则：按 sendState =&gt; 未发送 / 已发送
-
-5) 日期过滤
-- 日期类型=发送CRP日期：使用 sendAt；若缺失且 sendState=已发送，则用 createdAt 兜底生成（演示）
-- 日期类型=ETD：使用 etd（yyyy-mm-dd）
-
-## 导出
-- 主列表 CSV：输出 booking/vv/日期/箱量(完成/计划)/未完成/状态 等字段
-- 矩阵 CSV：行=运输公司，列=日期，值=未完成箱量</pre>
-        </div>
-      </div>
-
-      <!-- slms-ui-spec.md -->
-      <div class="docBlock">
-        <div class="docHd">
-          <b>slms-ui-spec.md</b>
-          <span class="badge2">页面交互/运算/导出（UI Spec）</span>
-        </div>
-        <div class="docBd">
-<pre class="code"># SLMS - CRP 提箱现况 RPT（rpt-crp-trans-status）UI Spec
-
-## 1. 查询条件
-- Booking No / 船公司 / 船名航次 / 状态(未发送/已发送/运输中/已完成) / 箱号 / 运输公司
-- 日期类型：默认“发送CRP日期”，可切换“ETD”
-- 默认日期：
-  - 发送CRP日期：开始=今天-7天，结束=今天
-  - ETD：开始=今天，结束=今天+14天
-
-## 2. 列表
-- 基于 slms_crp_bookings_v1
-- 箱量列显示“已完成/计划”，例如：4/5
-- 未完成列：sum(max(0, 计划-已完成))，用于统计条与矩阵
-
-## 3. 状态计算
-- 任一 done&gt;0 =&gt; 运输中
-- totalPlan&gt;0 且计划箱型全部完成 =&gt; 已完成
-- 否则按 sendState =&gt; 未发送 / 已发送
-
-## 4. 底部统计条
-- 按运输公司汇总未完成箱量：
-  - 展示：总未完成 + 各运输公司 badge（如 中集:12个）
-
-## 5. 详细弹窗（矩阵）
-- 条件：日期类型 + 日期范围
-- 展示：运输公司（行）× 日期（列）的未完成数量矩阵
-- 口径：按范围内 CRP（按所选日期字段过滤）汇总未完成
-
-## 6. 导出 CSV
-- 主列表：导出当前过滤后的数据
-- 矩阵：导出当前矩阵（行列同界面）
-
-## 7. 演示数据说明
-- 若 slms_crp_pickups_v1 为空，本页会基于 CRP 自动生成 demo 提箱记录
-- 正式系统请删除 demo 生成逻辑，并改为读取真实提箱明细</pre>
-        </div>
-      </div>
-
-      <div class="small" style="margin-top:10px">
-        提示：本弹窗内容与右上角版本号同步维护（当前：v2）。
-      </div>
-
-    </div>
-    <div class="modalFt">
-      <button class="btn" type="button" onclick="closeReq()">关闭</button>
     </div>
   </div>
-</div>
 
 <script>
-/* ========= 数据Key ========= */
-const LS_CRP = 'slms_crp_bookings_v1';
-const LS_PICK = 'slms_crp_pickups_v1'; // 演示：提箱记录（箱号+完成状态）
+/* ================= v7: 版本 & 三件套弹窗 ================= */
+const VERSION = "container-claim-with-bl-v7";
+verText.textContent = VERSION;
 
-/* ========= 三件套弹窗 ========= */
-document.getElementById('verBtn').onclick = ()=> document.getElementById('reqMask').style.display='flex';
-function closeReq(){ document.getElementById('reqMask').style.display='none'; }
-document.getElementById('reqMask').onclick = e=>{ if(e.target.id==='reqMask') closeReq(); };
+function openReq(){
+  reqVer.textContent = VERSION;
+  reqMask.style.display = "flex";
+}
+function closeReq(){ reqMask.style.display = "none"; }
+verBtn.addEventListener("click", openReq);
+reqMask.addEventListener("click", (e)=>{ if(e.target===reqMask) closeReq(); });
 
-/* ========= 工具 ========= */
-function pad2(n){ return String(n).padStart(2,'0'); }
-function ymd(d){
-  const dt = (d instanceof Date) ? d : new Date(d);
-  return `${dt.getFullYear()}-${pad2(dt.getMonth()+1)}-${pad2(dt.getDate())}`;
+function escapeHtml(s){
+  return String(s??"").replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;")
+    .replaceAll('"',"&quot;").replaceAll("'","&#39;");
 }
-function addDays(date, n){
-  const d = new Date(date);
-  d.setDate(d.getDate()+n);
-  return d;
-}
-function esc(s){return String(s??'').replace(/[&<>"']/g,m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[m]));}
-function escAttr(s){return esc(s).replace(/"/g,'&quot;');}
-function nowTs(){ return Date.now(); }
-function fmtTime(ts){
-  if(!ts) return '-';
-  const d=new Date(ts);
-  return `${d.getFullYear()}-${pad2(d.getMonth()+1)}-${pad2(d.getDate())} ${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
-}
-function parseInt0(v){ const n=parseInt(String(v||'').trim(),10); return Number.isFinite(n)?n:0; }
 
-/* ========= 读取/写入 ========= */
-function loadJson(key, fallback){
+/* ================= Tab title sync (for index tab workspace) ================= */
+const TAB_KEY = "container-claim";
+function setTabTitle(title){
   try{
-    const s=localStorage.getItem(key);
-    const v=s?JSON.parse(s):fallback;
-    return v ?? fallback;
-  }catch(e){ return fallback; }
+    if(window.parent && window.parent !== window){
+      window.parent.postMessage({ type:"SLMS_SET_TAB_TITLE", key:TAB_KEY, title }, "*");
+    }
+  }catch(_){}
 }
-function saveJson(key, val){
-  try{ localStorage.setItem(key, JSON.stringify(val)); }catch(e){}
-}
-function loadCrp(){ const arr=loadJson(LS_CRP, []); return Array.isArray(arr)?arr:[]; }
-function loadPickups(){ const arr=loadJson(LS_PICK, []); return Array.isArray(arr)?arr:[]; }
-
-/* ========= 演示：自动生成提箱记录 ========= */
-function ensureDemoPickups(crpRows){
-  let picks = loadPickups();
-  const hasAny = picks && picks.length;
-  if(hasAny) return picks;
-
-  const vendors = ['中集','顺航','XX运输公司','YY车队'];
-  function rnd(arr){ return arr[Math.floor(Math.random()*arr.length)]; }
-  function rndInt(a,b){ return a + Math.floor(Math.random()*(b-a+1)); }
-  function mkCntr(prefix){
-    const nums = String(rndInt(1000000,9999999));
-    return `${prefix}${nums}0`;
+function refreshTabTitle(){
+  if(currentBL && currentBL.bl){
+    setTabTitle(`提箱单（CRP）配箱 - ${currentBL.bl}`);
+  }else{
+    setTabTitle("提箱单（CRP）配箱");
   }
-  const prefixes = ['MSKU','MSCU','COSU','TGHU','OOLU'];
-
-  const out=[];
-  crpRows.slice(0,60).forEach(r=>{
-    const plan20=parseInt0(r.gp20), plan40=parseInt0(r.gp40), planHC=parseInt0(r.hc40), planRH=parseInt0(r.rh40);
-    const totalPlan = plan20+plan40+planHC+planRH;
-    if(totalPlan<=0) return;
-
-    const vendor = (r.vendor && String(r.vendor).trim()) ? String(r.vendor).trim() : rnd(vendors);
-
-    function gen(type, plan){
-      if(plan<=0) return;
-      const done = rndInt(0, plan);
-      for(let i=0;i<plan;i++){
-        out.push({
-          bookingNo: r.bookingNo,
-          vendor,
-          containerNo: mkCntr(rnd(prefixes)),
-          boxType: type,
-          status: (i<done) ? '已完成' : '未完成',
-          doneAt: (i<done) ? (nowTs() - rndInt(1,20)*86400000) : null,
-          createdAt: nowTs() - rndInt(1,30)*86400000
-        });
-      }
-    }
-    gen('20GP', plan20);
-    gen('40GP', plan40);
-    gen('40HC', planHC);
-    gen('40RH', planRH);
-  });
-
-  picks = out;
-  saveJson(LS_PICK, picks);
-  return picks;
 }
 
-/* ========= 发送日期兜底 ========= */
-function ensureSendAt(crpRows){
-  let changed=false;
-  crpRows.forEach(r=>{
-    if(String(r.sendState||'')==='已发送'){
-      if(!r.sendAt){
-        r.sendAt = r.createdAt || nowTs();
-        changed=true;
-      }
-    }
-  });
-  if(changed) saveJson(LS_CRP, crpRows);
-  return crpRows;
+/* ================= 可拖动分割线逻辑 ================= */
+const LS_KEY_SPLIT = "slms_demo_split_left_pct_v1";
+(function initSplit(){
+  const saved = parseFloat(localStorage.getItem(LS_KEY_SPLIT) || "");
+  if(Number.isFinite(saved) && saved>15 && saved<85){
+    applySplit(saved);
+  }
+})();
+function applySplit(leftPct){
+  leftPane.style.flex = `0 0 ${leftPct}%`;
+  rightPane.style.flex = `1 1 ${100-leftPct}%`;
+}
+(function enableDividerDrag(){
+  let dragging=false;
+
+  function start(e){
+    dragging=true;
+    document.documentElement.classList.add("dragging");
+    divider.setPointerCapture?.(e.pointerId);
+  }
+  function move(e){
+    if(!dragging) return;
+    const rect = layout.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const pct = (x / rect.width) * 100;
+    const clamped = Math.max(20, Math.min(80, pct));
+    applySplit(clamped);
+  }
+  function end(){
+    if(!dragging) return;
+    dragging=false;
+    document.documentElement.classList.remove("dragging");
+    const leftPct = parseFloat((leftPane.getBoundingClientRect().width / layout.getBoundingClientRect().width * 100).toFixed(2));
+    try{ localStorage.setItem(LS_KEY_SPLIT, String(leftPct)); }catch(_){}
+  }
+
+  divider.addEventListener("pointerdown", start);
+  window.addEventListener("pointermove", move);
+  window.addEventListener("pointerup", end);
+})();
+
+/* ================= Sample Data ================= */
+const TYPES = ["20GP","40GP","40HQ"];
+const SHIPS = ["OOCL","MAERSK"];
+const TRANS = ["中集","顺航"];
+const PODS  = ["LOS ANGELES","HAMBURG","BUSAN"];
+const COUNTRIES = { "LOS ANGELES":"USA", "HAMBURG":"DE", "BUSAN":"KR" };
+const VESSELS = ["STAR RIVER 012W","BLUE OCEAN 118E","PACIFIC 003N","EAGLE 021S"];
+
+function pad(n){ return String(n).padStart(2,"0"); }
+function iso(d){ return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`; }
+function todayISO(){ return iso(new Date()); }
+function addDaysISO(baseISO, delta){
+  const d = new Date(baseISO+"T00:00:00");
+  d.setDate(d.getDate()+delta);
+  return iso(d);
+}
+function logLine(msg){
+  const t = new Date();
+  const stamp = `${pad(t.getHours())}:${pad(t.getMinutes())}:${pad(t.getSeconds())}`;
+  log.innerHTML = `<div><span class="t">${stamp}</span> ${escapeHtml(msg)}</div>` + log.innerHTML;
 }
 
-/* ========= 完成统计 ========= */
-function countDone(picks, bookingNo, boxType){
-  return picks.filter(p=>p.bookingNo===bookingNo && p.boxType===boxType && p.status==='已完成').length;
-}
-function countHasContainer(picks, bookingNo, containerNoLike){
-  const q = String(containerNoLike||'').trim().toLowerCase();
-  if(!q) return true;
-  return picks.some(p=>p.bookingNo===bookingNo && String(p.containerNo||'').toLowerCase().includes(q));
-}
-function vendorOfBooking(r, picks){
-  const v = String(r.vendor||'').trim();
-  if(v) return v;
-  const hit = picks.find(p=>p.bookingNo===r.bookingNo && String(p.vendor||'').trim());
-  return hit ? String(hit.vendor).trim() : '';
-}
-function getPlan(r){
-  return { gp20: parseInt0(r.gp20), gp40: parseInt0(r.gp40), hc40: parseInt0(r.hc40), rh40: parseInt0(r.rh40) };
-}
-function getDone(r, picks){
+/* BLs: 24 rows */
+const bls = Array.from({length:24}, (_,i)=>{
+  const pod = PODS[i%PODS.length];
+  const ship = SHIPS[i%SHIPS.length];
+  const trans = TRANS[(i+1)%TRANS.length];
   return {
-    gp20: countDone(picks, r.bookingNo, '20GP'),
-    gp40: countDone(picks, r.bookingNo, '40GP'),
-    hc40: countDone(picks, r.bookingNo, '40HC'),
-    rh40: countDone(picks, r.bookingNo, '40RH'),
+    bl: "OOLU" + String(900000+i),   // 页面字段沿用 bl；口径=bookingNo
+    ship,
+    vessel: VESSELS[i%VESSELS.length],
+    ff: ["Kim","Lee","Park","Choi","Han","Lim"][i%6],
+    trans,
+    etd: addDaysISO(todayISO(), i%20),
+    pod,
+    country: COUNTRIES[pod],
+    quota: { "20GP": 3 + (i%2), "40GP": 3, "40HQ": 2 },
+    claimed: { "20GP": 0, "40GP": 0, "40HQ": 0 }
   };
-}
-function calcStatus(plan, done, sendState){
-  const plans = [plan.gp20, plan.gp40, plan.hc40, plan.rh40];
-  const dones = [done.gp20, done.gp40, done.hc40, done.rh40];
+});
 
-  const anyDone = dones.some(x=>x>0);
-  const totalPlan = plans.reduce((a,x)=>a+x,0);
-  const allDoneForPlanned = plans.every((p,i)=> p===0 ? true : (dones[i]>=p));
+/* Containers: 30 rows; 1/3 claimed */
+const containers = Array.from({length:30}, (_,i)=>{
+  const ship = SHIPS[i%2];
+  const trans = TRANS[i%2];
+  const pod = PODS[i%PODS.length];
+  const type = TYPES[i%3];
+  return {
+    no: "MSCU" + String(1234500+i),
+    ship,
+    trans,
+    pod,
+    type,
+    releaseDate: addDaysISO(todayISO(), -(i%18)),
+    bl: "",
+    status: "unclaimed"
+  };
+});
 
-  if(totalPlan>0 && allDoneForPlanned) return '已完成';
-  if(anyDone) return '运输中';
-  return (String(sendState||'未发送')==='已发送') ? '已发送' : '未发送';
-}
-function statusPill(st){
-  if(st==='已完成') return `<span class="stPill done"><span class="dot"></span>已完成</span>`;
-  if(st==='运输中') return `<span class="stPill transit"><span class="dot"></span>运输中</span>`;
-  if(st==='已发送') return `<span class="stPill sent"><span class="dot"></span>已发送</span>`;
-  return `<span class="stPill unsent"><span class="dot"></span>未发送</span>`;
-}
-function unfinishedTotal(plan, done){
-  return Math.max(0, (plan.gp20-done.gp20)) +
-         Math.max(0, (plan.gp40-done.gp40)) +
-         Math.max(0, (plan.hc40-done.hc40)) +
-         Math.max(0, (plan.rh40-done.rh40));
-}
-function fmtFrac(d,p){ return `${d}/${p}`; }
+let selected = new Set();
+let selectedRowNo = null;
+let currentBL = null;
 
-/* ========= 过滤条件 ========= */
-const f_booking = document.getElementById('f_booking');
-const f_carrier = document.getElementById('f_carrier');
-const f_vv = document.getElementById('f_vv');
-const f_status = document.getElementById('f_status');
-const f_cntr = document.getElementById('f_cntr');
-const f_vendor = document.getElementById('f_vendor');
-const f_dateType = document.getElementById('f_dateType');
-const f_dateFrom = document.getElementById('f_dateFrom');
-const f_dateTo = document.getElementById('f_dateTo');
-
-function applyDateDefaults(triggerRender){
-  const t = f_dateType.value;
-  const today = new Date();
-  if(t==='send'){
-    f_dateFrom.value = ymd(addDays(today,-7));
-    f_dateTo.value = ymd(today);
-  }else{
-    f_dateFrom.value = ymd(today);
-    f_dateTo.value = ymd(addDays(today,14));
+/* seed claimed 1/3 */
+for(let i=0;i<containers.length;i++){
+  if(i%3===0){
+    const b = bls[i%bls.length];
+    const c = containers[i];
+    c.status="claimed";
+    c.bl=b.bl;
+    b.claimed[c.type] += 1;
   }
-  if(triggerRender) render();
-}
-function resetFilters(){
-  f_booking.value='';
-  f_carrier.value='';
-  f_vv.value='';
-  f_status.value='';
-  f_cntr.value='';
-  f_vendor.value='';
-  f_dateType.value='send';
-  applyDateDefaults(false);
-  render();
 }
 
-function inDateRange(r, dateType, fromYmd, toYmd){
-  const from = fromYmd ? new Date(fromYmd+'T00:00:00') : null;
-  const to = toYmd ? new Date(toYmd+'T23:59:59') : null;
+/* ================= Query Defaults ================= */
+qDateEnd.value = todayISO();
+bEtdStart.value = todayISO();
+bEtdEnd.value = addDaysISO(todayISO(), 14);
 
-  let v = null;
-  if(dateType==='etd'){
-    v = r.etd ? new Date(String(r.etd).trim()+'T00:00:00') : null;
-  }else{
-    const ts = r.sendAt || r.createdAt || null;
-    v = ts ? new Date(ts) : null;
-  }
-  if(!v) return false;
-  if(from && v < from) return false;
-  if(to && v > to) return false;
-  return true;
-}
+/* ================= Rendering ================= */
+function renderContainers(){
+  const box = qBox.value.trim().toUpperCase();
+  const bl = qBL.value.trim().toUpperCase();
+  const st = qStatus.value;
+  const tr = qTrans.value;
+  const ds = qDateStart.value;
+  const de = qDateEnd.value;
 
-/* ========= 主渲染 ========= */
-const tbody = document.getElementById('tbody');
-const statItems = document.getElementById('statItems');
+  selected.clear();
+  chkAll.checked = false;
+  selHint.textContent = `已选 0`;
+  containerBody.innerHTML = "";
 
-let crpRows = [];
-let picks = [];
-let viewRows = [];
-
-function buildView(){
-  const fbk=(f_booking.value||'').trim().toLowerCase();
-  const fcar=(f_carrier.value||'').trim().toLowerCase();
-  const fvv=(f_vv.value||'').trim().toLowerCase();
-  const fst=(f_status.value||'').trim();
-  const fven=(f_vendor.value||'').trim().toLowerCase();
-  const fcn=(f_cntr.value||'').trim();
-
-  const dt=f_dateType.value;
-  const df=f_dateFrom.value;
-  const dt2=f_dateTo.value;
-
-  let list = crpRows.slice().sort((a,b)=>(b.createdAt||0)-(a.createdAt||0));
-
-  list = list.filter(r=>{
-    if(fbk && !String(r.bookingNo||'').toLowerCase().includes(fbk)) return false;
-    if(fcar && !String(r.carrier||'').toLowerCase().includes(fcar)) return false;
-    if(fvv){
-      const vv = `${r.vessel||''} ${r.voyage||''}`.toLowerCase();
-      if(!vv.includes(fvv)) return false;
-    }
-    if(!inDateRange(r, dt, df, dt2)) return false;
-
-    if(fcn && !countHasContainer(picks, r.bookingNo, fcn)) return false;
-
-    const v = vendorOfBooking(r, picks).toLowerCase();
-    if(fven && !v.includes(fven)) return false;
-
-    const plan=getPlan(r);
-    const done=getDone(r, picks);
-    const st=calcStatus(plan, done, r.sendState);
-    if(fst && st!==fst) return false;
-
+  const rows = containers.filter(c=>{
+    if(box && !c.no.includes(box)) return false;
+    if(bl && !(c.bl||"").includes(bl)) return false;
+    if(st && c.status!==st) return false;
+    if(tr && c.trans!==tr) return false;
+    if(ds && c.releaseDate<ds) return false;
+    if(de && c.releaseDate>de) return false;
     return true;
   });
 
-  return list.map(r=>{
-    const plan=getPlan(r);
-    const done=getDone(r, picks);
-    const st=calcStatus(plan, done, r.sendState);
-    const vendor = vendorOfBooking(r, picks);
-    const unfin = unfinishedTotal(plan, done);
-    return { r, plan, done, st, vendor, unfin };
+  rows.forEach(c=>{
+    const trEl = document.createElement("tr");
+    if(c.status==="unclaimed") trEl.classList.add("unclaimed");
+    if(c.no===selectedRowNo) trEl.classList.add("rowSelected");
+
+    trEl.innerHTML = `
+      <td><input type="checkbox" onclick="selectOne(event,'${c.no}')"></td>
+      <td>${c.no}</td>
+      <td>${c.releaseDate}</td>
+      <td>${c.trans}</td>
+      <td>${c.ship}</td>
+      <td>${c.pod}</td>
+      <td>${c.type}</td>
+      <td>${c.bl||""}</td>
+      <td>${c.status==="claimed" ? `<span class="tag ok">已配箱</span>` : `<span class="tag warn">未配箱</span>`}</td>
+      <td><div class="ops"><button class="linkbtn" onclick="openEdit(event,'${c.no}')">编辑</button></div></td>
+    `;
+
+    trEl.addEventListener("click", ()=>{
+      selectedRowNo = c.no;
+      if(c.status==="claimed" && c.bl){
+        locateBL(c.bl);
+      }
+      renderContainers();
+    });
+
+    containerBody.appendChild(trEl);
   });
+
+  logLine(`箱号查询结果：${rows.length} 条`);
 }
 
-function render(){
-  const built = buildView();
-  viewRows = built;
+function renderBLs(){
+  const q1 = bBL.value.trim().toUpperCase();
+  const qShip = bShip.value;
+  const qTrans = bTrans.value;
+  const qPod = bPod.value;
+  const s = bEtdStart.value;
+  const e = bEtdEnd.value;
 
-  tbody.innerHTML='';
-  if(!built.length){
-    const tr=document.createElement('tr');
-    tr.innerHTML = `<td colspan="14" style="color:var(--muted);padding:18px">暂无数据（请先在 CRP录入页录入并发送；或等待演示数据生成）</td>`;
-    tbody.appendChild(tr);
-    statItems.innerHTML = '暂无统计';
+  blBody.innerHTML = "";
+
+  const rows = bls.filter(b=>{
+    if(q1 && !b.bl.includes(q1)) return false;
+    if(qShip && b.ship!==qShip) return false;
+    if(qTrans && b.trans!==qTrans) return false;
+    if(qPod && b.pod!==qPod) return false;
+    if(s && b.etd < s) return false;
+    if(e && b.etd > e) return false;
+    return true;
+  });
+
+  rows.forEach(b=>{
+    const trEl = document.createElement("tr");
+    if(currentBL && currentBL.bl===b.bl) trEl.classList.add("rowSelected");
+
+    trEl.innerHTML = `
+      <td>${b.bl}</td>
+      <td>${b.ship}</td>
+      <td>${b.vessel}</td>
+      <td>${b.etd}</td>
+      <td>${b.trans}</td>
+      <td>${b.country}</td>
+      <td>${b.pod}</td>
+      <td>${b.claimed["20GP"]}/${b.quota["20GP"]}</td>
+      <td>${b.claimed["40GP"]}/${b.quota["40GP"]}</td>
+      <td>${b.claimed["40HQ"]}/${b.quota["40HQ"]}</td>
+    `;
+    trEl.addEventListener("click", ()=>{
+      currentBL = b;
+      updateBLDetail();
+      renderBLs();
+    });
+    blBody.appendChild(trEl);
+  });
+
+  logLine(`提箱单查询结果：${rows.length} 条`);
+}
+
+function updateBLDetail(){
+  if(!currentBL){
+    blDetail.textContent = "请先选择提箱单（点击下方明细行）";
+    refreshTabTitle();
+    return;
+  }
+  blDetail.innerHTML = `
+    <b>提箱单详情（CRP抬头信息）</b><br/>
+    提箱单号：<b>${currentBL.bl}</b> ｜ 船公司：<b>${currentBL.ship}</b> ｜ 航次：<b>${currentBL.vessel}</b><br/>
+    运输公司：<b>${currentBL.trans}</b> ｜ FF担当：<b>${currentBL.ff}</b> ｜ ETD：<b>${currentBL.etd}</b><br/>
+    目的国家：<b>${currentBL.country}</b> ｜ 目的港：<b>${currentBL.pod}</b><br/>
+    箱型配额：20GP <b>${currentBL.claimed["20GP"]}</b>/<b>${currentBL.quota["20GP"]}</b> ｜ 40GP <b>${currentBL.claimed["40GP"]}</b>/<b>${currentBL.quota["40GP"]}</b> ｜ 40HQ <b>${currentBL.claimed["40HQ"]}</b>/<b>${currentBL.quota["40HQ"]}</b>
+  `;
+  refreshTabTitle();
+}
+
+/* ================= Actions ================= */
+function selectOne(e, no){
+  e.stopPropagation();
+  if(selected.has(no)) selected.delete(no);
+  else selected.add(no);
+  selHint.textContent = `已选 ${selected.size}`;
+}
+
+function toggleAll(checked){
+  selected.clear();
+  const checkboxes = containerBody.querySelectorAll("input[type=checkbox]");
+  const rows = Array.from(containerBody.querySelectorAll("tr"));
+  rows.forEach((trEl, idx)=>{
+    const no = trEl.children[1]?.textContent;
+    if(!no) return;
+    if(checked){
+      selected.add(no);
+      checkboxes[idx].checked = true;
+    }else{
+      checkboxes[idx].checked = false;
+    }
+  });
+  selHint.textContent = `已选 ${selected.size}`;
+}
+
+function resetContainerQuery(){
+  qBox.value=""; qBL.value=""; qStatus.value=""; qTrans.value=""; qDateStart.value=""; qDateEnd.value=todayISO();
+  renderContainers();
+}
+
+function locateBL(blNo){
+  const b = bls.find(x=>x.bl===blNo);
+  if(!b) return;
+  currentBL = b;
+  updateBLDetail();
+  renderBLs();
+  logLine(`已定位提箱单：${blNo}`);
+}
+
+function openEdit(e, containerNo){
+  e.stopPropagation();
+  const url = `./container-edit.html?containerNo=${encodeURIComponent(containerNo)}`;
+  const w = window.open(url, "containerEdit", "width=1100,height=720");
+  if(!w) alert("浏览器阻止了弹窗，请允许弹出窗口后重试。");
+}
+
+function unbindConfirm(){
+  const targets = containers.filter(c=>selected.has(c.no));
+  const claimed = targets.filter(c=>c.status==="claimed");
+  if(claimed.length===0){
+    alert("请选择已配箱的箱号后再解绑。");
+    return;
+  }
+  const list = claimed.map(c=>`${c.no}（原提箱单：${c.bl}）`).join("\n");
+  const ok = confirm(`确认解绑以下 ${claimed.length} 个箱号？\n\n${list}\n\n（解绑将清空箱号提箱单号，并回退提箱单已配箱数量）`);
+  if(!ok) return;
+
+  claimed.forEach(c=>{
+    const b = bls.find(x=>x.bl===c.bl);
+    if(b) b.claimed[c.type] = Math.max(0, b.claimed[c.type]-1);
+    c.status="unclaimed";
+    c.bl="";
+  });
+  logLine(`解绑成功：${claimed.length} 个箱号`);
+  renderContainers();
+  renderBLs();
+  updateBLDetail();
+}
+
+function bindAtomic(){
+  if(!currentBL){
+    alert("请先选择左侧提箱单。");
+    return;
+  }
+  if(selected.size===0){
+    alert("请先在右侧勾选要配到该提箱单的箱号。");
     return;
   }
 
-  built.forEach(x=>{
-    const r=x.r, plan=x.plan, done=x.done;
+  const targets = containers.filter(c=>selected.has(c.no));
+  const errors = [];
 
-    const tr=document.createElement('tr');
-    tr.innerHTML = `
-      <td>${fmtTime(r.createdAt||null)}</td>
-      <td><b>${esc(r.bookingNo||'')}</b></td>
-      <td>${esc(r.carrier||'')}</td>
-      <td class="ellip" title="${escAttr(r.vessel||'')}">${esc(r.vessel||'')}</td>
-      <td>${esc(r.voyage||'')}</td>
-      <td>${esc(r.etd||'-')}</td>
-      <td>${esc(r.sendAt ? ymd(new Date(r.sendAt)) : '-')}</td>
-      <td>${esc(x.vendor||'')}</td>
-
-      <td class="num">${esc(fmtFrac(done.gp20, plan.gp20))}</td>
-      <td class="num">${esc(fmtFrac(done.gp40, plan.gp40))}</td>
-      <td class="num">${esc(fmtFrac(done.hc40, plan.hc40))}</td>
-      <td class="num">${esc(fmtFrac(done.rh40, plan.rh40))}</td>
-
-      <td class="num"><b>${esc(String(x.unfin))}</b></td>
-      <td>${statusPill(x.st)}</td>
-    `;
-    tbody.appendChild(tr);
-  });
-
-  renderStatBar(built);
-}
-
-function renderStatBar(built){
-  const map = new Map();
-  built.forEach(x=>{
-    const v = (x.vendor||'未分配').trim() || '未分配';
-    map.set(v, (map.get(v)||0) + (x.unfin||0));
-  });
-
-  const items = Array.from(map.entries())
-    .sort((a,b)=>b[1]-a[1])
-    .slice(0, 20)
-    .map(([k,v])=> `<span class="badge"><span class="k">${esc(k)}:</span><span class="v">${esc(String(v))}</span>个</span>`)
-    .join('');
-
-  const total = built.reduce((a,x)=>a+(x.unfin||0),0);
-  statItems.innerHTML =
-    `<span class="badge"><span class="k">总未完成:</span><span class="v">${esc(String(total))}</span>个</span>` +
-    (items ? items : `<span class="small">暂无统计</span>`);
-}
-
-/* ========= 导出 CSV ========= */
-function csvEscape(v){
-  const s = String(v ?? '');
-  if(/[",\n]/.test(s)) return `"${s.replace(/"/g,'""')}"`;
-  return s;
-}
-function downloadCsv(filename, rows){
-  const blob = new Blob([rows.join('\n')], {type:'text/csv;charset=utf-8;'});
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  setTimeout(()=>URL.revokeObjectURL(a.href), 1000);
-}
-function exportMainCSV(){
-  const head = [
-    'bookingNo','carrier','vessel','voyage','etd','sendDate','vendor','status',
-    'gp20_done','gp20_plan','gp40_done','gp40_plan','hc40_done','hc40_plan','rh40_done','rh40_plan',
-    'unfinished'
-  ].join(',');
-
-  const lines = [head];
-
-  viewRows.forEach(x=>{
-    const r=x.r, p=x.plan, d=x.done;
-    lines.push([
-      r.bookingNo, r.carrier, r.vessel, r.voyage, r.etd,
-      (r.sendAt? ymd(new Date(r.sendAt)) : ''),
-      x.vendor, x.st,
-      d.gp20, p.gp20, d.gp40, p.gp40, d.hc40, p.hc40, d.rh40, p.rh40,
-      x.unfin
-    ].map(csvEscape).join(','));
-  });
-
-  downloadCsv(`crp-trans-status_${ymd(new Date())}.csv`, lines);
-}
-
-/* ========= 详细弹窗：矩阵 ========= */
-const detailMask = document.getElementById('detailMask');
-const d_dateType = document.getElementById('d_dateType');
-const d_from = document.getElementById('d_from');
-const d_to = document.getElementById('d_to');
-const matrixTbl = document.getElementById('matrixTbl');
-
-function openDetail(){
-  d_dateType.value = f_dateType.value || 'send';
-  applyDetailDateDefaults(false);
-  detailMask.style.display='flex';
-  renderMatrix();
-}
-function closeDetail(){ detailMask.style.display='none'; }
-detailMask.onclick = e=>{ if(e.target===detailMask) closeDetail(); };
-
-function applyDetailDateDefaults(trigger){
-  const t = d_dateType.value;
-  const today = new Date();
-  if(t==='send'){
-    d_from.value = ymd(addDays(today,-7));
-    d_to.value = ymd(today);
-  }else{
-    d_from.value = ymd(today);
-    d_to.value = ymd(addDays(today,14));
-  }
-  if(trigger) renderMatrix();
-}
-
-function dateList(fromYmd, toYmd){
-  const out=[];
-  const start=new Date(fromYmd+'T00:00:00');
-  const end=new Date(toYmd+'T00:00:00');
-  let cur = start;
-  while(cur <= end){
-    out.push(ymd(cur));
-    cur = addDays(cur, 1);
-  }
-  return out;
-}
-
-let lastMatrix = { dates:[], vendors:[], grid: new Map() };
-
-function renderMatrix(){
-  const t = d_dateType.value;
-  const from = d_from.value;
-  const to = d_to.value;
-  if(!from || !to){ alert('请选择开始/结束日期'); return; }
-  if(new Date(from) > new Date(to)){ alert('开始日期不能大于结束日期'); return; }
-
-  const dates = dateList(from, to);
-  const subset = crpRows.filter(r=> inDateRange(r, t, from, to));
-
-  const vset = new Set();
-  subset.forEach(r=>{
-    const v = (vendorOfBooking(r, picks) || '未分配').trim() || '未分配';
-    vset.add(v);
-  });
-  const vendors = Array.from(vset).sort((a,b)=>a.localeCompare(b,'zh'));
-
-  const grid = new Map();
-  function add(v, d, n){
-    const key = `${v}||${d}`;
-    grid.set(key, (grid.get(key)||0) + n);
-  }
-
-  subset.forEach(r=>{
-    const plan=getPlan(r);
-    const done=getDone(r, picks);
-    const unfin=unfinishedTotal(plan, done);
-    if(unfin<=0) return;
-
-    const vendor = (vendorOfBooking(r, picks) || '未分配').trim() || '未分配';
-
-    let d = '';
-    if(t==='etd'){
-      d = String(r.etd||'').trim();
-    }else{
-      d = r.sendAt ? ymd(new Date(r.sendAt)) : '';
-      if(!d) d = ymd(new Date(r.createdAt||nowTs()));
+  targets.forEach(c=>{
+    if(c.status==="claimed"){
+      errors.push(`${c.no}：已被提箱单 ${c.bl} 配箱（请先解绑或更换提箱单）`);
     }
-    if(!d || !dates.includes(d)) return;
-
-    add(vendor, d, unfin);
   });
 
-  let html = '';
-  html += '<thead><tr>';
-  html += '<th style="min-width:140px">运输公司</th>';
-  dates.forEach(d=> html += `<th class="num" style="min-width:90px">${esc(d.slice(5))}</th>`);
-  html += '</tr></thead>';
+  const need = { "20GP":0, "40GP":0, "40HQ":0 };
+  targets.forEach(c=>{
+    if(c.ship!==currentBL.ship) errors.push(`${c.no}：船公司不一致（箱：${c.ship} / 提箱单：${currentBL.ship}）`);
+    if(c.pod!==currentBL.pod) errors.push(`${c.no}：目的港不一致（箱：${c.pod} / 提箱单：${currentBL.pod}）`);
+    need[c.type] += 1;
+  });
 
-  html += '<tbody>';
-  if(!vendors.length){
-    html += `<tr><td colspan="${1+dates.length}" style="color:var(--muted);padding:16px">该日期范围暂无未完成数据</td></tr>`;
-  }else{
-    vendors.forEach(v=>{
-      html += `<tr><td><b>${esc(v)}</b></td>`;
-      dates.forEach(d=>{
-        const n = grid.get(`${v}||${d}`) || 0;
-        html += `<td class="num">${n ? `<b>${esc(String(n))}</b>` : ''}</td>`;
-      });
-      html += '</tr>';
-    });
-  }
-  html += '</tbody>';
+  Object.keys(need).forEach(t=>{
+    if(currentBL.claimed[t] + need[t] > currentBL.quota[t]){
+      errors.push(`${t}：提箱单箱型配额不足（需要 ${need[t]}，当前已配箱 ${currentBL.claimed[t]}，配额 ${currentBL.quota[t]}）`);
+    }
+  });
 
-  matrixTbl.innerHTML = html;
-  lastMatrix = { dates, vendors, grid };
-}
-
-function exportMatrixCSV(){
-  const {dates, vendors, grid} = lastMatrix;
-  if(!dates || !dates.length){ alert('暂无矩阵数据'); return; }
-
-  const head = ['vendor', ...dates].map(csvEscape).join(',');
-  const lines = [head];
-
-  if(!vendors || !vendors.length){
-    lines.push(csvEscape('暂无数据'));
-  }else{
-    vendors.forEach(v=>{
-      const row = [v, ...dates.map(d=> String(grid.get(`${v}||${d}`)||0))].map(csvEscape).join(',');
-      lines.push(row);
-    });
+  if(errors.length){
+    alert("配箱失败：存在以下问题（已阻止全部操作）\n\n" + errors.join("\n"));
+    logLine(`配箱失败（阻止全部）：${errors.length} 条校验不通过`);
+    return;
   }
 
-  downloadCsv(`crp-unfinished-matrix_${ymd(new Date())}.csv`, lines);
+  targets.forEach(c=>{
+    c.status="claimed";
+    c.bl=currentBL.bl;
+    currentBL.claimed[c.type] += 1;
+  });
+
+  logLine(`配箱成功：${targets.length} 个箱号 → ${currentBL.bl}`);
+  renderContainers();
+  renderBLs();
+  updateBLDetail();
 }
 
-/* ========= init ========= */
-(function init(){
-  crpRows = ensureSendAt(loadCrp());
-  picks = ensureDemoPickups(crpRows);
+/* ================= Cross-page Update (edit save) ================= */
+window.addEventListener("message", (ev)=>{
+  if(!ev.data || ev.data.type!=="SLMS_CONTAINER_UPDATED") return;
+  applyContainerUpdate(ev.data.payload);
+});
+window.addEventListener("storage", (ev)=>{
+  if(ev.key !== "slms_demo_container_updated") return;
+  try{
+    const payload = JSON.parse(ev.newValue || "{}");
+    applyContainerUpdate(payload);
+  }catch(_){}
+});
+function applyContainerUpdate(payload){
+  if(!payload || !payload.oldNo) return;
+  const { oldNo, newNo, ship, trans, pod, type, releaseDate } = payload;
 
-  f_dateType.value='send';
-  applyDateDefaults(false);
-  render();
-})();
+  const c = containers.find(x=>x.no===oldNo);
+  if(!c){
+    logLine(`收到编辑回传，但未找到箱号：${oldNo}`);
+    return;
+  }
+
+  c.no = newNo || c.no;
+  if(ship) c.ship = ship;
+  if(trans) c.trans = trans;
+  if(pod) c.pod = pod;
+  if(type) c.type = type;
+  if(releaseDate) c.releaseDate = releaseDate;
+
+  if(selected.has(oldNo)){
+    selected.delete(oldNo);
+    selected.add(c.no);
+  }
+  selectedRowNo = c.no;
+  logLine(`已更新箱号信息：${oldNo} → ${c.no}`);
+  renderContainers();
+}
+
+/* ================= init ================= */
+renderBLs();
+updateBLDetail();
+renderContainers();
+refreshTabTitle();
 </script>
 </body>
 </html>
