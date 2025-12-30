@@ -1,18 +1,12 @@
 <!--
 File: container/container-manage.html
-Version: container-manage-v1
-Date: 2025-12-29
+Version: container-manage-v2
+Date: 2025-12-30
 
-v1 变更点：
-1) 新增【集装箱管理】页面：内置 200 条演示数据（localStorage 可持久化），支持查询/分页/多选/编辑/导出 CSV
-2) 编辑必须为页面内 Modal（彻底去掉 window.open）
-3) 编辑 Modal 支持【错误箱号更正】：
-   - 勾选后出现红色警告容器：新箱号输入 + 检查按钮
-   - 检查：若新箱号已存在则自动带入；不存在则提示“无当前箱号”，保存时按旧箱号字段创建并承接
-   - 保存更正：若旧箱号已配 CRP 且 assignStatus=assigned → 对应 CRP 该箱型完成量 -1（不小于0）
-   - 空箱检查任务转移到正确箱号；旧箱号标记 correctedTo；新箱号标记 correctedFrom
-4) 右上角版本号弹窗升级为固定三件套 SLMS-ThreeKitStyle（左导航 + 右单文档区），并遵循滚动条默认规则
-5) 所有列表/表格：根据画面自适应，溢出自动出现滚动条（优先纵向；长行/宽表支持横向）
+v2 变更点（基于 v1 最新主线）：
+1) 三件套（schema/dict/ui-spec）补充“作业地看板/箱子状态管理逻辑（计划态+在场态+作业进度态）”，用于后端与 Dashboard 口径统一
+2) 同步更新右上角版本号显示与版本弹窗三件套内容（遵循版本号同步规则）
+3) 三件套弹窗样式保持 SLMS-ThreeKitStyle 不变，滚动条规则不变
 -->
 
 <!doctype html>
@@ -214,7 +208,7 @@ v1 变更点：
     <div class="right">
       <div class="ver" id="verBtn" title="点击查看三件套（schema / dict / ui spec）">
         <span class="dot"></span>
-        <span id="verText">container-manage-v1</span>
+        <span id="verText">container-manage-v2</span>
       </div>
     </div>
   </div>
@@ -750,7 +744,7 @@ v1 变更点：
   <div class="modalMask" id="reqMask">
     <div class="modal reqModal">
       <div class="modalHd">
-        <span>三件套（集装箱管理 / <span class="mono">container-manage-v1</span>）</span>
+        <span>三件套（集装箱管理 / <span class="mono">container-manage-v2</span>）</span>
         <span class="closeX" onclick="closeReq()">关闭</span>
       </div>
 
@@ -762,7 +756,7 @@ v1 变更点：
             <button class="reqNavBtn" id="navDict" onclick="showDoc('dict')">slms-data-dict.md</button>
             <button class="reqNavBtn" id="navUi" onclick="showDoc('ui')">slms-ui-spec.md</button>
             <div class="small" style="margin-top:8px">
-              提示：右上角版本号与本弹窗内容必须随版本同步维护（v1）。
+              提示：右上角版本号与本弹窗内容必须随版本同步维护（v2）。
             </div>
           </div>
 
@@ -776,9 +770,14 @@ v1 变更点：
                   <button class="copyBtn" type="button" onclick="copyText('schemaText')">复制</button>
                 </div>
               </div>
-<pre class="code" id="schemaText">version: slms-container-manage-schema-v1
+<pre class="code" id="schemaText">version: slms-container-manage-schema-v2
 domain: slms
 module: container_manage
+
+# 说明：
+# - 本页面（container-manage）演示数据仍以 container 为主（localStorage）。
+# - 为支撑“作业地看板 / Dashboard”，v2 在 Schema 中补充后台推荐结构（plan + presence + job_summary + logs）。
+# - 页面未必立刻实现这些实体字段，但口径需要在三件套中先对齐，避免后续各页面各算一套。
 
 entities:
 
@@ -800,8 +799,8 @@ entities:
       pod:          { type: string, required: false, note: "目的港" }
 
       releaseDate:  { type: date, required: false, note: "提箱日期" }
-      stuffDate:    { type: date, required: false, note: "计划装箱日期" }
-      worksite:     { type: string, required: false, note: "作业地" }
+      stuffDate:    { type: date, required: false, note: "计划装箱日期（计划态参考）" }
+      worksite:     { type: string, required: false, note: "作业地（计划态参考；真实系统推荐以 plan.placeId 为准）" }
 
       cntrStatus:   { type: enum, required: true, values: ["EMPTY","RELEASED","GATE_IN","STUFFING","LOADED","SHIPPED","HOLD"] }
       assignStatus: { type: enum, required: true, values: ["unassigned","assigned","corrected","cancelled"] }
@@ -814,6 +813,79 @@ entities:
       remark:       { type: string, required: false }
       updatedAt:    { type: int64, required: true, note: "更新时间戳(ms)" }
       history:      { type: array, required: false, note: "操作日志（演示结构）" }
+
+  # ==========================
+  # 作业地看板 / Dashboard 推荐后台结构（v2 新增）
+  # ==========================
+
+  worksite:
+    description: "作业地/场地字典（用于 Dashboard 汇总、权限、排序）"
+    primary_key: placeId
+    fields:
+      placeId:   { type: string, required: true, example: "DGZ" }
+      placeName: { type: string, required: true, example: "东港站" }
+      enabled:   { type: bool,   required: true, example: true }
+      sort:      { type: int,    required: false, note: "显示顺序" }
+
+  stuffing_plan_item:
+    description: "装箱计划/指派清单（计划态：assigned/not_arrived 的根集合）"
+    primary_key: planItemId
+    fields:
+      planItemId:   { type: string, required: true }
+      containerNo:  { type: string, required: true, note: "计划使用的箱号；允许为空/待定时可用 placeholder" }
+      placeId:      { type: string, required: true, note: "指派作业地（唯一口径）" }
+      planDate:     { type: date,   required: false, note: "计划装箱日期" }
+
+      bookingNo:    { type: string, required: false }
+      crpNo:        { type: string, required: false }
+      requestKey:   { type: string, required: false }
+
+      planQty:      { type: int,    required: false, note: "计划装箱台数（或箱量口径）" }
+      planSkuList:  { type: array,  required: false, note: "计划产品明细（可选，若需型号/机种维度）" }
+
+      planStatus:   { type: enum, required: true, values: ["assigned","scheduled","cancelled"], note: "计划自身状态" }
+      createdAt:    { type: int64, required: true }
+      updatedAt:    { type: int64, required: true }
+
+  container_presence:
+    description: "在场/位置当前态（在场态：箱子当前在哪里；用于 Dashboard 现存箱数）"
+    primary_key: containerNo
+    fields:
+      containerNo:  { type: string, required: true }
+      currentPlaceId:{ type: string, required: false, note: "当前作业地/堆场；不在任何场地可为空" }
+      presenceStatus:{ type: enum, required: true, values: ["not_arrived","arrived","departed"], note: "在场状态（当前态）" }
+      arrivedAt:    { type: int64, required: false }
+      departedAt:   { type: int64, required: false }
+      lastEventTs:  { type: int64, required: true, note: "最后一次位置事件时间戳" }
+
+  container_presence_log:
+    description: "位置事件历史（事件态：审计/追溯；量可大，但不用于常规 Dashboard 查询）"
+    primary_key: eventId
+    fields:
+      eventId:      { type: string, required: true }
+      containerNo:  { type: string, required: true }
+      eventType:    { type: enum, required: true, values: ["assign","arrive","move","depart","cancel_assign","correct_no"] }
+      fromPlaceId:  { type: string, required: false }
+      toPlaceId:    { type: string, required: false }
+      ts:           { type: int64, required: true }
+      by:           { type: string, required: false, note: "操作者/系统来源" }
+      note:         { type: string, required: false }
+
+  stuffing_job_summary:
+    description: "装箱作业汇总（作业进度态：装了多少/计划多少/装了什么；供 Dashboard 快速展示）"
+    primary_key: containerNo
+    fields:
+      containerNo:  { type: string, required: true }
+      placeId:      { type: string, required: true, note: "作业发生的作业地（通常=plan.placeId）" }
+      bookingNo:    { type: string, required: false }
+      requestKey:   { type: string, required: false }
+
+      planQty:      { type: int, required: false }
+      doneQty:      { type: int, required: false, note: "累计完成台数（净值）" }
+      modelsSummary:{ type: string, required: false, note: "型号汇总（如 A1=10,B2=5），或用明细表替代" }
+
+      jobStatus:    { type: enum, required: true, values: ["waiting","running","done","hold","cancelled"] }
+      lastUpdateTs: { type: int64, required: true }
 
   crp_done:
     description: "CRP 对应箱型完成量（演示：用于错误箱号更正时 -1）"
@@ -832,9 +904,10 @@ entities:
                   <button class="copyBtn" type="button" onclick="copyText('dictText')">复制</button>
                 </div>
               </div>
-<pre class="code" id="dictText"># SLMS - 集装箱管理（container-manage）数据字典（v1）
+<pre class="code" id="dictText"># SLMS - 集装箱管理（container-manage）数据字典（v2）
 
-## 1) container（集装箱）
+## A) 现有页面数据（演示：container）
+### 1) container（集装箱）
 - containerNo：箱号（业务主键，演示版允许修改；真实系统通常限制）
 - boxType：箱型（20GP/40GP/40HQ/40RH）
 - tare：Tare 自重（kg）
@@ -844,9 +917,9 @@ entities:
 - truckNo：车辆号码（可为空）
 - vendor/carrier/pod：运输公司/船公司/目的港
 - releaseDate：提箱日期
-- stuffDate/worksite：计划装箱日期 / 作业地（为后续装箱计划使用）
+- stuffDate/worksite：计划装箱日期 / 作业地（演示：写在 container；真实系统推荐以 plan.placeId 为唯一口径）
 
-### 状态枚举
+### 状态枚举（演示）
 - cntrStatus（箱状态）：EMPTY/RELEASED/GATE_IN/STUFFING/LOADED/SHIPPED/HOLD
 - assignStatus（配箱状态）：unassigned/assigned/corrected/cancelled
 - checkStatus（空箱检查）：none/pending/passed/failed
@@ -856,16 +929,84 @@ entities:
 - correctedTo：错误箱号 -> 正确箱号
 - correctedFrom：正确箱号 <- 错误箱号
 
-## 2) crp_done（CRP 完成量，演示口径）
+## B) 作业地看板 / Dashboard 口径（v2 新增，后端推荐结构）
+> 目的：在“作业地管理界面 / Dashboard”准确显示：
+> 1) 每个作业地指派了哪些箱（含未到）
+> 2) 现在在场有哪些箱（按位置）
+> 3) 每个箱装了什么、装了多少、计划多少（作业进度）
+
+### 1) 三态模型（核心思想）
+- 计划态（Plan/Assigned）：指派给哪个作业地、计划日期、计划数量/型号
+  - 数据来源：stuffing_plan_item（placeId 为唯一口径）
+- 在场态（Presence/Arrived）：箱子现在在哪里（位置当前态）
+  - 数据来源：container_presence（只存“当前态”，避免表无限增长）
+- 作业进度态（Job/Progress）：装了多少/计划多少/装了什么
+  - 数据来源：stuffing_job_summary（或由装箱动作明细聚合得到）
+
+### 2) 为什么不把“位置/状态历史”都塞进 container 表？
+- container 表适合存“主数据”和“少量过程字段”。
+- 位置变化、移动、到达、离开属于“事件流”，如果都堆在 container，会导致：
+  - 无法审计追溯（缺少事件粒度）
+  - 当前态计算复杂且容易被覆盖
+  - 数据量长期累积（你提到一年 3 万条属于事件级别；应落到 log 表）
+
+推荐分层：
+- container_presence：每箱一行（当前态），用于 Dashboard 高频查询
+- container_presence_log：记录每次位置/指派/到达/离开事件，用于追溯审计（量大但低频）
+
+### 3) 作业地箱子清单（你要的“在 + 未到”合并展示）
+**作业地箱子清单 = 指派清单 LEFT JOIN 在场清单 LEFT JOIN 作业汇总**
+- 主集合（必须包含“未到”）：stuffing_plan_item where placeId = X and planStatus != cancelled
+- 在场信息：container_presence by containerNo
+- 进度信息：stuffing_job_summary by containerNo
+
+建议输出字段（用于作业地页面列表）：
+- containerNo
+- placeId（指派作业地）
+- planDate / planQty / planSkuList（或 modelsSummary）
+- presenceStatus（not_arrived/arrived/departed）
+- currentPlaceId（当前所在作业地；用于判断“是否到达指派地”）
+- jobStatus（waiting/running/done/hold/cancelled）
+- doneQty（已装台数）
+- bookingNo/requestKey/crpNo 等关联字段
+
+### 4) 关键口径（状态计算规则建议）
+#### 4.1 “是否已到指派作业地”
+- arrived_to_assigned_place = (presence.presenceStatus == "arrived") AND (presence.currentPlaceId == plan.placeId)
+
+#### 4.2 作业地列表展示状态（推荐展示用）
+- assigned_not_arrived：
+  - plan 存在，且 arrived_to_assigned_place 为 false
+- arrived_waiting：
+  - arrived_to_assigned_place 为 true
+  - 且 jobStatus in ["waiting"] 或 doneQty == 0
+- running：
+  - arrived_to_assigned_place 为 true
+  - 且 jobStatus == "running" 或 doneQty > 0 且 doneQty < planQty(若存在)
+- done：
+  - jobStatus == "done"
+  - 或 planQty 存在且 doneQty >= planQty
+- departed（可选）：
+  - presence.presenceStatus == "departed"（一般从作业地看板移出或进“已离场”筛选）
+
+### 5) Dashboard 汇总（每个作业地）
+- assigned_total = count(planItem where placeId=X and planStatus != cancelled)
+- arrived_total = count(planItem join presence where placeId=X and arrived_to_assigned_place=true)
+- not_arrived_total = assigned_total - arrived_total
+- running_total = count(where status_display == running)
+- done_total = count(where status_display == done)
+- 可扩展：hold_total / exception_total（来自 jobStatus 或 dataQuality）
+
+## C) crp_done（CRP 完成量，演示口径）
 - doneQtyByType：记录该 CRP 按箱型的“完成箱量”（演示）
 - 错误箱号更正时，如果旧箱号满足：
   - assignStatus=assigned 且 crpNo 非空
   - 则对该 crpNo 的 doneQtyByType[旧箱号.boxType] 执行 -1（不小于0）
 
-## 3) history（操作日志，演示）
+## D) history（操作日志，演示）
 - 每次编辑/批量修改/纠错，都追加一条：
   - ts：时间戳
-  - action：动作（edit / bulk / correct）
+  - action：动作（edit / bulk / correct / scan / seed）
   - note：说明
   - by：操作者（演示固定为 "demo-user"）</pre>
             </div>
@@ -879,7 +1020,7 @@ entities:
                   <button class="copyBtn" type="button" onclick="copyText('uiText')">复制</button>
                 </div>
               </div>
-<pre class="code" id="uiText"># SLMS - 集装箱管理 UI Spec（container-manage-v1）
+<pre class="code" id="uiText"># SLMS - 集装箱管理 UI Spec（container-manage-v2）
 
 ## 1) 页面结构
 - 顶部：标题 + 右上角版本号（可点击打开三件套）
@@ -919,7 +1060,28 @@ entities:
   4) 新箱号标记：correctedFrom=oldNo，并承接旧箱号的 Booking/CRP 等字段（若新箱号不存在则创建）
   5) 双方写入 history
 
-## 7) 三件套（SLMS-ThreeKitStyle）
+## 7) 作业地看板 / Dashboard（后台口径约束，v2 新增）
+> 本页面是“容器数据维护/纠错”的通用后台页；作业地管理页与 Dashboard 将复用同一套口径。
+> 要求：后续任何页面实现“按作业地展示箱子状态”，必须按三态模型计算，不允许各页面各算一套。
+
+### 7.1 三态模型（必须）
+- 计划态：stuffing_plan_item（placeId 为唯一口径，包含未到箱）
+- 在场态：container_presence（当前态；用于实时“在场箱数/位置”）
+- 作业进度态：stuffing_job_summary（装了多少/计划多少/装了什么）
+
+### 7.2 作业地箱子清单（必须包含“指派未到”）
+- 列表根集合：stuffing_plan_item where placeId = X and planStatus != cancelled
+- 合并展示：LEFT JOIN container_presence + LEFT JOIN stuffing_job_summary
+- 展示至少包含：containerNo / planQty / doneQty / modelsSummary / presenceStatus / currentPlaceId / jobStatus
+
+### 7.3 统一的展示状态计算（建议）
+- assigned_not_arrived：plan 存在 && 未到指派地
+- arrived_waiting：已到指派地 && 尚未开始（doneQty==0 或 jobStatus=waiting）
+- running：已到指派地 && 进行中（doneQty>0 且未完成）
+- done：完成（doneQty>=planQty 或 jobStatus=done）
+- departed（可选）：presenceStatus=departed
+
+## 8) 三件套（SLMS-ThreeKitStyle）
 - 布局固定：左侧导航（3按钮）+ 右侧单文档内容区（docCard + copy + pre）
 - 内容区不够一屏时自动滚动（右侧优先纵向；pre/长行支持横向）</pre>
             </div>
@@ -935,9 +1097,9 @@ entities:
 
 <script>
 /* ================= 基础配置 ================= */
-const VERSION = "container-manage-v1";
-const LS_KEY = "slms_container_manage_v1";
-const LS_CRP_DONE = "slms_container_manage_crp_done_v1";
+const VERSION = "container-manage-v2";
+const LS_KEY = "slms_container_manage_v2";
+const LS_CRP_DONE = "slms_container_manage_crp_done_v2";
 const DEMO_USER = "demo-user";
 
 const BOX_TYPES = ["20GP","40GP","40HQ","40RH"];
@@ -1376,12 +1538,7 @@ function updateSelectionUI(){
   const count = selectedSet.size;
   bulkBtn.disabled = count===0;
   if(count===0) chkAll.checked = false;
-  selHintText();
   renderDetail();
-}
-function selHintText(){
-  // 右侧详情标题 + 批量
-  //（selSummary 已在上面）
 }
 
 /* ================= 右侧详情渲染 ================= */
@@ -1654,7 +1811,6 @@ function checkNewNo(){
 
   if(found){
     // 自动带入：如果系统里已经有记录
-    // 注意：你要求“如果系统里已经有带入其他对应字段内容”，这里采用“带入到表单的下半部分（主表单）”，方便用户最终保存。
     e_type.value = found.boxType || e_type.value;
     e_booking.value = found.bookingNo || e_booking.value;
     if(found.tare) e_tare.value = String(found.tare);
@@ -1779,7 +1935,6 @@ function saveEdit(){
 
   // 纠错检查：是否存在新箱号记录
   let target = findByNo(newNo);
-  const willCreate = !target;
 
   // 1) CRP 完成量 -1（满足条件）
   const needMinus = (base.assignStatus==="assigned" && String(base.crpNo||"").trim());
@@ -1808,8 +1963,7 @@ function saveEdit(){
     containers.unshift(created);
     target = created;
   }else{
-    // 已存在：把旧箱号关键字段带入正确箱号（你要求：把上方错误箱号相关字段带入正确箱号）
-    // 策略：优先用“旧箱号的 booking/crp/requestKey 等”覆盖到 target（除非 target 已有且用户在表单修改了）
+    // 已存在：把旧箱号关键字段带入正确箱号
     const merged = Object.assign({}, target, {
       bookingNo: next.bookingNo || base.bookingNo || target.bookingNo,
       requestKey: base.requestKey || target.requestKey,
