@@ -1,20 +1,26 @@
 <!--
 File: mobile/stuffing-mobile.html
-Version: stuffing-mobile-v2
+Version: stuffing-mobile-v5
 Date: 2025-12-29
 
-v2 变更点（基于 v1 最新主线）：
-1) 列表改为“紧凑单行 + 可展开详情”：
-   - 默认显示动作列表（紧凑行），点击展开显示多型号明细与照片区
-2) 插入动作：改为在列表底部追加（不是最上面）
-3) 删除能力：
-   - 动作行提供【删除动作】按钮
-   - 删除型号行时：若当前动作只剩最后 1 行型号，点击删除会询问“是否删除整个动作”，确认后删除动作
-4) 右上角版本号 + 点击弹出“三件套”（SLMS-ThreeKitStyle）：
-   - 左侧导航：slms-schema.yaml / slms-data-dict.md / slms-ui-spec.md
-   - 右侧单文档内容区：docCard + copy 按钮 + pre 代码块
-   - 内容溢出自动滚动：右侧内容区优先纵向滚动；代码块/长行支持横向滚动
-5) 列表/表格默认规则：自适应，溢出自动滚动（优先纵向，宽表支持横向）
+v5 变更点（基于 v4 最新主线）：
+1) 增加“第一页：选择作业地”
+   - 顶部：作业地下拉 + 右侧【下一步】按钮
+   - 下方：该作业地已安排箱号列表（模拟 20 条）
+     字段：计划装箱时间 / 船公司 / 箱号 / 箱型 / 型号 / 数量 / 状态（等待/进行中/已完成）
+   - 列表右侧自动纵向滚动条；表头固定；选中行高亮
+2) 点击【下一步】进入“第二页：装箱作业（v4 列表明细页）”
+   - 作业信息区新增：Booking No、截关时间（Cutoff）
+   - 作业信息区改为可折叠：
+     * 折叠后仅显示：箱号、抱夹车号、司机、装卸工
+   - 从第一页带入：作业地、箱号、船公司、箱型、(可选)型号/数量（仅用于显示，不强制写入明细）
+   - 进入第二页时清空人员相关字段（抱夹/司机/装卸工/监装等，便于同箱不同人员）
+3) 保留 v4 全部逻辑：
+   - 动作/型号明细使用表格列表，表头 sticky，列表溢出滚动
+   - 工具栏：+动作 / +型号 / 删除 / 📷（作用于选中行所属动作）
+   - 删除规则：按“型号行”删除；动作无型号则动作一并删除
+   - 照片：缩略图点击预览；预览支持左右滑动浏览；右上角删除（确认后删除）
+4) 三件套规则保留（SLMS-ThreeKitStyle）：右上角版本号，点击弹出 schema/dict/ui-spec；内容超出自动滚动
 -->
 
 <!doctype html>
@@ -22,36 +28,35 @@ v2 变更点（基于 v1 最新主线）：
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>装箱管理（Mobile）</title>
+<title>装箱作业（Mobile）</title>
 <style>
 :root{
   --brand:#e0205c;--bg:#f1f2f5;--card:#fff;--text:#222;--muted:#6d6d6d;--line:#e9e9e9;
-  --ok:#16a34a;--bad:#ef4444;--warn:#f59e0b;
+  --ok:#16a34a;--bad:#ef4444;--warn:#f59e0b;--done:#0ea5e9;
 }
 *{box-sizing:border-box}
 body{margin:0;font-family:Arial,"Microsoft YaHei";background:var(--bg);color:var(--text)}
 button,input,select,textarea{font-family:inherit}
-a{color:inherit}
 .small{font-size:12px}
 .muted{color:var(--muted)}
 .row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.hidden{display:none}
 
-/* 顶部条 */
+/* ===== 顶部：标题行 + 工具行 ===== */
 .topbar{
-  position:sticky;top:0;z-index:10;
+  position:sticky;top:0;z-index:20;
   background:#fff;border-bottom:1px solid var(--line);
-  padding:10px 12px;display:flex;align-items:center;justify-content:space-between;gap:10px
 }
-.title{font-weight:900}
-.btn{
-  border:1px solid #ddd;background:#fff;border-radius:12px;padding:10px 12px;
-  font-weight:900;font-size:13px;cursor:pointer;white-space:nowrap
+.topbar .line1{
+  padding:10px 12px 8px;
+  display:flex;align-items:center;justify-content:space-between;gap:10px;
 }
-.btn.primary{background:var(--brand);border-color:var(--brand);color:#fff}
-.btn.ghost{background:#fafafa}
-.btn.danger{background:#fff7f7;border-color:#ffd3d3;color:#b91c1c}
-.btn.small{font-size:12px;padding:7px 10px;border-radius:10px}
-.btn:active{transform:translateY(1px)}
+.title{font-weight:1000;font-size:16px}
+.subnote{font-size:12px;color:var(--muted)}
+.topbar .line2{
+  padding:0 12px 10px;
+  display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;
+}
 
 /* 右上角版本号 */
 .ver{
@@ -62,8 +67,25 @@ a{color:inherit}
 }
 .ver .dot{width:8px;height:8px;border-radius:99px;background:var(--brand)}
 
+/* 按钮 */
+.btn{
+  border:1px solid #ddd;background:#fff;border-radius:12px;padding:10px 12px;
+  font-weight:900;font-size:13px;cursor:pointer;white-space:nowrap
+}
+.btn.primary{background:var(--brand);border-color:var(--brand);color:#fff}
+.btn.ghost{background:#fafafa}
+.btn.danger{background:#fff7f7;border-color:#ffd3d3;color:#b91c1c}
+.btn.small{font-size:12px;padding:7px 10px;border-radius:10px}
+.btn.icon{
+  width:36px;height:36px;padding:0;border-radius:12px;
+  display:inline-flex;align-items:center;justify-content:center;
+  font-size:16px;font-weight:1000
+}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.btn:active{transform:translateY(1px)}
+
 /* 页面容器 */
-.wrap{padding:12px;max-width:980px;margin:0 auto;display:flex;flex-direction:column;gap:12px}
+.wrap{padding:12px;max-width:1100px;margin:0 auto;display:flex;flex-direction:column;gap:12px}
 .card{
   background:var(--card);border:1px solid var(--line);border-radius:16px;
   box-shadow:0 10px 24px rgba(0,0,0,.06);
@@ -73,96 +95,113 @@ a{color:inherit}
 .cardHd b{font-size:13px}
 .cardBd{padding:12px}
 
-.tag{
-  display:inline-flex;align-items:center;gap:6px;
-  padding:4px 8px;border-radius:999px;border:1px solid #eee;background:#fafafa;
-  font-weight:900;font-size:12px
+/* 作业信息输入 */
+.formGrid{
+  display:grid;grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:10px;
 }
-.tag.warn{background:#fff7ed;border-color:#ffedd5}
-.tag.ok{background:#f0fdf4;border-color:#dcfce7}
-.tag.bad{background:#fff1f2;border-color:#ffe4e6}
+@media (max-width:560px){
+  .formGrid{grid-template-columns:1fr}
+}
+.fld{display:flex;flex-direction:column;gap:6px}
+.fld label{font-size:12px;color:var(--muted);font-weight:900}
+.fld input,.fld select{
+  border:1px solid #ddd;border-radius:12px;padding:10px 10px;font-size:13px;outline:none;background:#fff
+}
+.fld input:focus,.fld select:focus{border-color:#c7c7c7;box-shadow:0 0 0 3px rgba(224,32,92,.10)}
+
+/* 折叠信息条 */
+.collapseBar{
+  display:flex;align-items:center;justify-content:space-between;gap:10px;
+  padding:10px 12px;border-top:1px solid var(--line);background:#fafafa;
+}
+.miniInfo{
+  display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+  font-size:12px;font-weight:900;color:#333;
+}
+.pill{
+  border:1px solid #eee;background:#fff;border-radius:999px;padding:6px 10px;
+}
+
+/* 列表工具栏 */
+.toolbar{
+  padding:10px 12px;border-top:1px solid var(--line);
+  display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;
+  background:#fafafa;
+}
+.toolbar .left, .toolbar .right{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.hintPill{
+  font-size:12px;font-weight:900;color:var(--muted);
+  border:1px solid #eee;background:#fff;border-radius:999px;padding:6px 10px;
+}
 
 /* 列表滚动容器：默认规则 */
 .listWrap{
+  overflow:auto; /* ✅ 自动纵向滚动；宽表支持横向滚动 */
   border-top:1px solid var(--line);
-  max-height: calc(100vh - 240px);
-  overflow:auto; /* ✅ 自动纵向滚动；宽内容会出现横向滚动 */
 }
-.helper{font-size:12px;color:var(--muted);padding:10px 12px;border-top:1px solid var(--line);background:#fafafa}
 
-/* 动作紧凑行 */
-.actRow{
-  border-top:1px solid #f0f0f0;
-  padding:10px 12px;
-  display:flex;align-items:center;justify-content:space-between;gap:10px;
+/* 表格（通用） */
+table{border-collapse:separate;border-spacing:0;width:100%;background:#fff}
+thead th{
+  position:sticky;top:0;z-index:5;
+  background:#fff;
+  border-bottom:1px solid #eee;
+  font-size:12px;color:var(--muted);font-weight:1000;
+  text-align:left;padding:10px 10px;
 }
-.actRow:first-child{border-top:none}
-.actLeft{display:flex;align-items:center;gap:10px;min-width:0}
-.pm{
-  width:44px;height:44px;border-radius:14px;border:1px solid #ddd;background:#fff;
-  display:flex;align-items:center;justify-content:center;
-  font-weight:1000;font-size:18px;cursor:pointer;user-select:none;
-  flex:0 0 auto;
+tbody td{
+  border-bottom:1px solid #f2f2f2;
+  padding:8px 10px;
+  vertical-align:middle;
 }
-.pm.plus{color:var(--ok);border-color:#cfeedd;background:#f5fff8}
-.pm.minus{color:var(--bad);border-color:#ffd3d3;background:#fff7f7}
-.actMain{min-width:0;display:flex;flex-direction:column;gap:6px}
-.actTitle{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
-.actSummary{
-  font-size:12px;color:var(--muted);
-  display:flex;align-items:center;gap:8px;flex-wrap:wrap;
-  min-width:0;
+tbody tr:hover{background:#fafafa}
+tbody tr.selected{
+  background:#fff2f7;
+  outline:2px solid rgba(224,32,92,.22);
+  outline-offset:-2px;
 }
-.ellipsis{max-width:520px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.chev{
-  width:34px;height:34px;border-radius:12px;border:1px solid #ddd;background:#fff;
-  display:flex;align-items:center;justify-content:center;
-  cursor:pointer;user-select:none;font-weight:1000;
-}
-.chev.open{border-color:#ffd6e3;background:#fff7fb;color:var(--brand)}
-.actRight{display:flex;align-items:center;gap:8px;flex-wrap:wrap;flex:0 0 auto}
 
-/* 展开详情 */
-.actDetail{
-  padding:10px 12px 12px;
-  border-top:1px solid #f3f3f3;
-  background:#fcfcfc;
-  display:none;
-}
-.actDetail.open{display:block}
-.section{
-  border:1px solid var(--line);border-radius:14px;background:#fff;overflow:hidden
-}
-.sectionHd{
-  padding:8px 10px;background:#fafafa;border-bottom:1px solid var(--line);
-  display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap
-}
-.sectionHd b{font-size:12px}
-.sectionBd{padding:10px}
+/* 第二页明细表：加最小宽，支持横向滚动 */
+.tableMinW{min-width:920px}
 
-/* 型号子表：宽表横向滚动 */
-.tableWrap{overflow:auto} /* ✅ 宽内容横向滚动 */
-table{border-collapse:separate;border-spacing:0;width:100%;min-width:760px}
-th,td{border-bottom:1px solid #f1f1f1;padding:8px 8px;text-align:left;vertical-align:top}
-th{position:sticky;top:0;background:#fff;font-size:12px;color:var(--muted);font-weight:900;z-index:1}
+/* ± */
+.cellSign{width:58px}
+.signBtn{
+  width:44px;height:36px;border-radius:12px;border:1px solid #ddd;background:#fff;
+  font-weight:1000;font-size:16px;cursor:pointer;
+  display:inline-flex;align-items:center;justify-content:center;
+  user-select:none;
+}
+.signBtn.plus{color:var(--ok);border-color:#cfeedd;background:#f5fff8}
+.signBtn.minus{color:var(--bad);border-color:#ffd3d3;background:#fff7f7}
+.cellAction{width:70px;color:#444;font-weight:900}
 td input{
   width:100%;border:1px solid #ddd;border-radius:10px;padding:8px 9px;font-size:13px;outline:none;background:#fff
 }
 td input:focus{border-color:#c7c7c7;box-shadow:0 0 0 3px rgba(224,32,92,.10)}
-.iconBtn{
-  border:1px solid #ddd;background:#fff;border-radius:10px;padding:7px 10px;
-  font-weight:900;font-size:12px;cursor:pointer
-}
-.iconBtn.danger{border-color:#ffd3d3;background:#fff7f7;color:#b91c1c}
 
-/* 照片区 */
-.photoRow{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
-.thumbList{display:flex;gap:8px;flex-wrap:wrap}
-.thumb{
-  width:56px;height:56px;border-radius:12px;border:1px solid #eee;background:#fafafa;
-  overflow:hidden;display:flex;align-items:center;justify-content:center;cursor:pointer
+/* 照片缩略图列（同一动作共享） */
+.photoStrip{
+  display:flex;align-items:center;gap:6px;
+  max-width:420px;
+  overflow:auto; /* ✅ 照片多时可横向滚动 */
+  padding-bottom:2px;
 }
-.thumb img{width:100%;height:100%;object-fit:cover;display:block}
+.thumbMini{
+  width:34px;height:34px;border-radius:12px;border:1px solid #eee;background:#fafafa;
+  overflow:hidden;display:flex;align-items:center;justify-content:center;cursor:pointer;
+  flex:0 0 auto;
+}
+.thumbMini img{width:100%;height:100%;object-fit:cover;display:block}
+
+/* 状态标签（第一页列表用） */
+.tag{
+  font-size:12px;font-weight:1000;border-radius:999px;padding:6px 10px;border:1px solid #eee;background:#fff;
+}
+.tag.wait{border-color:#ffe2b8;background:#fff7e8;color:#9a5b00}
+.tag.run{border-color:#bfe8ff;background:#eef8ff;color:#0369a1}
+.tag.done{border-color:#bfead7;background:#f1fff8;color:#0f766e}
 
 /* Toast */
 .toast{
@@ -170,6 +209,50 @@ td input:focus{border-color:#c7c7c7;box-shadow:0 0 0 3px rgba(224,32,92,.10)}
   background:rgba(0,0,0,.82);color:#fff;padding:10px 12px;border-radius:999px;
   font-size:12px;font-weight:900;display:none;z-index:99999
 }
+
+/* ===== 照片预览层 ===== */
+.viewerMask{
+  position:fixed;inset:0;background:rgba(0,0,0,.78);
+  display:none;align-items:center;justify-content:center;z-index:99998;
+}
+.viewer{
+  width:min(96vw,720px);
+  height:min(86vh,820px);
+  position:relative;
+  display:flex;align-items:center;justify-content:center;
+}
+.viewer img{
+  max-width:100%;max-height:100%;
+  border-radius:14px;
+  box-shadow:0 18px 60px rgba(0,0,0,.5);
+}
+.viewerTop{
+  position:absolute;top:10px;left:10px;right:10px;
+  display:flex;align-items:center;justify-content:space-between;gap:10px;
+}
+.viewerPill{
+  background:rgba(0,0,0,.55);color:#fff;border:1px solid rgba(255,255,255,.18);
+  border-radius:999px;padding:7px 10px;font-size:12px;font-weight:1000;
+}
+.viewerBtn{
+  border:1px solid rgba(255,255,255,.25);
+  background:rgba(0,0,0,.55);
+  color:#fff;border-radius:12px;padding:8px 10px;font-weight:1000;font-size:12px;cursor:pointer;
+}
+.viewerBtn.danger{border-color:rgba(255,120,120,.35);background:rgba(120,0,0,.35)}
+.viewerNav{
+  position:absolute;left:10px;right:10px;bottom:10px;
+  display:flex;align-items:center;justify-content:space-between;gap:10px;
+}
+.navIcon{
+  width:42px;height:38px;border-radius:12px;
+  border:1px solid rgba(255,255,255,.25);
+  background:rgba(0,0,0,.55);
+  color:#fff;font-weight:1000;font-size:18px;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;
+  user-select:none;
+}
+.navIcon:active{transform:translateY(1px)}
 
 /* ===== 三件套（SLMS-ThreeKitStyle）弹窗 ===== */
 .modalMask{position:fixed;inset:0;background:rgba(0,0,0,.38);display:none;align-items:center;justify-content:center;z-index:9999}
@@ -180,9 +263,7 @@ td input:focus{border-color:#c7c7c7;box-shadow:0 0 0 3px rgba(224,32,92,.10)}
 }
 .modalHd{padding:12px 14px;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;gap:10px}
 .modalHd b{font-size:14px}
-.modalBody{
-  flex:1;display:flex;min-height:0; /* 关键：让内部滚动生效 */
-}
+.modalBody{flex:1;display:flex;min-height:0}
 .leftNav{
   width:220px;border-right:1px solid var(--line);background:#fafafa;
   padding:10px;display:flex;flex-direction:column;gap:8px
@@ -197,9 +278,7 @@ td input:focus{border-color:#c7c7c7;box-shadow:0 0 0 3px rgba(224,32,92,.10)}
   flex:1;min-width:0;padding:12px;display:flex;flex-direction:column;gap:10px;
   overflow:auto; /* ✅ 右侧内容区优先纵向滚动 */
 }
-.docCard{
-  border:1px solid var(--line);border-radius:14px;background:#fff;overflow:hidden
-}
+.docCard{border:1px solid var(--line);border-radius:14px;background:#fff;overflow:hidden}
 .docHd{
   padding:10px 12px;border-bottom:1px solid var(--line);
   display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;
@@ -213,59 +292,139 @@ td input:focus{border-color:#c7c7c7;box-shadow:0 0 0 3px rgba(224,32,92,.10)}
 pre{
   margin:0;padding:12px;max-width:100%;
   font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px;line-height:1.5;
-  overflow:auto; /* ✅ 代码块/长行支持横向滚动 */
-  white-space:pre;
+  overflow:auto;white-space:pre;
 }
 </style>
 </head>
 
 <body>
   <div class="topbar">
-    <div class="row" style="gap:10px">
-      <div class="title">装箱管理（Mobile）</div>
-      <span class="tag warn">紧凑列表 + 可展开</span>
-    </div>
-
-    <div class="row">
-      <button class="btn primary" onclick="addAction()">＋ 在下方插入动作</button>
+    <div class="line1">
+      <div>
+        <div class="title" id="pageTitle">装箱作业（选择作业地）</div>
+        <div class="subnote" id="pageNote">先选择作业地与箱号，再进入装箱动作明细页</div>
+      </div>
       <div class="ver" id="verBtn" title="点击查看三件套（schema/dict/ui-spec）">
         <span class="dot"></span>
-        <span>stuffing-mobile-v2</span>
+        <span>stuffing-mobile-v5</span>
+      </div>
+    </div>
+
+    <div class="line2">
+      <div class="row">
+        <span class="hintPill">时间：<span id="nowTime"></span></span>
+        <span class="hintPill" id="selBoxHint">已选箱：<span id="selBoxText">无</span></span>
+        <span class="hintPill hidden" id="selHintWrap">选中行：<span id="selHint">无</span></span>
+      </div>
+      <div class="row">
+        <button class="btn ghost hidden" id="btnBack" onclick="goPage1()">← 返回</button>
       </div>
     </div>
   </div>
 
   <div class="wrap">
-    <div class="card">
+
+    <!-- ========== Page 1：选择作业地 ========== -->
+    <div class="card" id="page1">
       <div class="cardHd">
-        <b>作业信息</b>
-        <span class="muted small">每条记录=一次抱夹进箱动作；支持掏箱(-)；一个动作可多型号（照片共享）</span>
-      </div>
-      <div class="cardBd">
+        <b>选择作业地</b>
         <div class="row">
-          <span class="tag warn">Container：未选择</span>
-          <span class="tag">Booking：可选</span>
-          <span class="tag">监装：当前用户</span>
-          <span class="tag">时间：<span id="nowTime"></span></span>
+          <select id="placeSel" class="btn" style="padding:10px 12px; border-radius:12px; font-weight:900">
+            <!-- options via JS -->
+          </select>
+          <button class="btn primary" id="btnNext" onclick="goPage2()">下一步</button>
         </div>
       </div>
 
-      <div class="listWrap" id="listWrap"><!-- render --></div>
-
-      <div class="helper">
-        ✅ 默认生成 2 条空白动作；列表溢出自动纵向滚动（宽内容可横向滚动）。<br/>
-        ✅ 删除型号：若该动作只剩最后 1 行型号，点击删除会询问是否删除整个动作。
+      <div class="cardBd">
+        <div class="muted small" style="margin-bottom:8px">
+          下方列表为：当前已安排在该作业地的箱号（模拟 20 条）。请选择一条后点击【下一步】。
+        </div>
       </div>
+
+      <div class="listWrap" id="planListWrap" style="max-height:calc(100vh - 260px)"></div>
     </div>
+
+    <!-- ========== Page 2：装箱作业（明细） ========== -->
+    <div class="card hidden" id="page2">
+
+      <div class="cardHd">
+        <b>作业信息</b>
+        <span class="muted small">进入页面默认清空人员字段（同箱不同人员可重填）</span>
+      </div>
+
+      <!-- 折叠条 -->
+      <div class="collapseBar">
+        <div class="miniInfo" id="miniInfo"></div>
+        <button class="btn small" id="btnToggleJob" onclick="toggleJobInfo()">折叠</button>
+      </div>
+
+      <div class="cardBd" id="jobInfoBody">
+        <div class="formGrid">
+          <div class="fld"><label>作业地（stuffing_place）</label><input id="f_place" placeholder="如 012_A3平台" value=""/></div>
+          <div class="fld"><label>箱号（container_no）</label><input id="f_container_no" placeholder="如 TGBU1234567" value=""/></div>
+
+          <div class="fld"><label>船公司（carrier）</label><input id="f_carrier" placeholder="如 MAEU / COSCO" value=""/></div>
+          <div class="fld"><label>箱型（container_type）</label><input id="f_container_type" placeholder="如 40HQ / 45HQ" value=""/></div>
+
+          <div class="fld"><label>Booking No</label><input id="f_booking_no" placeholder="如 BK20251229-001" value=""/></div>
+          <div class="fld"><label>截关时间（Cutoff）</label><input id="f_cutoff" placeholder="如 2025-12-31 18:00" value=""/></div>
+
+          <div class="fld"><label>运输公司（trans_co）</label><input id="f_trans_co" placeholder="如 XX运输" value=""/></div>
+          <div class="fld"><label>抱夹车号（clamp_no）</label><input id="f_clamp_no" placeholder="如 CL-08" value=""/></div>
+
+          <div class="fld"><label>司机（driver）</label><input id="f_driver" placeholder="姓名/工号" value=""/></div>
+          <div class="fld"><label>装卸工（loader）</label><input id="f_loader" placeholder="姓名/工号" value=""/></div>
+
+          <div class="fld"><label>监装（inspector）</label><input id="f_inspector" placeholder="姓名/工号" value=""/></div>
+          <div class="fld"><label>备注（可选）</label><input id="f_note" placeholder="可留空" value=""/></div>
+        </div>
+      </div>
+
+      <!-- 工具栏（作用于选中行/所属动作） -->
+      <div class="toolbar">
+        <div class="left">
+          <button class="btn primary" onclick="addAction()">+动作</button>
+          <button class="btn ghost" id="btnAddModel" onclick="addModelToSelected()" disabled>+型号</button>
+          <button class="btn danger" id="btnDelete" onclick="deleteSelectedModel()" disabled>删除</button>
+          <button class="btn icon ghost" id="btnPhoto" title="拍照/上传（作用于选中动作）" onclick="pickPhotoForSelected()" disabled>📷</button>
+        </div>
+        <div class="right">
+          <span class="muted small">删除按“型号行”执行；若删除后动作无型号，动作一并删除</span>
+        </div>
+      </div>
+
+      <!-- 明细列表 -->
+      <div class="listWrap" id="listWrap" style="max-height:calc(100vh - 520px)"></div>
+    </div>
+
   </div>
 
   <div class="toast" id="toast"></div>
+
+  <!-- 照片预览层 -->
+  <div class="viewerMask" id="viewerMask">
+    <div class="viewer" id="viewer">
+      <div class="viewerTop">
+        <span class="viewerPill" id="viewerMeta">0/0</span>
+        <button class="viewerBtn danger" id="viewerDelBtn" onclick="deleteViewedPhoto()">删除</button>
+      </div>
+
+      <img id="viewerImg" alt="preview"/>
+
+      <div class="viewerNav">
+        <div class="navIcon" onclick="prevPhoto()">‹</div>
+        <span class="viewerPill" id="viewerHint">左右滑动浏览</span>
+        <div class="navIcon" onclick="nextPhoto()">›</div>
+      </div>
+    </div>
+  </div>
 
   <!-- 三件套弹窗（SLMS-ThreeKitStyle） -->
   <div class="modalMask" id="kitMask">
     <div class="modal" role="dialog" aria-modal="true">
       <div class="modalHd">
-        <b>三件套（Schema / Data Dict / UI Spec）— stuffing-mobile-v2</b>
+        <b>三件套（Schema / Data Dict / UI Spec）— stuffing-mobile-v5</b>
         <button class="btn small" onclick="closeKit()">关闭</button>
       </div>
 
@@ -276,26 +435,83 @@ pre{
           <button class="navBtn" id="btnUi" onclick="showDoc('ui')">slms-ui-spec.md</button>
         </div>
 
-        <div class="rightDoc" id="docRight">
-          <!-- docCard render -->
-        </div>
+        <div class="rightDoc" id="docRight"></div>
       </div>
     </div>
   </div>
 
 <script>
 /** ==========================
- *  数据结构
- *  Action = {
- *    id, sign:+1|-1, expanded:boolean,
- *    models:[{model,w,l,h,f,qty}],
- *    photos:[dataUrl...],
- *    ts
- *  }
+ *  Page 状态
  * ========================== */
+let currentPage = 1; // 1=选择作业地, 2=装箱作业
+const pageTitle = document.getElementById('pageTitle');
+const pageNote  = document.getElementById('pageNote');
+const btnBack   = document.getElementById('btnBack');
+const selHintWrap = document.getElementById('selHintWrap');
 
+/** ==========================
+ *  作业地 & 箱号计划（模拟）
+ * ========================== */
+const PLACES = [
+  '011_A3仓库','012_A3平台','021_B1东侧','022_B1西侧','031_B2仓库','041_B3东侧','042_B3西侧','061_C2南侧','071_外部'
+];
+
+let selectedPlace = PLACES[0];
+let planRows = [];           // 当前作业地下的 20 条箱计划
+let selectedPlanIdx = -1;    // 选中的箱计划行
+
+function genPlanRows(place){
+  // 模拟 20 条
+  const carriers = ['MAEU','COSCO','MSCU','ONE','HPL','YML'];
+  const cTypes = ['40HQ','45HQ','20GP'];
+  const models = ['A1','B2','C3','D4','E5','X9'];
+  const statuses = ['等待','进行中','已完成'];
+  const pick = arr => arr[Math.floor(Math.random()*arr.length)];
+  const pad = n => String(n).padStart(2,'0');
+
+  const baseDay = 29; // 12-29
+  const rows = [];
+  for(let i=0;i<20;i++){
+    const hh = 8 + (i%10);
+    const mm = (i%2)*30;
+    const st = (i%7===0) ? '已完成' : (i%5===0 ? '进行中' : '等待');
+
+    const carrier = pick(carriers);
+    const cn = `${carrier}${(1000000+i*73).toString().slice(0,7)}${pad(i%97)}`.slice(0,11).toUpperCase(); // 伪箱号
+    const containerNo = `TGBU${(1234500 + i*17).toString().slice(0,7)}`.slice(0,11) + (i%10); // 伪箱号
+
+    rows.push({
+      place,
+      plan_time:`2025-12-${baseDay} ${pad(hh)}:${pad(mm)}`,
+      carrier,
+      container_no:containerNo,
+      container_type:pick(cTypes),
+      model:pick(models),
+      qty: 10 + (i%6)*5,
+      status:st,
+      booking_no:`BK20251229-${pad(i+1)}`,
+      cutoff:`2025-12-31 18:00`,
+      trans_co: (i%3===0) ? 'XX运输' : (i%3===1 ? 'YY物流' : 'ZZ车队')
+    });
+  }
+  return rows;
+}
+
+/** ==========================
+ *  明细数据结构（v4 继承）
+ * ========================== */
 let actions = [];
 let seq = 1;
+let selection = null;
+
+/** 作业信息（进入明细页默认清空人员字段） */
+const jobInfo = {
+  place:'', container_no:'', carrier:'', container_type:'',
+  booking_no:'', cutoff:'',
+  trans_co:'', clamp_no:'', driver:'', loader:'', inspector:'',
+  note:''
+};
 
 function uid(){ return 'A' + Date.now().toString(36) + '-' + (seq++); }
 function nowStr(){
@@ -303,88 +519,333 @@ function nowStr(){
   const p=n=>String(n).padStart(2,'0');
   return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
 }
-function createEmptyModelRow(){ return { model:'', w:'', l:'', h:'', f:'', qty:'' }; }
+function createEmptyModelRow(){ return { model:'', w:'', l:'', h:'', f:'' }; }
 function createEmptyAction(){
-  return { id:uid(), sign:+1, expanded:true, models:[createEmptyModelRow()], photos:[], ts:Date.now() };
+  return { id:uid(), sign:+1, models:[createEmptyModelRow()], photos:[], ts:Date.now() };
 }
 
-/** 初始化：默认 2 条空白动作 */
+/** ==========================
+ *  初始化
+ * ========================== */
 function init(){
   document.getElementById('nowTime').textContent = nowStr();
+
+  // Page1: place 下拉
+  const placeSel = document.getElementById('placeSel');
+  placeSel.innerHTML = PLACES.map(p=>`<option value="${escAttr(p)}">${esc(p)}</option>`).join('');
+  placeSel.value = selectedPlace;
+  placeSel.onchange = ()=>{
+    selectedPlace = placeSel.value;
+    selectedPlanIdx = -1;
+    planRows = genPlanRows(selectedPlace);
+    renderPlanList();
+    setSelectedBoxHint();
+  };
+
+  // 默认生成第一页数据
+  planRows = genPlanRows(selectedPlace);
+  renderPlanList();
+  setSelectedBoxHint();
+
+  // 预置明细：默认 2 条空白动作（进入第二页时再重置）
   actions = [createEmptyAction(), createEmptyAction()];
-  render();
+  selection = null;
+  updateToolbarState();
+  renderSelectionHint();
+
+  // 三件套
+  verBtnInit();
 }
 
-/** 插入动作：在列表底部追加（✅ 不是最上面） */
+/** ==========================
+ *  Page 切换
+ * ========================== */
+function goPage1(){
+  currentPage = 1;
+  document.getElementById('page1').classList.remove('hidden');
+  document.getElementById('page2').classList.add('hidden');
+  btnBack.classList.add('hidden');
+  selHintWrap.classList.add('hidden');
+
+  pageTitle.textContent = '装箱作业（选择作业地）';
+  pageNote.textContent  = '先选择作业地与箱号，再进入装箱动作明细页';
+}
+
+function goPage2(){
+  if(selectedPlanIdx<0){
+    toast('请先在列表中选择一个箱号');
+    return;
+  }
+  const picked = planRows[selectedPlanIdx];
+  if(!picked){
+    toast('选择无效，请重选');
+    return;
+  }
+
+  // 从计划带入作业信息：place/container/carrier/type/booking/cutoff/trans_co
+  jobInfo.place = picked.place;
+  jobInfo.container_no = picked.container_no;
+  jobInfo.carrier = picked.carrier;
+  jobInfo.container_type = picked.container_type;
+  jobInfo.booking_no = picked.booking_no || '';
+  jobInfo.cutoff = picked.cutoff || '';
+  jobInfo.trans_co = picked.trans_co || '';
+
+  // ✅ 进入第二页：清空人员字段（可能同箱不同人员）
+  jobInfo.clamp_no = '';
+  jobInfo.driver = '';
+  jobInfo.loader = '';
+  jobInfo.inspector = '';
+  jobInfo.note = '';
+
+  // 明细动作：默认 2 条空白动作
+  actions = [createEmptyAction(), createEmptyAction()];
+  selection = null;
+
+  currentPage = 2;
+  document.getElementById('page1').classList.add('hidden');
+  document.getElementById('page2').classList.remove('hidden');
+  btnBack.classList.remove('hidden');
+  selHintWrap.classList.remove('hidden');
+
+  pageTitle.textContent = '装箱作业（明细）';
+  pageNote.textContent  = '表格仅展示明细；操作作用于选中行；照片点击预览（可左右滑动）';
+
+  // 默认展开作业信息
+  jobCollapsed = false;
+  syncJobCollapseUI();
+
+  // 绑定输入
+  setJobInputsFromState(false);
+
+  // 渲染明细
+  render();
+  updateMiniInfo();
+  setSelectedBoxHint();
+}
+
+function setSelectedBoxHint(){
+  const el = document.getElementById('selBoxText');
+  if(selectedPlanIdx<0 || !planRows[selectedPlanIdx]) el.textContent = '无';
+  else{
+    const r = planRows[selectedPlanIdx];
+    el.textContent = `${r.container_no} / ${r.place}`;
+  }
+}
+
+/** ==========================
+ *  Page1：计划列表渲染（20条）
+ * ========================== */
+function renderPlanList(){
+  const wrap = document.getElementById('planListWrap');
+  const rows = planRows.map((r, idx)=>{
+    const sel = (idx===selectedPlanIdx) ? 'selected' : '';
+    const tagCls = r.status==='等待' ? 'tag wait' : (r.status==='进行中' ? 'tag run' : 'tag done');
+    return `
+      <tr class="${sel}" onclick="selectPlanRow(${idx})">
+        <td style="width:150px">${esc(r.plan_time)}</td>
+        <td style="width:80px;font-weight:1000">${esc(r.carrier)}</td>
+        <td style="width:150px;font-family:ui-monospace,Menlo,Consolas,monospace">${esc(r.container_no)}</td>
+        <td style="width:80px">${esc(r.container_type)}</td>
+        <td style="width:80px">${esc(r.model)}</td>
+        <td style="width:80px">${esc(r.qty)}</td>
+        <td style="width:110px"><span class="${tagCls}">${esc(r.status)}</span></td>
+      </tr>
+    `;
+  }).join('');
+
+  wrap.innerHTML = `
+    <div class="listWrap" style="max-height:calc(100vh - 260px);overflow:auto">
+      <table>
+        <thead>
+          <tr>
+            <th style="width:150px">计划装箱时间</th>
+            <th style="width:80px">船公司</th>
+            <th style="width:150px">箱号</th>
+            <th style="width:80px">箱型</th>
+            <th style="width:80px">型号</th>
+            <th style="width:80px">数量</th>
+            <th style="width:110px">状态</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${rows || `<tr><td colspan="7" class="muted" style="padding:16px">暂无数据</td></tr>`}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+function selectPlanRow(idx){
+  selectedPlanIdx = idx;
+  renderPlanList();
+  setSelectedBoxHint();
+}
+
+/** ==========================
+ *  Page2：作业信息（折叠）
+ * ========================== */
+let jobCollapsed = false;
+function toggleJobInfo(){
+  jobCollapsed = !jobCollapsed;
+  syncJobCollapseUI();
+}
+function syncJobCollapseUI(){
+  const body = document.getElementById('jobInfoBody');
+  const btn  = document.getElementById('btnToggleJob');
+  if(jobCollapsed){
+    body.classList.add('hidden');
+    btn.textContent = '展开';
+  }else{
+    body.classList.remove('hidden');
+    btn.textContent = '折叠';
+  }
+  updateMiniInfo();
+}
+function updateMiniInfo(){
+  const mini = document.getElementById('miniInfo');
+  // 折叠后仅要求显示：箱号、抱夹车号、司机、装卸工
+  const items = [
+    {k:'箱号', v: jobInfo.container_no},
+    {k:'抱夹', v: jobInfo.clamp_no},
+    {k:'司机', v: jobInfo.driver},
+    {k:'装卸工', v: jobInfo.loader},
+  ];
+  mini.innerHTML = items.map(it=>`<span class="pill">${esc(it.k)}：${esc(it.v||'')}</span>`).join('');
+}
+
+/** === 作业信息：输入绑定 === */
+function setJobInputsFromState(forceClear){
+  const map = {
+    f_place:'place',
+    f_container_no:'container_no',
+    f_carrier:'carrier',
+    f_container_type:'container_type',
+    f_booking_no:'booking_no',
+    f_cutoff:'cutoff',
+    f_trans_co:'trans_co',
+    f_clamp_no:'clamp_no',
+    f_driver:'driver',
+    f_loader:'loader',
+    f_inspector:'inspector',
+    f_note:'note'
+  };
+  Object.entries(map).forEach(([id,key])=>{
+    const el=document.getElementById(id);
+    if(!el) return;
+    if(forceClear) jobInfo[key]='';
+    el.value = jobInfo[key] || '';
+    el.oninput = ()=>{
+      jobInfo[key]=el.value;
+      updateMiniInfo();
+    };
+  });
+}
+
+/** ==========================
+ *  Page2：选中处理（型号行）
+ * ========================== */
+function setSelection(actionId, modelIdx){
+  selection = { actionId, modelIdx };
+  updateToolbarState();
+  renderSelectionHint();
+  renderTableOnly();
+}
+function clearSelection(){
+  selection = null;
+  updateToolbarState();
+  renderSelectionHint();
+  renderTableOnly();
+}
+function renderSelectionHint(){
+  const el = document.getElementById('selHint');
+  if(!el) return;
+  if(!selection){ el.textContent='无'; return; }
+  const aIdx = actions.findIndex(a=>a.id===selection.actionId);
+  el.textContent = `动作#${aIdx>=0 ? (aIdx+1) : '?'} / 型号行#${selection.modelIdx+1}`;
+}
+function updateToolbarState(){
+  const hasSel = !!selection && actions.some(a=>a.id===selection.actionId);
+  const b1 = document.getElementById('btnAddModel');
+  const b2 = document.getElementById('btnDelete');
+  const b3 = document.getElementById('btnPhoto');
+  if(b1) b1.disabled = !hasSel;
+  if(b2) b2.disabled = !hasSel;
+  if(b3) b3.disabled = !hasSel;
+}
+
+/** ==========================
+ *  Page2：动作操作
+ * ========================== */
 function addAction(){
   actions.push(createEmptyAction());
+  const a = actions[actions.length-1];
+  setSelection(a.id, 0);
   render();
-  toast('已在下方插入一条空白动作');
-  // 滚动到底部让用户看到新增
+  toast('已新增动作（并选中第一行型号）');
   const lw=document.getElementById('listWrap');
-  lw.scrollTop = lw.scrollHeight;
+  if(lw) lw.scrollTop = lw.scrollHeight;
 }
-
-/** 展开/收起 */
-function toggleExpand(actionId){
-  const a=actions.find(x=>x.id===actionId);
-  if(!a) return;
-  a.expanded = !a.expanded;
-  render();
-}
-
-/** +/- 切换 */
 function toggleSign(actionId){
   const a=actions.find(x=>x.id===actionId);
   if(!a) return;
   a.sign = a.sign===+1 ? -1 : +1;
-  render();
+  renderTableOnly();
 }
 
-/** 动作删除（显式按钮） */
-function deleteAction(actionId){
-  const idx = actions.findIndex(x=>x.id===actionId);
-  if(idx<0) return;
-
-  const ok = confirm('确认删除当前动作？（该动作下的照片与型号记录将一并删除）');
-  if(!ok) return;
-
-  actions.splice(idx,1);
-  render();
-  toast('已删除动作');
-}
-
-/** 型号行增删 */
-function addModelRow(actionId){
-  const a=actions.find(x=>x.id===actionId);
+/** +型号：加到选中动作末尾 */
+function addModelToSelected(){
+  if(!selection) return;
+  const a=actions.find(x=>x.id===selection.actionId);
   if(!a) return;
   a.models.push(createEmptyModelRow());
-  a.expanded = true;
-  render();
+  setSelection(a.id, a.models.length-1);
+  toast('已新增一行型号');
 }
-function removeModelRow(actionId, rowIdx){
-  const a=actions.find(x=>x.id===actionId);
-  if(!a) return;
 
-  if(a.models.length<=1){
-    // ✅ 只剩最后一行型号：询问是否删除整个动作
-    const ok = confirm('当前动作只剩最后 1 行型号。\n是否删除整个动作？');
-    if(ok) deleteAction(actionId);
-    return;
+/** 删除：以“型号行”为单位；若动作无型号则动作也删除 */
+function deleteSelectedModel(){
+  if(!selection) return;
+  const aIdx = actions.findIndex(a=>a.id===selection.actionId);
+  if(aIdx<0) return;
+  const a = actions[aIdx];
+  const mIdx = selection.modelIdx;
+
+  const ok = confirm('确认删除选中的型号行？');
+  if(!ok) return;
+
+  if(mIdx>=0 && mIdx<a.models.length){
+    a.models.splice(mIdx,1);
   }
 
-  a.models.splice(rowIdx,1);
-  a.expanded = true;
+  if(a.models.length===0){
+    actions.splice(aIdx,1);
+    toast('已删除型号行；该动作已无型号，动作一并删除');
+    const next = actions[aIdx] || actions[aIdx-1];
+    if(next) setSelection(next.id, 0);
+    else clearSelection();
+  }else{
+    toast('已删除型号行');
+    const newIdx = Math.min(mIdx, a.models.length-1);
+    setSelection(a.id, newIdx);
+  }
+
   render();
 }
+
+/** 型号输入绑定 */
 function setModelField(actionId, idx, field, val){
   const a=actions.find(x=>x.id===actionId);
   if(!a || !a.models[idx]) return;
   a.models[idx][field]=val;
 }
 
-/** 拍照/上传（照片归属 Action） */
-function pickPhoto(actionId){
+/** ==========================
+ *  Page2：拍照/上传（作用于选中动作）
+ * ========================== */
+function pickPhotoForSelected(){
+  if(!selection) return;
+  const actionId = selection.actionId;
   const input=document.createElement('input');
   input.type='file';
   input.accept='image/*';
@@ -397,171 +858,201 @@ function pickPhoto(actionId){
       const a=actions.find(x=>x.id===actionId);
       if(!a) return;
       a.photos.push(reader.result);
-      a.expanded = true;
-      render();
+      renderTableOnly();
       toast('照片已添加到该动作');
     };
     reader.readAsDataURL(file);
   };
   input.click();
 }
-function removePhoto(actionId, pidx){
-  const a=actions.find(x=>x.id===actionId);
-  if(!a) return;
-  a.photos.splice(pidx,1);
-  a.expanded = true;
-  render();
-}
 
 /** =======================
- *  渲染
+ *  Page2：表格渲染
  * ======================= */
 function render(){
+  renderTable();
+  updateToolbarState();
+  renderSelectionHint();
+}
+function renderTable(){
   const wrap=document.getElementById('listWrap');
-  wrap.innerHTML = actions.map((a,i)=>actionBlockTpl(a,i)).join('');
+  if(!wrap) return;
+  wrap.innerHTML = tableTpl();
+}
+function renderTableOnly(){
+  const wrap=document.getElementById('listWrap');
+  if(!wrap) return;
+  wrap.innerHTML = tableTpl();
 }
 
-function actionBlockTpl(a, idx){
-  const pmClass = a.sign===+1 ? 'pm plus' : 'pm minus';
-  const pmText  = a.sign===+1 ? '+' : '−';
-  const signTag = a.sign===+1 ? `<span class="tag ok">装箱 +</span>` : `<span class="tag bad">掏箱 -</span>`;
-  const photoTag = a.photos.length ? `<span class="tag">照片 ${a.photos.length}</span>` : `<span class="tag warn">未拍照</span>`;
-  const modelCountTag = `<span class="tag">型号 ${a.models.length}</span>`;
-
-  const firstModel = (a.models[0] && a.models[0].model) ? a.models[0].model : '未填写型号';
-  const firstQtyHint = buildQtyHint(a.models[0]);
-  const summary = `${firstModel}${firstQtyHint ? ' · ' + firstQtyHint : ''}${a.models.length>1 ? ` · 另有 ${a.models.length-1} 个型号` : ''}`;
-
-  const chevCls = a.expanded ? 'chev open' : 'chev';
-  const chevText = a.expanded ? '▾' : '▸';
-  const detailCls = a.expanded ? 'actDetail open' : 'actDetail';
+function tableTpl(){
+  const rows = [];
+  actions.forEach((a, ai)=>{
+    a.models.forEach((m, mi)=>{
+      const isSel = selection && selection.actionId===a.id && selection.modelIdx===mi;
+      rows.push(rowTpl(a, ai, m, mi, isSel));
+    });
+  });
 
   return `
-    <div>
-      <div class="actRow">
-        <div class="actLeft">
-          <div class="${pmClass}" onclick="toggleSign('${escAttr(a.id)}')" title="点击切换 + / -">${pmText}</div>
-
-          <div class="actMain">
-            <div class="actTitle">
-              ${signTag}
-              ${modelCountTag}
-              ${photoTag}
-              <span class="tag">动作#${idx+1}</span>
-            </div>
-            <div class="actSummary">
-              <span class="ellipsis">${esc(summary)}</span>
-            </div>
-          </div>
-        </div>
-
-        <div class="actRight">
-          <button class="btn ghost small" onclick="addModelRow('${escAttr(a.id)}')">＋ 型号行</button>
-          <button class="btn ghost small" onclick="pickPhoto('${escAttr(a.id)}')">📷 拍照</button>
-          <button class="btn danger small" onclick="deleteAction('${escAttr(a.id)}')">删除动作</button>
-          <div class="${chevCls}" onclick="toggleExpand('${escAttr(a.id)}')" title="展开/收起">${chevText}</div>
-        </div>
-      </div>
-
-      <div class="${detailCls}">
-        ${detailTpl(a)}
-      </div>
+    <div class="listWrap" style="overflow:auto; max-height:calc(100vh - 520px)">
+      <table class="tableMinW">
+        <thead>
+          <tr>
+            <th class="cellSign">±</th>
+            <th class="cellAction">动作</th>
+            <th style="width:320px">型号</th>
+            <th style="width:90px">W</th>
+            <th style="width:90px">L</th>
+            <th style="width:90px">H</th>
+            <th style="width:90px">F</th>
+            <th style="width:420px">照片</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${rows.length ? rows.join('') : `<tr><td colspan="8" class="muted" style="padding:16px">暂无记录</td></tr>`}
+        </tbody>
+      </table>
     </div>
   `;
 }
 
-function buildQtyHint(m){
-  if(!m) return '';
-  const parts=[];
-  if(m.w) parts.push(`W${m.w}`);
-  if(m.l) parts.push(`L${m.l}`);
-  if(m.h) parts.push(`H${m.h}`);
-  if(m.f) parts.push(`F${m.f}`);
-  if(m.qty) parts.push(`Qty${m.qty}`);
-  return parts.join(' ');
-}
+function rowTpl(a, ai, m, mi, isSel){
+  const signCls = a.sign===+1 ? 'signBtn plus' : 'signBtn minus';
+  const signTxt = a.sign===+1 ? '+' : '−';
 
-function detailTpl(a){
+  const photoStrip = a.photos.length
+    ? `<div class="photoStrip">${a.photos.map((p,pi)=>thumbMiniTpl(a.id, pi, p)).join('')}</div>`
+    : `<span class="muted small">暂无</span>`;
+
   return `
-    <div class="section" style="margin-bottom:10px">
-      <div class="sectionHd">
-        <b>型号与数量（一个动作可多型号，照片共享）</b>
-        <span class="muted small">删除型号：若只剩最后 1 行型号，将询问是否删除动作</span>
-      </div>
-      <div class="sectionBd">
-        <div class="tableWrap">
-          <table>
-            <thead>
-              <tr>
-                <th style="width:280px">型号</th>
-                <th style="width:90px">W</th>
-                <th style="width:90px">L</th>
-                <th style="width:90px">H</th>
-                <th style="width:90px">F</th>
-                <th style="width:120px">Qty(可选)</th>
-                <th style="width:90px">操作</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${a.models.map((m,mi)=>modelRowTpl(a.id,m,mi)).join('')}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </div>
-
-    <div class="section">
-      <div class="sectionHd">
-        <b>动作照片（共享）</b>
-        <div class="row">
-          <button class="btn ghost small" onclick="pickPhoto('${escAttr(a.id)}')">📷 再拍/上传</button>
-        </div>
-      </div>
-      <div class="sectionBd">
-        <div class="photoRow">
-          <div class="row">
-            <span class="muted small">点击缩略图可删除：</span>
-            <div class="thumbList">
-              ${a.photos.length ? a.photos.map((p,pi)=>thumbTpl(a.id,p,pi)).join('') : `<span class="muted small">暂无</span>`}
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  `;
-}
-
-function modelRowTpl(actionId, m, idx){
-  return `
-    <tr>
-      <td>
-        <input value="${escAttr(m.model)}" placeholder="如 ABNQ18GM1T7 / ANWTBHR"
-          oninput="setModelField('${escAttr(actionId)}', ${idx}, 'model', this.value)"/>
+    <tr class="${isSel ? 'selected':''}" onclick="setSelection('${escAttr(a.id)}', ${mi})">
+      <td class="cellSign" onclick="event.stopPropagation(); toggleSign('${escAttr(a.id)}')">
+        <div class="${signCls}" title="点击切换 + / -">${signTxt}</div>
       </td>
+
+      <td class="cellAction">#${ai+1}</td>
+
+      <td><input value="${escAttr(m.model)}" placeholder="型号"
+        oninput="setModelField('${escAttr(a.id)}', ${mi}, 'model', this.value)"
+        onclick="event.stopPropagation(); setSelection('${escAttr(a.id)}', ${mi})"/></td>
+
       <td><input value="${escAttr(m.w)}" placeholder="W" inputmode="numeric"
-          oninput="setModelField('${escAttr(actionId)}', ${idx}, 'w', this.value)"/></td>
+        oninput="setModelField('${escAttr(a.id)}', ${mi}, 'w', this.value)"
+        onclick="event.stopPropagation(); setSelection('${escAttr(a.id)}', ${mi})"/></td>
+
       <td><input value="${escAttr(m.l)}" placeholder="L" inputmode="numeric"
-          oninput="setModelField('${escAttr(actionId)}', ${idx}, 'l', this.value)"/></td>
+        oninput="setModelField('${escAttr(a.id)}', ${mi}, 'l', this.value)"
+        onclick="event.stopPropagation(); setSelection('${escAttr(a.id)}', ${mi})"/></td>
+
       <td><input value="${escAttr(m.h)}" placeholder="H" inputmode="numeric"
-          oninput="setModelField('${escAttr(actionId)}', ${idx}, 'h', this.value)"/></td>
+        oninput="setModelField('${escAttr(a.id)}', ${mi}, 'h', this.value)"
+        onclick="event.stopPropagation(); setSelection('${escAttr(a.id)}', ${mi})"/></td>
+
       <td><input value="${escAttr(m.f)}" placeholder="F" inputmode="numeric"
-          oninput="setModelField('${escAttr(actionId)}', ${idx}, 'f', this.value)"/></td>
-      <td><input value="${escAttr(m.qty)}" placeholder="可选" inputmode="numeric"
-          oninput="setModelField('${escAttr(actionId)}', ${idx}, 'qty', this.value)"/></td>
-      <td>
-        <button class="iconBtn danger" onclick="removeModelRow('${escAttr(actionId)}', ${idx})">删除</button>
+        oninput="setModelField('${escAttr(a.id)}', ${mi}, 'f', this.value)"
+        onclick="event.stopPropagation(); setSelection('${escAttr(a.id)}', ${mi})"/></td>
+
+      <td onclick="event.stopPropagation();">
+        ${photoStrip}
       </td>
     </tr>
   `;
 }
 
-function thumbTpl(actionId, dataUrl, idx){
+function thumbMiniTpl(actionId, photoIdx, dataUrl){
   return `
-    <div class="thumb" title="点击删除" onclick="removePhoto('${escAttr(actionId)}', ${idx})">
-      <img src="${escAttr(dataUrl)}" alt="photo"/>
+    <div class="thumbMini" title="点击预览" onclick="openViewer('${escAttr(actionId)}', ${photoIdx})">
+      <img src="${escAttr(dataUrl)}" alt="p"/>
     </div>
   `;
 }
+
+/** =======================
+ *  照片预览（支持左右滑动）
+ * ======================= */
+const viewerMask = document.getElementById('viewerMask');
+const viewerImg  = document.getElementById('viewerImg');
+const viewerMeta = document.getElementById('viewerMeta');
+
+let viewerState = { actionId:null, idx:0, startX:null, startY:null };
+
+function openViewer(actionId, idx){
+  const a = actions.find(x=>x.id===actionId);
+  if(!a || !a.photos.length) return;
+  viewerState.actionId = actionId;
+  viewerState.idx = Math.max(0, Math.min(idx, a.photos.length-1));
+  viewerMask.style.display='flex';
+  renderViewer();
+}
+function closeViewer(){
+  viewerMask.style.display='none';
+  viewerState.actionId=null;
+  viewerState.idx=0;
+}
+function renderViewer(){
+  const a = actions.find(x=>x.id===viewerState.actionId);
+  if(!a || !a.photos.length){ closeViewer(); return; }
+  viewerImg.src = a.photos[viewerState.idx];
+  viewerMeta.textContent = `${viewerState.idx+1}/${a.photos.length}`;
+}
+function prevPhoto(){
+  const a = actions.find(x=>x.id===viewerState.actionId);
+  if(!a || !a.photos.length) return;
+  viewerState.idx = (viewerState.idx - 1 + a.photos.length) % a.photos.length;
+  renderViewer();
+}
+function nextPhoto(){
+  const a = actions.find(x=>x.id===viewerState.actionId);
+  if(!a || !a.photos.length) return;
+  viewerState.idx = (viewerState.idx + 1) % a.photos.length;
+  renderViewer();
+}
+function deleteViewedPhoto(){
+  const a = actions.find(x=>x.id===viewerState.actionId);
+  if(!a) return;
+  const ok = confirm('确认删除当前照片？');
+  if(!ok) return;
+
+  a.photos.splice(viewerState.idx,1);
+
+  if(a.photos.length===0){
+    toast('照片已删除（该动作暂无照片）');
+    closeViewer();
+    renderTableOnly();
+    return;
+  }
+
+  viewerState.idx = Math.min(viewerState.idx, a.photos.length-1);
+  toast('照片已删除');
+  renderViewer();
+  renderTableOnly();
+}
+
+viewerMask.addEventListener('click', (e)=>{
+  if(e.target===viewerMask) closeViewer();
+});
+viewerImg.addEventListener('click', ()=>closeViewer());
+
+viewerImg.addEventListener('touchstart', (e)=>{
+  const t=e.touches[0];
+  viewerState.startX=t.clientX;
+  viewerState.startY=t.clientY;
+},{passive:true});
+
+viewerImg.addEventListener('touchend', (e)=>{
+  if(viewerState.startX==null) return;
+  const t=e.changedTouches[0];
+  const dx=t.clientX - viewerState.startX;
+  const dy=t.clientY - viewerState.startY;
+  viewerState.startX=null; viewerState.startY=null;
+
+  if(Math.abs(dx) < 30) return;
+  if(Math.abs(dx) < Math.abs(dy)) return;
+
+  if(dx>0) prevPhoto();
+  else nextPhoto();
+},{passive:true});
 
 /** =======================
  *  Toast
@@ -580,9 +1071,11 @@ function toast(msg){
  * ======================= */
 const kitMask = document.getElementById('kitMask');
 const verBtn = document.getElementById('verBtn');
-verBtn.onclick = ()=>{ kitMask.style.display='flex'; showDoc('schema'); };
-kitMask.addEventListener('click', (e)=>{ if(e.target===kitMask) closeKit(); });
 
+function verBtnInit(){
+  verBtn.onclick = ()=>{ kitMask.style.display='flex'; showDoc('schema'); };
+  kitMask.addEventListener('click', (e)=>{ if(e.target===kitMask) closeKit(); });
+}
 function closeKit(){ kitMask.style.display='none'; }
 
 function setNavActive(which){
@@ -612,10 +1105,7 @@ function copyDoc(which){
   const pre = document.getElementById('pre-'+which);
   if(!pre) return;
   const text = pre.textContent || '';
-  navigator.clipboard.writeText(text).then(()=>{
-    toast('已复制');
-  }).catch(()=>{
-    // 兼容旧浏览器
+  navigator.clipboard.writeText(text).then(()=>toast('已复制')).catch(()=>{
     const ta=document.createElement('textarea');
     ta.value=text; document.body.appendChild(ta);
     ta.select(); document.execCommand('copy');
@@ -624,96 +1114,156 @@ function copyDoc(which){
   });
 }
 
-/** ===== 三件套内容（可后续与你全局 schema/dict/ui-spec 合并） ===== */
+/** ===== 三件套内容（v5 同步） ===== */
 const DOCS = {
   schema: {
     name: 'slms-schema.yaml',
     content:
-`# SLMS - Mobile Stuffing Action (Demo Schema)
-# 说明：演示用 schema 片段（后续可合并进你的全局 slms-schema.yaml）
+`# SLMS - Mobile Stuffing (Demo Schema)
+# Version: stuffing-mobile-v5
+
+stuffing_place:
+  pk: place_id
+  fields:
+    place_id: string             # 如 012_A3平台
+    code: string                 # 如 012
+    name: string                 # 如 A3平台
+    warehouse: string            # 如 A3（示意）
+    capacity: int
+    enabled: bool
+
+stuffing_plan_item:
+  pk: plan_id
+  fields:
+    plan_id: string
+    place_id: string
+    plan_time: datetime
+    carrier: string
+    booking_no: string?
+    cutoff_time: datetime?
+    container_no: string
+    container_type: string
+    model: string
+    qty: int
+    status: enum(waiting|running|done)
+
+mobile_stuffing_job:
+  pk: job_id
+  fields:
+    job_id: string
+    place_id: string
+    booking_no: string?
+    cutoff_time: datetime?
+    container_no: string
+    carrier: string?
+    container_type: string?
+    trans_co: string?
+    clamp_no: string?
+    driver: string?
+    loader: string?
+    inspector: string?
+    note: string?
+    created_at: datetime
 
 mobile_stuffing_action:
   pk: action_id
   fields:
-    action_id: string            # 动作ID
-    container_no: string?         # 箱号（可选/后续对接）
-    booking_no: string?           # Booking No（可选/后续对接）
+    action_id: string
     sign: int                    # +1 装箱 / -1 掏箱
     created_at: datetime
-    created_by: string?          # 监装人员/账号
-    photos: array<string>        # 图片URL或base64（演示用）
-    models: array<action_model>  # 一个动作内多型号明细
+    photos: array<string>        # 图片URL或base64（演示）
+    models: array<action_model>
 
 action_model:
   fields:
-    model: string                # 型号
-    w: int?                      # 宽向数量（夹取维度分解）
-    l: int?                      # 长向数量
-    h: int?                      # 高向数量
-    f: int?                      # Floating（不规则/顶层补齐等）
-    qty: int?                    # 可选：直接数量（当不使用 W/L/H/F 时）
+    model: string
+    w: int?
+    l: int?
+    h: int?
+    f: int?
 `
   },
   dict: {
     name: 'slms-data-dict.md',
     content:
-`# SLMS Data Dict - Mobile 装箱动作记录（Demo）
+`# SLMS Data Dict - Mobile 装箱作业（Demo）
 
-## 1. 表：mobile_stuffing_action（装箱动作）
-- action_id：动作ID（页面生成；后续可由后端生成）
-- container_no：箱号（可选；对接集装箱选择）
-- booking_no：Booking No（可选；对接出运计划）
+## 1) 第1页：选择作业地 / 箱号计划
+- place_id：作业地
+- plan_time：计划装箱时间
+- carrier：船公司
+- container_no：箱号
+- container_type：箱型
+- model / qty：计划型号与数量（展示用）
+- status：等待 / 进行中 / 已完成
+
+## 2) 第2页：作业信息（可折叠）
+- place：作业地
+- container_no：箱号
+- carrier：船公司
+- container_type：箱型
+- booking_no：Booking No
+- cutoff：截关时间
+- trans_co：运输公司
+- clamp_no：抱夹车号
+- driver：司机
+- loader：装卸工
+- inspector：监装
+- note：备注
+
+## 3) 动作 mobile_stuffing_action
+- action_id：动作ID
 - sign：+1=装箱；-1=掏箱
-- created_at：创建时间
-- created_by：监装人员/账号
-- photos：照片（同一个动作共享；可多张）
-- models：型号明细数组（一个动作可多个型号）
+- photos：动作照片（共享）
+- models：动作内多型号明细（表格行）
 
-## 2. 子结构：action_model（动作内型号明细）
-- model：型号（必填建议；演示阶段允许空）
-- w / l / h / f：用于“夹取维度”分解记录数量（可选）
-- qty：可选；当不使用 w/l/h/f 时，可直接填写总数量
-
-> 口径建议：
-> - 若使用 w/l/h/f：可把一次夹取的摆放形态分解记录，便于复核
-> - 若现场更习惯直接数量：填写 qty 即可
+## 4) 动作内型号 action_model
+- model：型号
+- w/l/h/f：维度分解数量（可选）
 `
   },
   ui: {
     name: 'slms-ui-spec.md',
     content:
-`# SLMS UI Spec - Mobile 装箱管理（监装） stuffing-mobile-v2
+`# SLMS UI Spec - Mobile 装箱作业 stuffing-mobile-v5
 
-## 1) 页面目标
-- 每次“抱夹进入集装箱”的动作，作为一条 Action 记录。
-- Action 可包含多个型号明细；照片只需拍一次（归属该 Action）。
+## 0) 总体
+- 页面包含两步：
+  1) 选择作业地 -> 选择箱号计划 -> 下一步
+  2) 装箱作业明细：动作/型号行 + 拍照
 
-## 2) 列表形态（紧凑 + 可展开）
-- 默认展示紧凑行：
-  - 左侧 ±：切换装箱(+) / 掏箱(-)
-  - 标签：装箱/掏箱、型号数量、照片数量、动作序号
-  - 摘要：展示第一个型号及数量提示；若有多型号显示“另有 N 个型号”
-  - 右侧按钮：+型号行、拍照、删除动作、展开/收起
+## 1) 第1页：选择作业地
+- 顶部：作业地下拉 + 【下一步】
+- 下方：该作业地已安排箱计划列表（模拟 20 条）
+- 列表字段：计划装箱时间 / 船公司 / 箱号 / 箱型 / 型号 / 数量 / 状态
+- 表头 sticky；溢出自动滚动；选中行高亮
+- 下一步：必须先选择一条箱计划
 
-- 点击展开：
-  - 显示“型号明细表”（多行）
-  - 显示“动作照片区”（共享）
+## 2) 第2页：作业信息（可折叠）
+- 新增字段：Booking No、截关时间（Cutoff）
+- 可折叠：折叠后仅显示（箱号/抱夹车号/司机/装卸工）
+- 从第1页带入：作业地/箱号/船公司/箱型/Booking/Cutoff/运输公司（如有）
+- 进入第2页时：清空人员字段（抱夹/司机/装卸工/监装等）
 
-## 3) 插入与删除规则
-- 插入动作：在列表底部追加一条空白动作，并滚动到底部可见
-- 删除动作：
-  - 点击【删除动作】弹出确认框；确认后删除该动作及其照片/型号
-- 删除型号行：
-  - 若动作内型号行 > 1：删除当前型号行
-  - 若动作内仅剩最后 1 行：点击删除时询问“是否删除整个动作”，确认后删除动作
+## 3) 动作与型号明细（表格列表）
+- 表格展示明细行；表头 sticky
+- 选中行高亮；工具栏操作作用于选中行所属动作
+- 工具栏：+动作 / +型号 / 删除 / 📷
+- 删除规则：按“型号行”删除；动作无型号行则动作一并删除
+- 列表不显示 qty、不显示行内删除按钮
+- 照片列显示缩略图（可横向滚动）
 
-## 4) 滚动默认规则（重要）
-- 列表区域：自适应高度，溢出自动纵向滚动
-- 宽表（型号表）：支持横向滚动
-- 三件套弹窗（SLMS-ThreeKitStyle）：
-  - 左侧导航（3按钮）
-  - 右侧单文档内容区（docCard + copy + pre）
-  - 内容区优先纵向滚动；代码块/长行支持横向滚动
+## 4) 照片预览
+- 点击缩略图：打开大图预览（不直接删除）
+- 预览支持左右滑动浏览同一动作多张照片
+- 预览右上角：删除按钮（需确认）
+- 点击图片或遮罩空白处：关闭预览
+
+## 5) 三件套弹窗样式（SLMS-ThreeKitStyle）
+- 左侧导航（schema/dict/ui-spec）
+- 右侧单文档内容区（docCard + copy + pre）
+- 内容超出自动滚动：右侧内容区优先纵向滚动；代码块/长行支持横向滚动
+- 所有列表/表格默认自适应并在溢出时自动滚动（优先纵向，宽表支持横向）
 `
   }
 };
@@ -730,6 +1280,9 @@ function esc(s){
     .replaceAll("'","&#39;");
 }
 function escAttr(s){ return esc(s).replaceAll('`','&#96;'); }
+
+/** 返回按钮绑定 */
+btnBack.addEventListener('click', goPage1);
 
 init();
 </script>
