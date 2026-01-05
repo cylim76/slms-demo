@@ -1,12 +1,13 @@
 <!-- 
 File: crp/crp-entry.html
-Version: crp-entry-v23
+Version: crp-entry-v24
 Date: 2025-12-29
 
-v23 变更点（基于 v22 最新主线）：
-1) 右侧 CRP 列表：修复/加强滚动条（自适应高度链路，溢出自动纵向滚动；宽表自动横向滚动）
-2) 版本号弹窗三件套（SLMS-ThreeKitStyle）：补齐滚动条（右侧内容区优先纵向滚动；代码块/长行横向滚动；左侧导航溢出可滚动），布局不变
-3) 三件套（schema/dict/ui-spec）同步更新：UI Spec 增加“列表/弹窗默认滚动规则”说明（v23）
+v24 变更点（基于 v23 最新主线）：
+1) 三件套（schema/dict/ui-spec）补齐：CRP 生命周期（含 CANCEL_PENDING/CANCELLED）、提箱调度状态 pickup_dispatch_status（含 NOT_REQUIRED）、CRP 事件日志 crp_event_log
+2) 明确“发送给运输公司”是 CRP 的可选子流程：NOT_REQUIRED 的 CRP 不进入发送队列
+3) 明确“作废与箱子重分配可不同步”：作废挂起态 CANCEL_PENDING 作为中间态，直到箱子处理完才进入 CANCELLED
+4) 维持 SLMS-ThreeKitStyle 与默认滚动规则（延续 v23）
 -->
 
 <!doctype html>
@@ -239,7 +240,7 @@ pre.code{
     </label>
     <div class="ver" id="verBtn" title="点击查看三件套（schema / dict / ui spec）">
       <span class="dot"></span>
-      <span>crp-entry-v23</span>
+      <span>crp-entry-v24</span>
     </div>
   </div>
 </div>
@@ -544,7 +545,7 @@ pre.code{
 <div class="modalMask" id="reqMask">
   <div class="modal reqModal">
     <div class="modalHd">
-      <span>三件套（CRP 录入 / crp-entry-v23）</span>
+      <span>三件套（CRP 录入 / crp-entry-v24）</span>
       <span style="cursor:pointer;color:var(--muted)" onclick="closeReq()">关闭</span>
     </div>
 
@@ -556,7 +557,7 @@ pre.code{
           <button class="reqNavBtn" id="navDict" onclick="showDoc('dict')">slms-data-dict.md</button>
           <button class="reqNavBtn" id="navUi" onclick="showDoc('ui')">slms-ui-spec.md</button>
           <div class="small" style="margin-top:8px">
-            提示：本弹窗内容与版本号同步维护（v23）。
+            提示：本弹窗内容与版本号同步维护（v24）。
           </div>
         </div>
 
@@ -570,9 +571,14 @@ pre.code{
                 <button class="copyBtn" type="button" onclick="copyText('schemaText')">复制</button>
               </div>
             </div>
-<pre class="code" id="schemaText">version: slms-crp-schema-v4
+<pre class="code" id="schemaText">version: slms-crp-schema-v5
 domain: slms
 module: crp
+
+# 说明：
+# - 本页面当前演示数据实体为 crp_booking（按 Booking 汇总），并保留 sendState/entryState 的演示字段。
+# - 真实系统中，CRP 需要补齐“生命周期状态（含作废挂起）”与“提箱调度状态（可选发送）”，并写入 CRP 事件日志。
+# - “发送给运输公司”不再视为 CRP 必经阶段：pickup_dispatch_status=NOT_REQUIRED 的 CRP 不进入发送队列。
 
 entities:
 
@@ -617,12 +623,41 @@ entities:
 
       fileCount:{ type: int, required: true, min: 0, default: 0 }
 
+      # ===== 发送演示字段（页面现有机制，保持不变） =====
       sendState:{ type: enum, required: true, values: ["未发送","已发送"], default: "未发送" }
       vendor:   { type: string, required: false, note: "运输公司，仅已发送时有值；未发送清空" }
-
       entryState:{ type: enum, required: true, values: ["草稿","已提交","已修改"] }
 
       createdAt:{ type: int64, required: true, note: "首次创建时间戳；修改不刷新" }
+
+      # ===== 真实系统推荐新增字段（v24 补齐口径） =====
+      crp_status:
+        type: enum
+        required: true
+        values: ["DRAFT","ACTIVE","COMPLETED","CANCEL_PENDING","CANCELLED"]
+        default: "ACTIVE"
+        note: "CRP 生命周期：CANCEL_PENDING=作废挂起（箱子未处理完）；全部处理完后转 CANCELLED"
+
+      pickup_dispatch_status:
+        type: enum
+        required: true
+        values: ["NOT_REQUIRED","PENDING_SEND","SENT","IN_PROGRESS","COMPLETED","CANCELLED"]
+        default: "PENDING_SEND"
+        note: "提箱调度子流程：NOT_REQUIRED=箱源来自系统内调拨，不进入运输公司发送队列"
+
+  crp_event_log:
+    description: "CRP 事件日志（审计/追溯）。建议至少记录：创建、修改、发起作废、作废完成、设置无需提箱。"
+    primary_key: id
+    fields:
+      id:        { type: string, required: true, example: "CRPLOG-..." }
+      crpRef:    { type: string, required: true, note: "关联 CRP 主键（如 bookingNo 或 crp_id）" }
+      eventType:
+        type: enum
+        required: true
+        values: ["CREATE","UPDATE","CANCEL_REQUEST","CANCEL_FINALIZE","SET_PICKUP_NOT_REQUIRED","DISPATCH_SENT","DISPATCH_CANCELLED"]
+      reason:    { type: string, required: false, note: "作废/变更原因（作废建议必填）" }
+      operator:  { type: string, required: true }
+      occurredAt:{ type: int64, required: true }
 
 ui_contract:
   send_embed_url: "send-crp.html?embed=1&booking={bookingNo}&mode={send|resend}"
@@ -634,6 +669,7 @@ state_rules:
       entryState: "已修改"
       sendState: "未发送"
       vendor: ""
+    note: "现有演示规则：已发送记录被修改后需重发（真实系统可映射为 DISPATCH_CANCELLED + PENDING_SEND）"
 
   - name: send_button_rule_v21
     when: "右侧列表行内渲染发送按钮"
@@ -642,15 +678,15 @@ state_rules:
         if: "sendState=未发送 AND entryState!=已修改"
         button: "发送"
         else_button: "再发送"
-      note: "已发送或已修改都显示再发送"
+      note: "已发送或已修改都显示再发送（现有演示规则）"
 
-  - name: copy_voyage_from_selected_v21
-    when: "左侧点击复制"
+  - name: pickup_dispatch_not_required_v24
+    when: "CRP 箱源全部来自系统内调拨"
     then:
+      pickup_dispatch_status: "NOT_REQUIRED"
       ui:
-        require: "右侧必须选中某条 CRP"
-        action: "把选中记录的 voyageId + 航次字段(船公司/船名/航次/ETD/截关)回填到左侧录入面板"
-        keep: "Booking/箱量/附件不自动填"</pre>
+        hide_from_send_queue: true
+      note: "NOT_REQUIRED 的 CRP 不进入运输公司发送流程"</pre>
           </div>
 
           <!-- dict -->
@@ -662,7 +698,10 @@ state_rules:
                 <button class="copyBtn" type="button" onclick="copyText('dictText')">复制</button>
               </div>
             </div>
-<pre class="code" id="dictText"># SLMS - CRP 录入（crp-entry）数据字典（v23）
+<pre class="code" id="dictText"># SLMS - CRP 录入（crp-entry）数据字典（v24）
+
+> 说明：本页面当前演示数据模型为 crp_booking（按 Booking 汇总），并保留 sendState/entryState 的演示字段。
+> v24 在三件套中补齐“真实系统应有的 CRP 生命周期 + 提箱调度状态 + CRP 事件日志”，用于指导后续与集装箱管理/重分配流程衔接。
 
 ## 1) crp_booking（按 Booking No 汇总）
 | 字段 | 类型 | 必填 | 口径/说明 |
@@ -675,31 +714,61 @@ state_rules:
 | ffOwner/clOwner | string | Y | 负责人（必填） |
 | remark | string | N | 备注（可空） |
 | fileCount | int | Y | 附件数量（演示口径） |
-| sendState | enum | Y | 未发送 / 已发送 |
-| vendor | string | N | 运输公司：仅 sendState=已发送 时有效；未发送应为空 |
-| entryState | enum | Y | 草稿 / 已提交 / 已修改（列表不展示，但用于联动与按钮判定） |
 | createdAt | int64(ms) | Y | 首次创建时间戳（修改不刷新） |
 
-## v21 关键口径（延续）
-### A) 发送/再发送按钮判定
+### 1.1 发送演示字段（页面现有机制，保持不变）
+| 字段 | 类型 | 必填 | 口径/说明 |
+|---|---|---:|---|
+| sendState | enum | Y | 未发送 / 已发送（本页面“发送CRP”按钮使用） |
+| vendor | string | N | 运输公司：仅 sendState=已发送 时有效；未发送应为空 |
+| entryState | enum | Y | 草稿 / 已提交 / 已修改（用于联动按钮判定） |
+
+## 2) 真实系统推荐新增字段（v24 补齐）
+### 2.1 CRP 生命周期状态（crp_status）
+- DRAFT：草稿（可选；也可直接 ACTIVE）
+- ACTIVE：有效可执行
+- COMPLETED：已关闭（任务层完成）
+- CANCEL_PENDING：作废挂起（已发起作废，但箱子尚未全部解绑/重分配）
+- CANCELLED：已作废（箱子处理完毕后的最终态）
+
+> 口径：作废动作与箱子重分配可以不同步，因此必须有 CANCEL_PENDING 作为中间态。
+
+### 2.2 提箱调度子状态（pickup_dispatch_status）
+- NOT_REQUIRED：无需运输公司提箱（箱源来自系统内调拨/空箱池），不得进入发送队列
+- PENDING_SEND：需要提箱但尚未发送
+- SENT：已发送给运输公司
+- IN_PROGRESS：提箱进行中
+- COMPLETED：提箱完成
+- CANCELLED：提箱计划取消（例如：CRP 作废或改为内部调拨）
+
+> 口径：pickup_dispatch_status 是 CRP 的“子流程”，不等同于 CRP 生命周期状态。
+
+## 3) CRP 事件日志（crp_event_log）
+用于审计/追溯 CRP 的关键变化：
+- CREATE：创建
+- UPDATE：修改（可记录 changed_fields）
+- CANCEL_REQUEST：发起作废（建议必填 reason）
+- CANCEL_FINALIZE：作废完成（系统自动触发也要记录）
+- SET_PICKUP_NOT_REQUIRED：设置无需提箱（原因：箱子来自其他 CRP/系统内调拨）
+- DISPATCH_SENT / DISPATCH_CANCELLED：发送/取消发送
+
+## v21~v23 关键口径（延续）
+### A) 发送/再发送按钮判定（v21）
 - 未发送（sendState=未发送 且 entryState!=已修改） -> 显示【发送】
 - 已发送 或 已修改 -> 显示【再发送】
 
-### B) 左侧“复制”按钮（替代保存草稿）
+### B) 左侧“复制”按钮（v21）
 - 若右侧未选中记录：提示用户先从列表选择
 - 若已选中记录：仅复制航次信息（voyageId + 航次字段 + 截关时间）回填到左侧
-  - 不自动填 Booking/箱量/附件
+  - 不复制 Booking/箱量/附件
 
-### C) 右侧列表日期范围过滤
+### C) 右侧列表日期范围过滤（v21）
 - 日期类型：录入时间(createdAt) / ETD(etd)
 - 默认范围：
   - createdAt：过去7天到今天
   - etd：今天到未来14天
 
-## v22 UI 细节（延续）
-- “状态/操作”列内按钮顺序：发送/再发送在前，修改在后（仅选中行显示修改）
-
-## v23 默认滚动规则（新增）
+## v23 默认滚动规则（延续）
 - 所有列表/表格/列表视图：根据画面大小自适应；内容溢出时自动出现滚动条
   - 优先纵向滚动；长行/宽表支持横向滚动
 - 三件套弹窗（SLMS-ThreeKitStyle）：左侧导航 + 右侧内容区布局不变
@@ -715,18 +784,22 @@ state_rules:
                 <button class="copyBtn" type="button" onclick="copyText('uiText')">复制</button>
               </div>
             </div>
-<pre class="code" id="uiText"># SLMS - CRP 录入页（crp-entry）UI Spec（v23）
+<pre class="code" id="uiText"># SLMS - CRP 录入页（crp-entry）UI Spec（v24）
 
-## 1) 左侧录入区
+> 说明：
+> - 本页面当前实现的是“按 Booking 汇总的 CRP 录入 + 发送演示”。
+> - v24 在 UI Spec 中补齐：CRP 作废挂起、无需提箱、与箱子重分配的衔接规则，作为后续开发/联调标准。
+
+## 1) 左侧录入区（现有实现）
 ### 1.1 操作按钮
 - 新建：清空录入（保留/清空规则按实现）
-- 复制（v21新增，替代保存草稿）：
+- 复制（v21，替代保存草稿）：
   - 若未选中右侧 CRP：提示“请先从列表选择”
   - 若已选中：把选中记录的航次信息回填到左侧（voyageId + carrier/vessel/voyage/etd/cutoffAt）
   - 不复制 Booking/箱量/附件
 - 提交：保存录入
 
-## 2) 右侧列表
+## 2) 右侧列表（现有实现）
 ### 2.1 发送/再发送按钮（v21）
 - 显示前提：用户勾选顶部“发送CRP”
 - 判定：
@@ -734,23 +807,50 @@ state_rules:
   - 否则（已发送 或 已修改）-> 再发送
 
 ### 2.1.1 状态/操作列按钮顺序（v22）
-- 为保证视觉一致性，“状态 / 操作”列内的按钮从左到右顺序固定为：
-  1) 发送 / 再发送（若有权限显示）
-  2) 修改（仅当该行被选中时显示）
-- 目标：发送/再发送按钮始终位于同一列位置
+- 固定顺序：状态 → 发送/再发送（若有权限）→ 修改（仅选中行显示）
 
 ### 2.2 查询条件：日期范围过滤（v21）
-- 日期类型下拉：
-  - 录入时间：按 createdAt 过滤（日期粒度）
-    - 默认：过去7天到今天
-  - ETD：按 etd 过滤（日期粒度）
-    - 默认：今天到未来14天
-- 日期范围为空时：
-  - 仍允许查询（实现中可自动回填默认值）
+- 日期类型：录入时间(createdAt) / ETD(etd)
+- 默认：
+  - createdAt：过去7天到今天
+  - etd：今天到未来14天
 
-## 3) 默认滚动规则（v23 新增）
-- 所有显示列表（表格/列表视图）：根据画面大小自适应
-  - 内容溢出时自动出现滚动条：优先纵向滚动；长行/宽表支持横向滚动
+## 3) CRP 生命周期与作废挂起（v24 新增规范）
+### 3.1 作废触发与中间态
+- 用户发起作废时：
+  - crp_status 必须进入 CANCEL_PENDING
+  - 写入 crp_event_log：CANCEL_REQUEST（reason 建议必填）
+- 作废与箱子处理可不同步：
+  - 只要仍存在“当前归属该 CRP 的箱子”或“待重分配处理未完成”，CRP 保持 CANCEL_PENDING
+- 当该 CRP 名下箱子全部完成解绑/重分配/标记清理后：
+  - crp_status 自动进入 CANCELLED
+  - 写入 crp_event_log：CANCEL_FINALIZE
+
+## 4) 发送提箱流程是可选子流程（v24 新增规范）
+### 4.1 NOT_REQUIRED（无需提箱/无需发送）
+- 若该 CRP 的箱源全部来自系统内调拨/空箱池：
+  - pickup_dispatch_status = NOT_REQUIRED
+  - 该 CRP 不得进入“发送给运输公司”的队列
+  - 写入 crp_event_log：SET_PICKUP_NOT_REQUIRED（reason 记录箱源来自何处）
+- 仅当 pickup_dispatch_status in [PENDING_SEND] 时：
+  - 才允许进入发送动作（DISPATCH_SENT）
+
+### 4.2 与本页面 sendState 的映射（指导口径）
+- sendState=已发送 可视为 pickup_dispatch_status=SENT（或 IN_PROGRESS）
+- sendState=未发送 可视为 pickup_dispatch_status=PENDING_SEND
+- NOT_REQUIRED：本页面未来可扩展为“无需发送”状态展示（不进入发送按钮逻辑）
+
+## 5) 与集装箱/重分配的衔接（v24 新增规范）
+- 当发生“箱子从其他 CRP 调拨到本 CRP”导致本 CRP 不需要提箱：
+  - 必须设置 pickup_dispatch_status=NOT_REQUIRED
+  - 且不得强制用户执行发送流程
+- 当已发送的 CRP 被修改导致“需要重发/或取消发送”：
+  - 记录 DISPATCH_CANCELLED（或 UPDATE + reason）
+  - 回到 PENDING_SEND（需重发），或转 NOT_REQUIRED（改为内部调拨）
+
+## 6) 默认滚动规则（v23 延续）
+- 所有显示列表（表格/列表视图）：自适应；溢出自动出现滚动条
+  - 优先纵向滚动；长行/宽表支持横向滚动
 - 三件套弹窗（SLMS-ThreeKitStyle）：
   - 固定布局：左侧导航 + 右侧单文档内容区（docCard + copy按钮 + pre代码块）
   - 超出屏幕时：右侧内容区优先纵向滚动；代码块/长行支持横向滚动；布局不变</pre>
